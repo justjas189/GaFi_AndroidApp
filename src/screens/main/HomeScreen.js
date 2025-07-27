@@ -12,6 +12,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../../config/supabase';
 import { AuthContext } from '../../context/AuthContext';
 import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
@@ -31,6 +33,78 @@ const HomeScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [recentExpenses, setRecentExpenses] = useState([]);
   const [insights, setInsights] = useState([]);
+
+  // Test function to reset onboarding status for testing
+  const resetOnboardingForTesting = async () => {
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        Alert.alert('Error', 'No active session found.');
+        return;
+      }
+
+      const userId = session.user.id;
+      
+      Alert.alert(
+        '🧪 Test Onboarding Reset',
+        'This will reset your onboarding status and take you back to the onboarding flow to test budget creation.',
+        [
+          {
+            text: 'Reset & Test Onboarding',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                // Reset onboarding_completed to false in profiles table
+                const { error: updateError } = await supabase
+                  .from('profiles')
+                  .update({ onboarding_completed: false })
+                  .eq('id', userId);
+
+                if (updateError) {
+                  console.error('Error resetting onboarding:', updateError);
+                  Alert.alert('Error', 'Could not reset onboarding status: ' + updateError.message);
+                  return;
+                }
+
+                // Clear local storage
+                await AsyncStorage.removeItem('onboardingComplete');
+                await AsyncStorage.removeItem(`hasOnboarded_${userId}`);
+
+                Alert.alert(
+                  'Onboarding Reset Complete',
+                  'You will now be taken to the onboarding flow to test budget creation.',
+                  [
+                    {
+                      text: 'Start Onboarding',
+                      onPress: () => {
+                        navigation.reset({
+                          index: 0,
+                          routes: [{ 
+                            name: 'Onboarding',
+                            state: {
+                              routes: [{ name: 'GetStarted' }]
+                            }
+                          }]
+                        });
+                      }
+                    }
+                  ]
+                );
+              } catch (error) {
+                console.error('Error resetting onboarding:', error);
+                Alert.alert('Error', 'Failed to reset onboarding: ' + error.message);
+              }
+            }
+          },
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
+    } catch (error) {
+      console.error('Error in resetOnboardingForTesting:', error);
+      Alert.alert('Error', 'Failed to check session: ' + error.message);
+    }
+  };
 
   // Get current date information
   const currentDate = new Date();
@@ -97,17 +171,6 @@ const HomeScreen = ({ navigation }) => {
     setInsights(contextInsights || []);
   }, [expenses, contextInsights]);
   
-  const onRefresh = () => {
-    setRefreshing(true);
-    const sortedExpenses = [...expenses]
-      .sort((a, b) => new Date(b.date) - new Date(a.date))
-      .slice(0, 5);
-    setRecentExpenses(sortedExpenses);
-    const newInsights = generateInsights();
-    setInsights(newInsights);
-    setRefreshing(false);
-  };
-  
   const formatCurrency = (amount) => {
     return '₱' + parseFloat(amount).toFixed(2);
   };
@@ -126,60 +189,112 @@ const HomeScreen = ({ navigation }) => {
 
   const sections = useMemo(() => [
     {
-      title: 'Insights',
+      title: 'AI Insights',
       data: insights,
       renderItem: ({ item: insight }) => (
         <TouchableOpacity
-          style={[styles.insightCard, { backgroundColor: theme.colors.card }]}
-          onPress={() => Alert.alert('Financial Insight', insight.message)}
+          style={[
+            styles.insightCard, 
+            { 
+              backgroundColor: theme.colors.card,
+              borderLeftColor: insight.color || theme.colors.primary,
+              shadowColor: insight.color || theme.colors.primary,
+            }
+          ]}
+          onPress={() => Alert.alert(insight.title, insight.message, [
+            { text: 'Got it!', style: 'default' }
+          ])}
         >
-          <View style={styles.insightContent}>
-            <Ionicons name={insight.icon} size={20} color={insight.color || theme.colors.primary} />
-            <Text style={[styles.insightText, { color: theme.colors.text }]}>{insight.message}</Text>
-            <Ionicons 
-              name="chevron-forward-outline" 
-              size={16} 
-              color={theme.colors.text}
-              style={[styles.insightArrow, { opacity: 0.6 }]} 
-            />
+          <View style={styles.insightHeader}>
+            <View style={[styles.insightIconContainer, { backgroundColor: insight.color + '20' || theme.colors.primary + '20' }]}>
+              <Ionicons name={insight.icon} size={22} color={insight.color || theme.colors.primary} />
+            </View>
+            <View style={[styles.insightBadge, { backgroundColor: insight.color + '15' || theme.colors.primary + '15' }]}>
+              <Text style={[styles.insightType, { 
+                color: insight.color || theme.colors.primary,
+                textTransform: 'uppercase',
+                fontSize: 10,
+                fontWeight: '600'
+              }]}>
+                {insight.type}
+              </Text>
+            </View>
+          </View>
+          <Text style={[styles.insightTitle, { color: theme.colors.text }]}>{insight.title}</Text>
+          <Text style={[styles.insightMessage, { color: theme.colors.text }]}>{insight.message}</Text>
+          <View style={styles.insightFooter}>
+            <View style={styles.aiPoweredContainer}>
+              <Text style={[styles.aiPowered, { color: theme.colors.text }]}>🤖 AI Powered</Text>
+            </View>
+            <View style={[styles.insightAction, { backgroundColor: insight.color + '10' || theme.colors.primary + '10' }]}>
+              <Ionicons 
+                name="chevron-forward-outline" 
+                size={16} 
+                color={insight.color || theme.colors.primary}
+              />
+            </View>
           </View>
         </TouchableOpacity>
       ),
-      horizontal: true
+      horizontal: false
     },
     {
       title: 'Recent Expenses',
       data: recentExpenses,
       renderItem: ({ item: expense }) => (
-        <TouchableOpacity key={expense.id} style={[styles.expenseItem, { backgroundColor: theme.colors.background }]}>
+        <TouchableOpacity key={expense.id} style={[styles.expenseItem, { backgroundColor: theme.colors.card }]}>
           <View style={styles.expenseLeft}>
-            <View style={[styles.expenseIcon, { backgroundColor: theme.colors.card }]}>
+            <View style={[styles.expenseIcon, { backgroundColor: theme.colors.primary + '15' }]}>
               <Ionicons name={getCategoryIcon(expense.category)} size={20} color={theme.colors.primary} />
             </View>
-            <View>
+            <View style={styles.expenseDetails}>
               <Text style={[styles.expenseCategory, { color: theme.colors.text }]}>{expense.category}</Text>
-              <Text style={[styles.expenseDate, { color: theme.colors.text, opacity: 0.6 }]}>
+              <Text style={[styles.expenseDescription, { color: theme.colors.text, opacity: 0.7 }]}>
+                {expense.note || 'No description'}
+              </Text>
+              <Text style={[styles.expenseDate, { color: theme.colors.text, opacity: 0.5 }]}>
                 {new Date(expense.date).toLocaleDateString('en-US', {
+                  weekday: 'short',
                   month: 'short',
                   day: '2-digit'
                 })}
               </Text>
             </View>
           </View>
-          <Text style={[styles.expenseAmount, { color: theme.colors.primary }]}>
-            {formatCurrency(expense.amount)}
-          </Text>
+          <View style={styles.expenseRight}>
+            <Text style={[styles.expenseAmount, { color: '#FF4444' }]}>
+              -{formatCurrency(expense.amount)}
+            </Text>
+            <Text style={[styles.expenseTime, { color: theme.colors.text, opacity: 0.5 }]}>
+              {new Date(expense.date).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+            </Text>
+          </View>
         </TouchableOpacity>
-      )
+      ),
+      horizontal: false
     }
   ], [insights, recentExpenses, theme]);
 
   const renderSectionHeader = ({ section }) => (
-    <View style={styles.sectionHeader}>
-      <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>{section.title}</Text>
+    <View style={[styles.sectionHeader, { backgroundColor: theme.colors.background }]}>
+      <View style={styles.sectionTitleContainer}>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{section.title}</Text>
+        {section.title === 'AI Insights' && (
+          <View style={[styles.aiIndicator, { backgroundColor: theme.colors.primary + '20' }]}>
+            <Text style={[styles.aiIndicatorText, { color: theme.colors.primary }]}>✨ NVIDIA AI</Text>
+          </View>
+        )}
+      </View>
       {section.title === 'Recent Expenses' && (
-        <TouchableOpacity onPress={() => navigation.navigate('Expenses')}>
+        <TouchableOpacity 
+          style={styles.seeAllButton}
+          onPress={() => navigation.navigate('Expenses')}
+        >
           <Text style={[styles.seeAllText, { color: theme.colors.primary }]}>See All</Text>
+          <Ionicons name="chevron-forward" size={16} color={theme.colors.primary} />
         </TouchableOpacity>
       )}
     </View>
@@ -192,38 +307,106 @@ const HomeScreen = ({ navigation }) => {
           <Text style={[styles.greeting, { color: theme.colors.text, opacity: 0.6 }]}>Hello,</Text>
           <Text style={[styles.name, { color: theme.colors.text }]}>{userInfo?.name || 'User'}</Text>
         </View>
-        <TouchableOpacity
-          style={[styles.settingsButton, { backgroundColor: theme.colors.card }]}
-          onPress={() => navigation.navigate('Settings')}
-        >
-          <Ionicons name="settings-outline" size={24} color={theme.colors.text} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={[styles.chatHeaderButton, { backgroundColor: theme.colors.primary + '20' }]}
+            onPress={() => navigation.navigate('Notes')}
+          >
+            <Ionicons name="document-text" size={20} color={theme.colors.primary} />
+          </TouchableOpacity>
+
+          {/* Test Button for Onboarding Reset - Remove in production */}
+          {__DEV__ && (
+            <TouchableOpacity
+              style={[styles.testButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.primary }]}
+              onPress={resetOnboardingForTesting}
+            >
+              <Text style={[styles.testButtonText, { color: theme.colors.primary }]}>🧪</Text>
+            </TouchableOpacity>
+          )}
+          
+          <TouchableOpacity
+            style={[styles.settingsButton, { backgroundColor: theme.colors.card }]}
+            onPress={() => navigation.navigate('Settings')}
+          >
+            <Ionicons name="settings-outline" size={24} color={theme.colors.text} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={[styles.budgetCard, { backgroundColor: theme.colors.card }]}>
-        <Text style={[styles.budgetTitle, { color: theme.colors.text, opacity: 0.6 }]}>Monthly Budget</Text>
-        <Text style={[styles.budgetAmount, { color: theme.colors.text }]}>{formatCurrency(budget.monthly)}</Text>
+        <View style={styles.budgetHeader}>
+          <Text style={[styles.budgetTitle, { color: theme.colors.text, opacity: 0.6 }]}>Monthly Budget</Text>
+          <View style={[styles.budgetProgress, { backgroundColor: theme.colors.background }]}>
+            <View 
+              style={[
+                styles.budgetProgressBar, 
+                { 
+                  backgroundColor: monthlySpent > budget.monthly ? '#FF4444' : theme.colors.primary,
+                  width: `${Math.min((monthlySpent / budget.monthly) * 100, 100)}%`
+                }
+              ]} 
+            />
+          </View>
+        </View>
+        
+        <View style={styles.budgetAmountContainer}>
+          <Text style={[styles.budgetAmount, { color: theme.colors.text }]}>
+            {formatCurrency(budget.monthly)}
+          </Text>
+          <Text style={[styles.budgetPercentage, { 
+            color: monthlySpent > budget.monthly ? '#FF4444' : theme.colors.primary 
+          }]}>
+            {((monthlySpent / budget.monthly) * 100).toFixed(1)}% used
+          </Text>
+        </View>
+
         <View style={styles.budgetInfo}>
-          <View>
-            <Text style={[styles.budgetLabel, { color: theme.colors.text, opacity: 0.6 }]}>Spent</Text>
-            <Text style={[styles.budgetValue, { color: theme.colors.text }]}>{formatCurrency(monthlySpent)}</Text>
-            <Text style={[styles.budgetSubtext, { color: theme.colors.text, opacity: 0.6 }]}>
-              ~{formatCurrency(averageDailySpent)}/day
-            </Text>
+          <View style={styles.budgetInfoItem}>
+            <View style={[styles.budgetIcon, { backgroundColor: theme.colors.primary + '20' }]}>
+              <Ionicons name="trending-down-outline" size={16} color={theme.colors.primary} />
+            </View>
+            <View>
+              <Text style={[styles.budgetLabel, { color: theme.colors.text, opacity: 0.6 }]}>Spent</Text>
+              <Text style={[styles.budgetValue, { color: theme.colors.text }]}>
+                {formatCurrency(monthlySpent)}
+              </Text>
+              <Text style={[styles.budgetSubtext, { color: theme.colors.text, opacity: 0.6 }]}>
+                ~{formatCurrency(averageDailySpent)}/day
+              </Text>
+            </View>
           </View>
-          <View>
-            <Text style={[styles.budgetLabel, { color: theme.colors.text, opacity: 0.6 }]}>Remaining</Text>
-            <Text style={[styles.budgetValue, { color: theme.colors.text }]}>{formatCurrency(monthlyRemaining)}</Text>
-            <Text style={[styles.budgetSubtext, { color: theme.colors.text, opacity: 0.6 }]}>
-              {daysLeft} days left
-            </Text>
+          
+          <View style={styles.budgetInfoItem}>
+            <View style={[styles.budgetIcon, { backgroundColor: '#4CAF50' + '20' }]}>
+              <Ionicons name="wallet-outline" size={16} color="#4CAF50" />
+            </View>
+            <View>
+              <Text style={[styles.budgetLabel, { color: theme.colors.text, opacity: 0.6 }]}>Remaining</Text>
+              <Text style={[styles.budgetValue, { 
+                color: monthlyRemaining >= 0 ? '#4CAF50' : '#FF4444' 
+              }]}>
+                {formatCurrency(monthlyRemaining)}
+              </Text>
+              <Text style={[styles.budgetSubtext, { color: theme.colors.text, opacity: 0.6 }]}>
+                {daysLeft} days left
+              </Text>
+            </View>
           </View>
-          <View>
-            <Text style={[styles.budgetLabel, { color: theme.colors.text, opacity: 0.6 }]}>Daily Target</Text>
-            <Text style={[styles.budgetValue, { color: theme.colors.text }]}>{formatCurrency(dailyBudget)}</Text>
-            <Text style={[styles.budgetSubtext, { color: theme.colors.text, opacity: 0.6 }]}>
-              Ideal: {formatCurrency(idealDailyBudget)}
-            </Text>
+          
+          <View style={styles.budgetInfoItem}>
+            <View style={[styles.budgetIcon, { backgroundColor: '#FF9800' + '20' }]}>
+              <Ionicons name="calendar-outline" size={16} color="#FF9800" />
+            </View>
+            <View>
+              <Text style={[styles.budgetLabel, { color: theme.colors.text, opacity: 0.6 }]}>Daily Target</Text>
+              <Text style={[styles.budgetValue, { color: theme.colors.text }]}>
+                {formatCurrency(dailyBudget)}
+              </Text>
+              <Text style={[styles.budgetSubtext, { color: theme.colors.text, opacity: 0.6 }]}>
+                Ideal: {formatCurrency(idealDailyBudget)}
+              </Text>
+            </View>
           </View>
         </View>
       </View>
@@ -234,9 +417,6 @@ const HomeScreen = ({ navigation }) => {
         renderSectionHeader={renderSectionHeader}
         renderItem={({ item, section }) => section.renderItem({ item })}
         stickySectionHeadersEnabled={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
-        }
         contentContainerStyle={styles.sectionListContent}
         directionalLockEnabled={true}
         showsVerticalScrollIndicator={false}
@@ -255,6 +435,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  chatHeaderButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   greeting: {
     color: '#808080',
     fontSize: 16,
@@ -272,80 +464,222 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  testButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  testButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
   budgetCard: {
     margin: 20,
-    padding: 20,
+    padding: 24,
     backgroundColor: '#2C2C2C',
-    borderRadius: 15,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  budgetHeader: {
+    marginBottom: 20,
   },
   budgetTitle: {
     color: '#808080',
     fontSize: 14,
-    marginBottom: 5,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  budgetProgress: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#404040',
+    overflow: 'hidden',
+  },
+  budgetProgressBar: {
+    height: '100%',
+    borderRadius: 3,
+    backgroundColor: '#FF6B00',
+  },
+  budgetAmountContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginBottom: 24,
   },
   budgetAmount: {
     color: '#FFF',
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 20,
+    fontSize: 36,
+    fontWeight: '700',
+    letterSpacing: -1,
+  },
+  budgetPercentage: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FF6B00',
   },
   budgetInfo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 16,
+  },
+  budgetInfoItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  budgetIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
   },
   budgetLabel: {
     color: '#808080',
-    fontSize: 12,
-    marginBottom: 5,
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   budgetValue: {
     color: '#FFF',
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '700',
+    textAlign: 'center',
     marginBottom: 2,
   },
   budgetSubtext: {
-    fontSize: 12,
+    fontSize: 11,
+    textAlign: 'center',
+    opacity: 0.7,
   },
   insightsContainer: {
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    marginBottom: 10,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingVertical: 16,
+    paddingTop: 24,
   },
-  seeAllText: {
-    color: '#FF6B00',
-    fontSize: 14,
-  },
-  sectionTitle: {
-    color: '#FF6B00',
-    fontSize: 14,
-  },
-  insightCard: {
-    marginRight: 10,
-    marginLeft: 5,
-    padding: 15,
-    borderRadius: 12,
-    minWidth: 250,
-    maxWidth: 300,
-    marginVertical: 5,
-  },
-  insightContent: {
+  sectionTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
-  insightText: {
-    flex: 1,
+  seeAllText: {
     fontSize: 14,
-    marginRight: 10,
+    fontWeight: '600',
+    marginRight: 4,
   },
-  insightArrow: {
-    marginLeft: 'auto',
+  seeAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  aiIndicator: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  aiIndicatorText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  insightCard: {
+    alignSelf: 'center',
+    marginHorizontal: 10,
+    padding: 20,
+    borderRadius: 16,
+    width: 300,
+    marginVertical: 8,
+    borderLeftWidth: 4,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  insightHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  insightIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  insightBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  insightType: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  insightTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  insightMessage: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 16,
+    opacity: 0.8,
+  },
+  insightFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  aiPoweredContainer: {
+    flex: 1,
+  },
+  aiPowered: {
+    fontSize: 11,
+    opacity: 0.7,
+    fontWeight: '500',
+  },
+  insightAction: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   recentExpenses: {
     flex: 1,
@@ -355,37 +689,62 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 15,
+    paddingVertical: 16,
     paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#2C2C2C',
+    marginHorizontal: 20,
+    marginVertical: 4,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   expenseLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
   expenseIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#2C2C2C',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 15,
+    marginRight: 16,
+  },
+  expenseDetails: {
+    flex: 1,
   },
   expenseCategory: {
-    color: '#FFF',
     fontSize: 16,
-    marginBottom: 4,
+    fontWeight: '600',
+    marginBottom: 2,
+    textTransform: 'capitalize',
+  },
+  expenseDescription: {
+    fontSize: 14,
+    marginBottom: 2,
+    textTransform: 'capitalize',
   },
   expenseDate: {
-    color: '#808080',
     fontSize: 12,
+    fontWeight: '500',
+  },
+  expenseRight: {
+    alignItems: 'flex-end',
   },
   expenseAmount: {
-    color: '#FF6B00',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  expenseTime: {
+    fontSize: 11,
+    fontWeight: '500',
   },
   emptyState: {
     alignItems: 'center',
@@ -453,9 +812,6 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  sectionListContent: {
-    paddingBottom: 20,
   },
 });
 

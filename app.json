@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "MoneyTrack",
+    "slug": "moneytrack",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/logo.svg",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/logo.svg",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logo.svg",
+        "backgroundColor": "#FFFFFF"
+      }
+    },
+    "web": {
+      "favicon": "./assets/logo.svg"
+    },
+    "scheme": "moneytrack"
+  }
+}

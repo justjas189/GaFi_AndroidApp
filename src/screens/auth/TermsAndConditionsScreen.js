@@ -3,7 +3,15 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
-const TermsAndConditionsScreen = ({ navigation }) => {
+const TermsAndConditionsScreen = ({ navigation, route }) => {
+  const { onAccept, returnScreen } = route.params || {};
+
+  const handleAccept = () => {
+    if (onAccept) {
+      onAccept();
+    }
+    navigation.goBack();
+  };
   return (
     <SafeAreaView style={styles.container}>
       <TouchableOpacity 
@@ -33,7 +41,7 @@ const TermsAndConditionsScreen = ({ navigation }) => {
 
         <TouchableOpacity 
           style={styles.button}
-          onPress={() => navigation.goBack()}
+          onPress={handleAccept}
         >
           <Text style={styles.buttonText}>I Accept</Text>
         </TouchableOpacity>

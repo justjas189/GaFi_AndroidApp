@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthContext } from '../../context/AuthContext';
+import { supabase } from '../../config/supabase';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -71,11 +72,12 @@ const LoginScreen = ({ navigation }) => {
           navigation.replace('Main');
         }
       } else {
-        Alert.alert('Login Failed', error || 'Invalid credentials');
+        Alert.alert('Invalid Credentials', 'Incorrect email or password');
       }
     } catch (err) {
-      console.error('Login error:', err);
-      Alert.alert('Error', 'An error occurred during login. Please try again.');
+      // Log error for debugging but don't expose details to user
+      console.log('Login attempt failed');
+      Alert.alert('Error', 'Incorrect email or password');
     }
   };
 

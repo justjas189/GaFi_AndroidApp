@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -19,7 +19,7 @@ import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
 
 const SettingsScreen = ({ navigation }) => {
-  const { logout, userInfo } = useContext(AuthContext);
+  const { logout, userInfo, updateProfile } = useContext(AuthContext);
   const { budget, updateBudget } = useContext(DataContext);
   const { theme, isDarkMode, toggleTheme } = useContext(ThemeContext);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -30,26 +30,28 @@ const SettingsScreen = ({ navigation }) => {
   const [monthlyBudget, setMonthlyBudget] = useState(budget.monthly.toString());
   const [savingsGoal, setSavingsGoal] = useState(budget.savingsGoal.toString());
 
+  // Update name state when userInfo changes
+  useEffect(() => {
+    if (userInfo?.name) {
+      setName(userInfo.name);
+    }
+  }, [userInfo]);
+
   const handleUpdateProfile = async () => {
     try {
-      // Get current user info
-      const storedUserInfo = await AsyncStorage.getItem('userInfo');
-      if (!storedUserInfo) {
-        Alert.alert('Error', 'User information not found');
+      if (!name.trim()) {
+        Alert.alert('Error', 'Please enter your name');
         return;
       }
 
-      const currentUserInfo = JSON.parse(storedUserInfo);
-      const updatedUserInfo = {
-        ...currentUserInfo,
-        name: name.trim(),
-        email: email.trim()
-      };
-
-      // Save updated user info
-      await AsyncStorage.setItem('userInfo', JSON.stringify(updatedUserInfo));
-      Alert.alert('Success', 'Profile updated successfully');
-      setShowEditProfile(false);
+      const result = await updateProfile({ name: name.trim() });
+      
+      if (result.success) {
+        Alert.alert('Success', 'Profile updated successfully');
+        setShowEditProfile(false);
+      } else {
+        Alert.alert('Error', result.error || 'Failed to update profile');
+      }
     } catch (error) {
       console.error('Profile update error:', error);
       Alert.alert('Error', 'Failed to update profile. Please try again.');
@@ -106,101 +108,120 @@ const SettingsScreen = ({ navigation }) => {
       
       <Text style={[styles.title, { color: theme.colors.text }]}>Settings</Text>
       
-      <ScrollView>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Account</Text>
-          <TouchableOpacity onPress={() => setShowEditProfile(true)}>
-            <View style={styles.settingItem}>
+          
+          <TouchableOpacity 
+            onPress={() => setShowEditProfile(true)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.settingItem, { backgroundColor: theme.colors.card }]}>
               <View style={styles.settingItemLeft}>
-                <Ionicons name="person-outline" size={24} color={theme.colors.text} />
+                <View style={[styles.settingIconContainer, { backgroundColor: `${theme.colors.primary}20` }]}>
+                  <Ionicons name="person-outline" size={20} color={theme.colors.primary} />
+                </View>
                 <View style={styles.settingInfo}>
                   <Text style={[styles.settingText, { color: theme.colors.text }]}>Profile</Text>
-                  <View>
-                    <Text style={[styles.settingValue, { color: theme.colors.text }]}>{userInfo?.name || 'Set your name'}</Text>
-                    <Text style={[styles.emailText, { color: theme.colors.text }]}>{userInfo?.email}</Text>
-                  </View>
+                  <Text style={[styles.settingValue, { color: theme.colors.text }]}>{userInfo?.name || 'Set your name'}</Text>
+                  <Text style={[styles.emailText, { color: theme.colors.text }]}>{userInfo?.email}</Text>
                 </View>
               </View>
-              <Ionicons name="chevron-forward" size={24} color={theme.colors.text} />
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.text} style={{ opacity: 0.6 }} />
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => setShowEditBudget(true)}>
-            <View style={styles.settingItem}>
+          <TouchableOpacity 
+            onPress={() => setShowEditBudget(true)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.settingItem, { backgroundColor: theme.colors.card }]}>
               <View style={styles.settingItemLeft}>
-                <Ionicons name="wallet-outline" size={24} color={theme.colors.text} />
+                <View style={[styles.settingIconContainer, { backgroundColor: `${theme.colors.primary}20` }]}>
+                  <Ionicons name="wallet-outline" size={20} color={theme.colors.primary} />
+                </View>
                 <View style={styles.settingInfo}>
                   <Text style={[styles.settingText, { color: theme.colors.text }]}>Budget & Goals</Text>
-                  <View>
-                    <Text style={[styles.settingValue, { color: theme.colors.text }]}>Monthly: ₱{budget.monthly.toFixed(2)}</Text>
-                    <Text style={[styles.settingValue, { color: theme.colors.text }]}>Savings Goal: ₱{budget.savingsGoal.toFixed(2)}</Text>
-                  </View>
+                  <Text style={[styles.settingValue, { color: theme.colors.text }]}>Monthly: ₱{budget.monthly.toLocaleString()}</Text>
+                  <Text style={[styles.settingValue, { color: theme.colors.text }]}>Savings Goal: ₱{budget.savingsGoal.toLocaleString()}</Text>
                 </View>
               </View>
-              <Ionicons name="chevron-forward" size={24} color={theme.colors.text} />
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.text} style={{ opacity: 0.6 }} />
             </View>
           </TouchableOpacity>
+        </View>
 
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Preferences</Text>
-            
-            <View style={styles.settingItem}>
-              <View style={styles.settingItemLeft}>
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Preferences</Text>
+          
+          <View style={[styles.settingItem, { backgroundColor: theme.colors.card }]}>
+            <View style={styles.settingItemLeft}>
+              <View style={[styles.settingIconContainer, { backgroundColor: `${theme.colors.primary}20` }]}>
                 <Ionicons 
                   name={isDarkMode ? "moon-outline" : "sunny-outline"} 
-                  size={24} 
-                  color={theme.colors.text} 
+                  size={20} 
+                  color={theme.colors.primary} 
                 />
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingText, { color: theme.colors.text }]}>Dark Mode</Text>
-                  <Text style={[styles.settingValue, { color: theme.colors.text }]}>
-                    {isDarkMode ? 'On' : 'Off'}
-                  </Text>
-                </View>
               </View>
-              <Switch
-                value={isDarkMode}
-                onValueChange={toggleTheme}
-                trackColor={{ false: '#767577', true: '#FF6B00' }}
-                thumbColor={isDarkMode ? '#f4f3f4' : '#f4f3f4'}
-              />
-            </View>
-
-            <View style={styles.settingItem}>
-              <View style={styles.settingItemLeft}>
-                <Ionicons name="notifications-outline" size={24} color={theme.colors.text} />
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingText, { color: theme.colors.text }]}>Notifications</Text>
-                  <Text style={[styles.settingValue, { color: theme.colors.text }]}>
-                    {notificationsEnabled ? 'On' : 'Off'}
-                  </Text>
-                </View>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>Dark Mode</Text>
+                <Text style={[styles.settingValue, { color: theme.colors.text }]}>
+                  {isDarkMode ? 'Enabled' : 'Disabled'}
+                </Text>
               </View>
-              <Switch
-                value={notificationsEnabled}
-                onValueChange={handleNotificationsChange}
-                trackColor={{ false: '#767577', true: '#FF6B00' }}
-                thumbColor={notificationsEnabled ? '#f4f3f4' : '#f4f3f4'}
-              />
             </View>
+            <Switch
+              value={isDarkMode}
+              onValueChange={toggleTheme}
+              trackColor={{ false: '#767577', true: `${theme.colors.primary}80` }}
+              thumbColor={isDarkMode ? theme.colors.primary : '#f4f3f4'}
+              ios_backgroundColor="#3e3e3e"
+            />
           </View>
+
+        {/*  <View style={[styles.settingItem, { backgroundColor: theme.colors.card }]}>
+            <View style={styles.settingItemLeft}>
+              <View style={[styles.settingIconContainer, { backgroundColor: `${theme.colors.primary}20` }]}>
+                <Ionicons name="notifications-outline" size={20} color={theme.colors.primary} />
+              </View>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>Notifications</Text>
+                <Text style={[styles.settingValue, { color: theme.colors.text }]}>
+                  {notificationsEnabled ? 'Enabled' : 'Disabled'}
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={notificationsEnabled}
+              onValueChange={handleNotificationsChange}
+              trackColor={{ false: '#767577', true: `${theme.colors.primary}80` }}
+              thumbColor={notificationsEnabled ? theme.colors.primary : '#f4f3f4'}
+              ios_backgroundColor="#3e3e3e"
+            />
+          </View> */}
         </View>
         
         {/* About Section */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>About</Text>
-          <TouchableOpacity style={styles.settingItem}>
+          
+          <TouchableOpacity style={[styles.settingItem, { backgroundColor: theme.colors.card }]} activeOpacity={0.7}>
             <View style={styles.settingItemLeft}>
-              <Ionicons name="information-circle-outline" size={24} color={theme.colors.text} />
-              <Text style={[styles.settingText, { color: theme.colors.text }]}>App Info</Text>
+              <View style={[styles.settingIconContainer, { backgroundColor: `${theme.colors.primary}20` }]}>
+                <Ionicons name="information-circle-outline" size={20} color={theme.colors.primary} />
+              </View>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>App Version</Text>
+                <Text style={[styles.settingValue, { color: theme.colors.text }]}>MoneyTrack v1.0.0</Text>
+              </View>
             </View>
-            <Text style={[styles.versionText, { color: theme.colors.text }]}>v1.0.0</Text>
           </TouchableOpacity>
         </View>
         
         <TouchableOpacity 
           style={[styles.logoutButton, { backgroundColor: theme.colors.error }]}
           onPress={handleLogout}
+          activeOpacity={0.8}
         >
           <Text style={[styles.logoutButtonText, { color: theme.colors.background }]}>Log Out</Text>
         </TouchableOpacity>
@@ -212,6 +233,7 @@ const SettingsScreen = ({ navigation }) => {
         transparent={true}
         visible={showEditProfile}
         onRequestClose={() => setShowEditProfile(false)}
+        statusBarTranslucent
       >
         <View style={styles.modalContainer}>
           <View style={[styles.modalContent, { backgroundColor: theme.colors.background }]}>
@@ -228,7 +250,9 @@ const SettingsScreen = ({ navigation }) => {
                 value={name}
                 onChangeText={setName}
                 placeholderTextColor={theme.colors.secondaryText}
-                placeholderText="Enter your name"
+                placeholder="Enter your name"
+                returnKeyType="done"
+                onSubmitEditing={handleUpdateProfile}
               />
             </View>
 
@@ -238,13 +262,17 @@ const SettingsScreen = ({ navigation }) => {
                 style={[styles.input, { 
                   color: theme.colors.text,
                   borderColor: theme.colors.border,
-                  backgroundColor: theme.colors.card
+                  backgroundColor: theme.colors.card,
+                  opacity: 0.6
                 }]}
                 value={email}
-                onChangeText={setEmail}
+                editable={false}
                 placeholderTextColor={theme.colors.secondaryText}
-                placeholderText="Enter your email"
+                placeholder="Enter your email"
               />
+              <Text style={[styles.helpText, { color: theme.colors.text }]}>
+                Email cannot be changed for security reasons
+              </Text>
             </View>
 
             <View style={styles.modalButtons}>
@@ -254,6 +282,7 @@ const SettingsScreen = ({ navigation }) => {
                   { backgroundColor: theme.colors.card }
                 ]}
                 onPress={() => setShowEditProfile(false)}
+                activeOpacity={0.7}
               >
                 <Text style={[styles.cancelModalButtonText, { color: theme.colors.text }]}>Cancel</Text>
               </TouchableOpacity>
@@ -264,8 +293,9 @@ const SettingsScreen = ({ navigation }) => {
                   { backgroundColor: theme.colors.primary }
                 ]}
                 onPress={handleUpdateProfile}
+                activeOpacity={0.8}
               >
-                <Text style={[styles.saveModalButtonText, { color: theme.colors.background }]}>Save</Text>
+                <Text style={[styles.saveModalButtonText, { color: theme.colors.background }]}>Save Changes</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -276,8 +306,9 @@ const SettingsScreen = ({ navigation }) => {
       <Modal
         visible={showEditBudget}
         transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setShowEditBudget(false)}
+        statusBarTranslucent
       >
         <View style={styles.modalContainer}>
           <View style={[styles.modalContent, { backgroundColor: theme.colors.background }]}>
@@ -285,36 +316,51 @@ const SettingsScreen = ({ navigation }) => {
 
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: theme.colors.text }]}>Monthly Budget</Text>
-              <View style={[styles.inputContainer, { backgroundColor: theme.colors.card }]}>
+              <View style={[styles.inputContainer, { 
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border 
+              }]}>
                 <Text style={[styles.currencySymbol, { color: theme.colors.primary }]}>₱</Text>
                 <TextInput
                   style={[styles.input, { 
                     color: theme.colors.text,
-                    backgroundColor: theme.colors.card 
+                    backgroundColor: 'transparent',
+                    borderWidth: 0,
+                    flex: 1,
+                    paddingVertical: 16
                   }]}
                   value={monthlyBudget}
                   onChangeText={setMonthlyBudget}
                   keyboardType="decimal-pad"
                   placeholder="Enter monthly budget"
                   placeholderTextColor={theme.colors.secondaryText}
+                  returnKeyType="next"
                 />
               </View>
             </View>
 
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: theme.colors.text }]}>Savings Goal</Text>
-              <View style={[styles.inputContainer, { backgroundColor: theme.colors.card }]}>
+              <View style={[styles.inputContainer, { 
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border 
+              }]}>
                 <Text style={[styles.currencySymbol, { color: theme.colors.primary }]}>₱</Text>
                 <TextInput
                   style={[styles.input, { 
                     color: theme.colors.text,
-                    backgroundColor: theme.colors.card 
+                    backgroundColor: 'transparent',
+                    borderWidth: 0,
+                    flex: 1,
+                    paddingVertical: 16
                   }]}
                   value={savingsGoal}
                   onChangeText={setSavingsGoal}
                   keyboardType="decimal-pad"
                   placeholder="Enter savings goal"
                   placeholderTextColor={theme.colors.secondaryText}
+                  returnKeyType="done"
+                  onSubmitEditing={handleUpdateBudget}
                 />
               </View>
             </View>
@@ -326,6 +372,7 @@ const SettingsScreen = ({ navigation }) => {
                   { backgroundColor: theme.colors.card }
                 ]}
                 onPress={() => setShowEditBudget(false)}
+                activeOpacity={0.7}
               >
                 <Text style={[styles.cancelModalButtonText, { color: theme.colors.text }]}>Cancel</Text>
               </TouchableOpacity>
@@ -336,8 +383,9 @@ const SettingsScreen = ({ navigation }) => {
                   { backgroundColor: theme.colors.primary }
                 ]}
                 onPress={handleUpdateBudget}
+                activeOpacity={0.8}
               >
-                <Text style={[styles.saveModalButtonText, { color: theme.colors.background }]}>Save</Text>
+                <Text style={[styles.saveModalButtonText, { color: theme.colors.background }]}>Save Changes</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -350,164 +398,202 @@ const SettingsScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   // Container styles
   container: {
-    flex:           1,
+    flex: 1,
   },
   section: {
-    marginBottom:   20,
+    marginBottom: 24,
+    marginHorizontal: 16,
   },
-  profileSection: {
-    padding: 20,
-    backgroundColor: '#2C2C2C',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    marginBottom: 20,
-  },
-  profileInfo: {
-    alignItems: 'center',
-  },
-  userName: {
-    color: '#FFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  userEmail: {
-    color: '#808080',
-    fontSize: 14,
-  },
-
+  
   // Header styles
   title: {
-    fontSize:       24,
-    fontWeight:     'bold',
-    padding:        20,
+    fontSize: 32,
+    fontWeight: 'bold',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 24,
+    letterSpacing: -0.5,
   },
   sectionTitle: {
-    fontSize:       14,
-    fontWeight:     '500',
-    paddingHorizontal: 20,
-    marginBottom:   10,
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+    marginLeft: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    opacity: 0.8,
   },
+  
+  // Setting items
   settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 15,
-    paddingHorizontal: 60,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    marginBottom: 2,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   settingItemLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
-  profileInfo: {
-    marginLeft: 15,
-  },
-  settingText: {
-    color: '#FFF',
-    fontSize: 16,
-    marginLeft: 15,
-  },
-  emailText: {
-    color: '#808080',
-    fontSize: 14,
-    marginLeft: 15,
+  settingIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 107, 0, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
   },
   settingInfo: {
     flex: 1,
-    marginLeft: 15,
+  },
+  settingText: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 2,
   },
   settingValue: {
-    color: '#808080',
     fontSize: 14,
+    opacity: 0.7,
+    lineHeight: 18,
+  },
+  emailText: {
+    fontSize: 13,
+    opacity: 0.6,
     marginTop: 2,
   },
   versionText: {
-    color: '#808080',
     fontSize: 14,
+    opacity: 0.7,
   },
+  
+  // Logout button
   logoutButton: {
-    margin: 20,
-    padding: 15,
-    backgroundColor: '#2C2C2C',
-    borderRadius: 8,
+    marginHorizontal: 16,
+    marginTop: 24,
+    marginBottom: 32,
+    paddingVertical: 16,
+    borderRadius: 12,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   logoutButtonText: {
-    color: '#FF3B30',
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
+  
+  // Modal styles
   modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'center',
     padding: 20,
   },
   modalContent: {
-    backgroundColor: '#1C1C1C',
-    borderRadius: 12,
-    padding: 20,
+    borderRadius: 20,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 10,
   },
   modalTitle: {
-    color: '#FFF',
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 20,
+    marginBottom: 24,
+    textAlign: 'center',
+    letterSpacing: -0.3,
   },
+  
+  // Input styles
   inputGroup: {
     marginBottom: 20,
   },
   label: {
-    color: '#808080',
     fontSize: 14,
-    marginBottom: 5,
+    fontWeight: '600',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    opacity: 0.8,
   },
   input: {
-    backgroundColor: '#2C2C2C',
-    borderRadius: 8,
-    padding: 15,
-    color: '#FFF',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     fontSize: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2C2C2C',
-    borderRadius: 8,
-    paddingHorizontal: 15,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   currencySymbol: {
-    color: '#FF6B00',
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
-    marginRight: 10,
+    marginRight: 12,
   },
+  helpText: {
+    fontSize: 12,
+    opacity: 0.6,
+    marginTop: 8,
+    fontStyle: 'italic',
+    textAlign: 'center',
+  },
+  
+  // Modal buttons
   modalButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 20,
+    marginTop: 32,
+    gap: 12,
   },
   modalButton: {
     flex: 1,
-    padding: 15,
-    borderRadius: 8,
+    paddingVertical: 16,
+    borderRadius: 12,
     alignItems: 'center',
-  },
-  cancelModalButton: {
-    backgroundColor: '#2C2C2C',
-    marginRight: 10,
-  },
-  saveModalButton: {
-    backgroundColor: '#FF6B00',
-    marginLeft: 10,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
   },
   cancelModalButtonText: {
-    color: '#808080',
     fontSize: 16,
+    fontWeight: '600',
   },
   saveModalButtonText: {
-    color: '#FFF',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
 });
 

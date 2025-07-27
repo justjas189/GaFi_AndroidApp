@@ -34,14 +34,31 @@ const GetStartedScreen = ({ navigation }) => {
         
         <Text style={[styles.title, { color: theme.colors.text }]}>Welcome to MoneyTrack</Text>
         <Text style={[styles.subtitle, { color: theme.colors.text }]}>
-          Your personal finance companion for smart spending and saving
+          Your AI-powered personal finance companion with advanced analytics and smart insights
         </Text>
 
         <View style={styles.featuresContainer}>
-          <Text style={[styles.featureText, { color: theme.colors.text }]}>✓ Track your daily expenses</Text>
-          <Text style={[styles.featureText, { color: theme.colors.text }]}>✓ Set and monitor budget goals</Text>
-          <Text style={[styles.featureText, { color: theme.colors.text }]}>✓ Get AI-powered insights</Text>
-          <Text style={[styles.featureText, { color: theme.colors.text }]}>✓ Stay organized with notes</Text>
+          <View style={styles.featureSection}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>💰 Smart Expense Tracking</Text>
+            <Text style={[styles.featureText, { color: theme.colors.text }]}>✓ Track daily expenses with categories</Text>
+            <Text style={[styles.featureText, { color: theme.colors.text }]}>✓ Visual charts and analytics</Text>
+            <Text style={[styles.featureText, { color: theme.colors.text }]}>✓ Calendar view for expense history</Text>
+          </View>
+
+          <View style={styles.featureSection}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>🤖 AI-Powered Intelligence</Text>
+            <Text style={[styles.featureText, { color: theme.colors.text }]}>✓ NVIDIA AI expense analysis</Text>
+            <Text style={[styles.featureText, { color: theme.colors.text }]}>✓ Personalized spending recommendations</Text>
+            <Text style={[styles.featureText, { color: theme.colors.text }]}>✓ Smart budget predictions</Text>
+          </View>
+
+          <View style={styles.featureSection}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>🎯 Advanced Features</Text>
+            <Text style={[styles.featureText, { color: theme.colors.text }]}>✓ Savings goals with progress tracking</Text>
+            <Text style={[styles.featureText, { color: theme.colors.text }]}>✓ Financial calculators & tools</Text>
+            <Text style={[styles.featureText, { color: theme.colors.text }]}>✓ Educational content & tips</Text>
+            
+          </View>
         </View>
 
         <TouchableOpacity 
@@ -83,12 +100,23 @@ const styles = StyleSheet.create({
   },
   featuresContainer: {
     alignSelf: 'stretch',
-    marginBottom: 40,
-    paddingHorizontal: 40,
+    marginBottom: 30,
+    paddingHorizontal: 20,
+  },
+  featureSection: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 8,
+    textAlign: 'left',
   },
   featureText: {
-    fontSize: 16,
-    marginBottom: 16,
+    fontSize: 14,
+    marginBottom: 6,
+    paddingLeft: 8,
+    opacity: 0.9,
   },
   button: {
     paddingVertical: 16,

@@ -1,9 +1,10 @@
 import React, { useContext, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
+import { analyzeExpenses, getRecommendations } from '../../config/nvidia';
 
 const ExpenseGraphScreen = () => {
   const { budget, expenses, getExpensesByDateRange } = useContext(DataContext);
@@ -11,6 +12,8 @@ const ExpenseGraphScreen = () => {
   const [monthlyStats, setMonthlyStats] = useState(null);
   const [weeklyStats, setWeeklyStats] = useState(null);
   const [categoryStats, setCategoryStats] = useState(null);
+  const [aiInsights, setAiInsights] = useState([]);
+  const [isLoadingInsights, setIsLoadingInsights] = useState(false);
 
   const calculateStats = () => {
     // Get current date info
@@ -89,115 +92,345 @@ const ExpenseGraphScreen = () => {
     };
   };
 
+  const generateAIInsights = async () => {
+    if (!expenses || expenses.length === 0) {
+      setAiInsights([{
+        id: 'no-data',
+        type: 'info',
+        title: 'No Data Yet',
+        message: 'Start tracking expenses to get AI-powered insights!',
+        icon: 'bulb-outline',
+        color: '#2196F3'
+      }]);
+      return;
+    }
+
+    setIsLoadingInsights(true);
+    try {
+      // Get recent expenses for analysis
+      const recentExpenses = expenses.slice(0, 20);
+      
+      // Generate insights using NVIDIA AI
+      const insights = await analyzeExpenses(recentExpenses, budget);
+      const recommendations = await getRecommendations({ id: 'user' }, recentExpenses, budget);
+      
+      // Combine and limit to most relevant insights
+      const combinedInsights = [...insights, ...recommendations].slice(0, 4);
+      setAiInsights(combinedInsights);
+      
+    } catch (error) {
+      console.error('Error generating AI insights:', error);
+      // Fallback to basic insights
+      setAiInsights(generateBasicInsights());
+    } finally {
+      setIsLoadingInsights(false);
+    }
+  };
+
+  const generateBasicInsights = () => {
+    const insights = [];
+    
+    if (monthlyStats && categoryStats) {
+      // Budget analysis
+      if (monthlyStats.budget > 0) {
+        const budgetUsed = (monthlyStats.total / monthlyStats.budget) * 100;
+        if (budgetUsed > 90) {
+          insights.push({
+            id: 'budget-warning',
+            type: 'warning',
+            title: 'Budget Alert',
+            message: `You've used ${budgetUsed.toFixed(0)}% of your monthly budget`,
+            icon: 'warning-outline',
+            color: '#FF9800'
+          });
+        } else if (budgetUsed < 50) {
+          insights.push({
+            id: 'budget-good',
+            type: 'success',
+            title: 'Great Progress',
+            message: `You're on track! ${(100-budgetUsed).toFixed(0)}% budget remaining`,
+            icon: 'checkmark-circle-outline',
+            color: '#4CAF50'
+          });
+        }
+      }
+
+      // Top spending category
+      const topCategory = categoryStats.find(cat => cat.spent > 0);
+      if (topCategory) {
+        insights.push({
+          id: 'top-category',
+          type: 'info',
+          title: 'Top Spending',
+          message: `${topCategory.category} is your biggest expense category`,
+          icon: 'trending-up-outline',
+          color: '#2196F3'
+        });
+      }
+
+      // Savings tip
+      insights.push({
+        id: 'savings-tip',
+        type: 'info',
+        title: 'Savings Tip',
+        message: 'Try cooking at home to save ₱300+ per week on food',
+        icon: 'bulb-outline',
+        color: '#FF6B00'
+      });
+    }
+
+    return insights;
+  };
+
+  const formatCurrency = (amount) => {
+    return `₱${parseFloat(amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+  };
+
+  const getCategoryIcon = (category) => {
+    const categoryMap = {
+      food: 'fast-food-outline',
+      transportation: 'bus-outline',
+      entertainment: 'film-outline',
+      shopping: 'cart-outline',
+      utilities: 'build-outline',
+      others: 'apps-outline'
+    };
+    return categoryMap[category.toLowerCase()] || 'apps-outline';
+  };
+
   // Update stats when expenses or budget changes
   useEffect(() => {
     if (getExpensesByDateRange) {
       calculateStats();
+      generateAIInsights();
     }
   }, [expenses, budget, getExpensesByDateRange]);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Expense Analytics</Text>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View style={styles.header}>
+        <Text style={[styles.title, { color: theme.colors.text }]}>Expense Analytics</Text>
+        <View style={[styles.analyticsIndicator, { backgroundColor: theme.colors.primary + '20' }]}>
+          <Text style={[styles.analyticsIndicatorText, { color: theme.colors.primary }]}>📊 AI Powered</Text>
+        </View>
+      </View>
       
-      <ScrollView>
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Monthly Overview</Text>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
+          <View style={styles.cardHeader}>
+            <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Monthly Overview</Text>
+            <View style={[styles.monthBadge, { backgroundColor: theme.colors.primary + '15' }]}>
+              <Text style={[styles.monthBadgeText, { color: theme.colors.primary }]}>
+                {new Date().toLocaleDateString('en-US', { month: 'short' })}
+              </Text>
+            </View>
+          </View>
           {monthlyStats && (
             <View>
-              <View style={styles.statRow}>
-                <View style={styles.stat}>
-                  <Text style={styles.statLabel}>Total Spent</Text>
-                  <Text style={styles.statValue}>{formatCurrency(monthlyStats.total)}</Text>
+              <View style={styles.primaryStats}>
+                <View style={styles.primaryStat}>
+                  <Text style={[styles.primaryStatLabel, { color: theme.colors.text, opacity: 0.7 }]}>Total Spent</Text>
+                  <Text style={[styles.primaryStatValue, { color: theme.colors.text }]}>{formatCurrency(monthlyStats.total)}</Text>
                 </View>
-                <View style={styles.stat}>
-                  <Text style={styles.statLabel}>vs Last Month</Text>
+                <View style={styles.primaryStat}>
+                  <Text style={[styles.primaryStatLabel, { color: theme.colors.text, opacity: 0.7 }]}>vs Last Month</Text>
                   {getCurrentTrend().trend === 'increase' ? (
-                    <Text style={[styles.statValue, styles.negativeValue]}>
-                      +{getCurrentTrend().percentage}%
-                    </Text>
+                    <View style={styles.trendContainer}>
+                      <Ionicons name="trending-up" size={16} color="#FF4444" />
+                      <Text style={[styles.primaryStatValue, styles.negativeValue]}>
+                        +{getCurrentTrend().percentage}%
+                      </Text>
+                    </View>
                   ) : (
-                    <Text style={[styles.statValue, styles.positiveValue]}>
-                      -{getCurrentTrend().percentage}%
-                    </Text>
+                    <View style={styles.trendContainer}>
+                      <Ionicons name="trending-down" size={16} color="#4CAF50" />
+                      <Text style={[styles.primaryStatValue, styles.positiveValue]}>
+                        -{getCurrentTrend().percentage}%
+                      </Text>
+                    </View>
                   )}
                 </View>
               </View>
-              <View style={styles.statRow}>
-                <View style={styles.stat}>
-                  <Text style={styles.statLabel}>Remaining</Text>
-                  <Text style={[styles.statValue, monthlyStats.remaining < 0 && styles.negativeValue]}>
+              
+              <View style={styles.statsGrid}>
+                <View style={styles.statCard}>
+                  <View style={[styles.statIcon, { backgroundColor: monthlyStats.remaining >= 0 ? '#4CAF50' + '20' : '#FF4444' + '20' }]}>
+                    <Ionicons 
+                      name={monthlyStats.remaining >= 0 ? "wallet-outline" : "alert-circle-outline"} 
+                      size={20} 
+                      color={monthlyStats.remaining >= 0 ? "#4CAF50" : "#FF4444"} 
+                    />
+                  </View>
+                  <Text style={[styles.statLabel, { color: theme.colors.text, opacity: 0.7 }]}>Remaining</Text>
+                  <Text style={[styles.statValue, { color: monthlyStats.remaining < 0 ? '#FF4444' : '#4CAF50' }]}>
                     {formatCurrency(monthlyStats.remaining)}
                   </Text>
                 </View>
-              </View>
-              <View style={styles.statRow}>
-                <View style={styles.stat}>
-                  <Text style={styles.statLabel}>Daily Average</Text>
-                  <Text style={styles.statValue}>{formatCurrency(monthlyStats.average)}</Text>
+                
+                <View style={styles.statCard}>
+                  <View style={[styles.statIcon, { backgroundColor: theme.colors.primary + '20' }]}>
+                    <Ionicons name="calendar-outline" size={20} color={theme.colors.primary} />
+                  </View>
+                  <Text style={[styles.statLabel, { color: theme.colors.text, opacity: 0.7 }]}>Daily Average</Text>
+                  <Text style={[styles.statValue, { color: theme.colors.text }]}>{formatCurrency(monthlyStats.average)}</Text>
                 </View>
-                <View style={styles.stat}>
-                  <Text style={styles.statLabel}>Transactions</Text>
-                  <Text style={styles.statValue}>{monthlyStats.count}</Text>
+                
+                <View style={styles.statCard}>
+                  <View style={[styles.statIcon, { backgroundColor: '#FF9800' + '20' }]}>
+                    <Ionicons name="receipt-outline" size={20} color="#FF9800" />
+                  </View>
+                  <Text style={[styles.statLabel, { color: theme.colors.text, opacity: 0.7 }]}>Transactions</Text>
+                  <Text style={[styles.statValue, { color: theme.colors.text }]}>{monthlyStats.count}</Text>
                 </View>
               </View>
-              <View style={styles.progressBar}>
-                <View 
-                  style={[
-                    styles.progressFill, 
-                    { width: `${Math.min((monthlyStats.total / monthlyStats.budget) * 100, 100)}%` }
-                  ]} 
-                />
+              
+              <View style={styles.progressContainer}>
+                <View style={[styles.progressBar, { backgroundColor: theme.colors.background }]}>
+                  <View 
+                    style={[
+                      styles.progressFill, 
+                      { 
+                        width: `${Math.min((monthlyStats.total / monthlyStats.budget) * 100, 100)}%`,
+                        backgroundColor: monthlyStats.total > monthlyStats.budget ? '#FF4444' : theme.colors.primary
+                      }
+                    ]} 
+                  />
+                </View>
+                <Text style={[styles.progressLabel, { color: theme.colors.text, opacity: 0.7 }]}>
+                  {Math.round((monthlyStats.total / monthlyStats.budget) * 100)}% of budget used
+                </Text>
               </View>
-              <Text style={styles.progressLabel}>
-                {Math.round((monthlyStats.total / monthlyStats.budget) * 100)}% of budget used
-              </Text>
             </View>
           )}
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Weekly Summary</Text>
+        <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
+          <View style={styles.cardHeader}>
+            <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Weekly Summary</Text>
+            <View style={[styles.weekBadge, { backgroundColor: '#4CAF50' + '15' }]}>
+              <Text style={[styles.weekBadgeText, { color: '#4CAF50' }]}>This Week</Text>
+            </View>
+          </View>
           {weeklyStats && (
-            <View>
-              <View style={styles.statRow}>
-                <View style={styles.stat}>
-                  <Text style={styles.statLabel}>Total Spent</Text>
-                  <Text style={styles.statValue}>{formatCurrency(weeklyStats.total)}</Text>
+            <View style={styles.weeklyContainer}>
+              <View style={styles.weeklyStats}>
+                <View style={styles.weeklyStat}>
+                  <View style={[styles.weeklyStatIcon, { backgroundColor: theme.colors.primary + '20' }]}>
+                    <Ionicons name="cash-outline" size={24} color={theme.colors.primary} />
+                  </View>
+                  <View style={styles.weeklyStatInfo}>
+                    <Text style={[styles.weeklyStatLabel, { color: theme.colors.text, opacity: 0.7 }]}>Total Spent</Text>
+                    <Text style={[styles.weeklyStatValue, { color: theme.colors.text }]}>{formatCurrency(weeklyStats.total)}</Text>
+                  </View>
                 </View>
-                <View style={styles.stat}>
-                  <Text style={styles.statLabel}>Daily Average</Text>
-                  <Text style={styles.statValue}>{formatCurrency(weeklyStats.average)}</Text>
+                
+                <View style={styles.weeklyStat}>
+                  <View style={[styles.weeklyStatIcon, { backgroundColor: '#FF9800' + '20' }]}>
+                    <Ionicons name="trending-up-outline" size={24} color="#FF9800" />
+                  </View>
+                  <View style={styles.weeklyStatInfo}>
+                    <Text style={[styles.weeklyStatLabel, { color: theme.colors.text, opacity: 0.7 }]}>Daily Average</Text>
+                    <Text style={[styles.weeklyStatValue, { color: theme.colors.text }]}>{formatCurrency(weeklyStats.average)}</Text>
+                  </View>
                 </View>
-              </View>
-              <View style={styles.statRow}>
-                <View style={styles.stat}>
-                  <Text style={styles.statLabel}>Transactions</Text>
-                  <Text style={styles.statValue}>{weeklyStats.count}</Text>
+                
+                <View style={styles.weeklyStat}>
+                  <View style={[styles.weeklyStatIcon, { backgroundColor: '#9C27B0' + '20' }]}>
+                    <Ionicons name="list-outline" size={24} color="#9C27B0" />
+                  </View>
+                  <View style={styles.weeklyStatInfo}>
+                    <Text style={[styles.weeklyStatLabel, { color: theme.colors.text, opacity: 0.7 }]}>Transactions</Text>
+                    <Text style={[styles.weeklyStatValue, { color: theme.colors.text }]}>{weeklyStats.count}</Text>
+                  </View>
                 </View>
               </View>
             </View>
           )}
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Category Breakdown</Text>
+        {/* AI Insights Section */}
+        <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
+          <View style={styles.cardHeader}>
+            <Text style={[styles.cardTitle, { color: theme.colors.text }]}>AI Insights</Text>
+            <View style={styles.insightsHeaderRight}>
+              {isLoadingInsights && (
+                <ActivityIndicator size="small" color={theme.colors.primary} />
+              )}
+              <View style={[styles.aiPoweredBadge, { backgroundColor: theme.colors.primary + '15' }]}>
+                <Text style={[styles.aiPoweredText, { color: theme.colors.primary }]}>🤖 AI</Text>
+              </View>
+            </View>
+          </View>
+          
+          {aiInsights && aiInsights.length > 0 ? (
+            <View style={styles.insightsContainer}>
+              {aiInsights.map((insight, index) => (
+                <View key={insight.id || index} style={[styles.insightCard, { backgroundColor: theme.colors.background }]}>
+                  <View style={styles.insightHeader}>
+                    <View style={[styles.insightIconContainer, { backgroundColor: insight.color + '20' || theme.colors.primary + '20' }]}>
+                      <Ionicons 
+                        name={insight.icon || 'bulb-outline'} 
+                        size={20} 
+                        color={insight.color || theme.colors.primary} 
+                      />
+                    </View>
+                    <View style={styles.insightContent}>
+                      <Text style={[styles.insightTitle, { color: theme.colors.text }]}>
+                        {insight.title}
+                      </Text>
+                      <Text style={[styles.insightMessage, { color: theme.colors.text, opacity: 0.8 }]}>{insight.message}</Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.noInsightsContainer}>
+              <View style={[styles.noInsightsIcon, { backgroundColor: theme.colors.background }]}>
+                <Ionicons name="bulb-outline" size={32} color={theme.colors.text} opacity={0.3} />
+              </View>
+              <Text style={[styles.noInsightsText, { color: theme.colors.text, opacity: 0.6 }]}>No insights available yet</Text>
+              <Text style={[styles.noInsightsSubtext, { color: theme.colors.text, opacity: 0.4 }]}>Track more expenses to get AI insights</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
+          <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Category Breakdown</Text>
           {categoryStats && categoryStats.map(stat => (
             <View key={stat.category} style={styles.categoryItem}>
               <View style={styles.categoryHeader}>
-                <Text style={styles.categoryName}>{stat.category}</Text>
-                <Text style={styles.categoryAmount}>{formatCurrency(stat.spent)}</Text>
+                <View style={styles.categoryLeft}>
+                  <View style={[styles.categoryIcon, { backgroundColor: theme.colors.primary + '20' }]}>
+                    <Ionicons 
+                      name={getCategoryIcon(stat.category)} 
+                      size={18} 
+                      color={theme.colors.primary} 
+                    />
+                  </View>
+                  <Text style={[styles.categoryName, { color: theme.colors.text }]}>{stat.category}</Text>
+                </View>
+                <View style={styles.categoryRight}>
+                  <Text style={[styles.categoryAmount, { color: theme.colors.primary }]}>{formatCurrency(stat.spent)}</Text>
+                  <Text style={[styles.categoryPercentage, { color: theme.colors.text, opacity: 0.6 }]}>
+                    {Math.round(stat.percentage)}%
+                  </Text>
+                </View>
               </View>
-              <View style={styles.progressBar}>
+              <View style={[styles.progressBar, { backgroundColor: theme.colors.background }]}>
                 <View 
                   style={[
                     styles.progressFill, 
-                    { width: `${Math.min(stat.percentage, 100)}%` },
-                    stat.percentage > 90 && styles.warningProgress
+                    { 
+                      width: `${Math.min(stat.percentage, 100)}%`,
+                      backgroundColor: stat.percentage > 90 ? '#FF4444' : theme.colors.primary
+                    }
                   ]} 
                 />
               </View>
-              <Text style={styles.progressLabel}>{Math.round(stat.percentage)}% of limit used</Text>
+              <Text style={[styles.progressLabel, { color: theme.colors.text, opacity: 0.6 }]}>
+                of {formatCurrency(stat.limit)} limit
+              </Text>
             </View>
           ))}
         </View>
@@ -209,101 +442,285 @@ const ExpenseGraphScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1C1C1C',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    paddingBottom: 16,
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
-    padding: 20,
-    paddingBottom: 10,
-    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  analyticsIndicator: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  analyticsIndicatorText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  scrollContent: {
+    paddingBottom: 20,
   },
   card: {
-    margin: 10,
-    padding: 15,
-    backgroundColor: '#2C2C2C',
-    borderRadius: 10,
+    margin: 16,
+    padding: 20,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
   },
   cardTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 15,
-    color: '#FFFFFF',
+    fontWeight: '700',
   },
-  statRow: {
+  monthBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  monthBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  weekBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  weekBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  primaryStats: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 15,
+    marginBottom: 24,
   },
-  stat: {
+  primaryStat: {
     flex: 1,
-    paddingHorizontal: 10,
+  },
+  primaryStatLabel: {
+    fontSize: 14,
+    marginBottom: 8,
+    fontWeight: '500',
+  },
+  primaryStatValue: {
+    fontSize: 24,
+    fontWeight: '700',
+  },
+  trendContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+  },
+  statIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
   },
   statLabel: {
-    color: '#808080',
-    fontSize: 14,
-    marginBottom: 5,
+    fontSize: 12,
+    marginBottom: 4,
+    textAlign: 'center',
+    fontWeight: '500',
   },
   statValue: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
   },
-  positiveValue: {
-    color: '#4CD964',
-  },
-  negativeValue: {
-    color: '#FF3B30',
+  progressContainer: {
+    marginTop: 8,
   },
   progressBar: {
     height: 8,
-    backgroundColor: '#3C3C3C',
     borderRadius: 4,
-    marginVertical: 10,
+    marginBottom: 8,
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#FF6B00',
     borderRadius: 4,
   },
-  warningProgress: {
-    backgroundColor: '#FF3B30',
-  },
   progressLabel: {
-    color: '#808080',
     fontSize: 12,
-    marginTop: 5,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  weeklyContainer: {
+    marginTop: 8,
+  },
+  weeklyStats: {
+    gap: 16,
+  },
+  weeklyStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+  },
+  weeklyStatIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  weeklyStatInfo: {
+    flex: 1,
+  },
+  weeklyStatLabel: {
+    fontSize: 14,
+    marginBottom: 4,
+    fontWeight: '500',
+  },
+  weeklyStatValue: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  insightsHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  aiPoweredBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  aiPoweredText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  insightsContainer: {
+    gap: 12,
+  },
+  insightCard: {
+    padding: 16,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#2196F3',
+  },
+  insightHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  insightIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  insightContent: {
+    flex: 1,
+  },
+  insightTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  insightMessage: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  noInsightsContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  noInsightsIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  noInsightsText: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  noInsightsSubtext: {
+    fontSize: 14,
   },
   categoryItem: {
-    marginBottom: 15,
+    marginBottom: 20,
   },
   categoryHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 5,
+    alignItems: 'center',
+    marginBottom: 12,
   },
-  categoryName: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    textTransform: 'capitalize',
-  },
-  categoryAmount: {
-    color: '#FF6B00',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  insightRow: {
+  categoryLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 10,
   },
-  insightText: {
-    color: '#808080',
-    fontSize: 14,
-    flex: 1,
+  categoryIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
   },
-  insightIcon: {
-    marginRight: 10,
+  categoryName: {
+    fontSize: 16,
+    fontWeight: '600',
+    textTransform: 'capitalize',
+  },
+  categoryRight: {
+    alignItems: 'flex-end',
+  },
+  categoryAmount: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  categoryPercentage: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  positiveValue: {
+    color: '#4CAF50',
+  },
+  negativeValue: {
+    color: '#FF4444',
   },
 });
 

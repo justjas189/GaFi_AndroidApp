@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../../context/AuthContext';
+import { supabase } from '../../config/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SignUpScreen = ({ navigation }) => {
@@ -25,6 +26,7 @@ const SignUpScreen = ({ navigation }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState({});
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const { register, error, isLoading } = useContext(AuthContext);
 
   const validateForm = () => {
@@ -66,13 +68,81 @@ const SignUpScreen = ({ navigation }) => {
     return Object.keys(newErrors).length === 0;
   };
 
+  const checkEmailExists = async (email) => {
+    try {
+      // Use RPC function to check if email exists in auth.users
+      const { data, error } = await supabase.rpc('check_email_exists', {
+        email_to_check: email.trim().toLowerCase()
+      });
+      
+      if (error) {
+        console.error('Error checking email existence:', error);
+        // If RPC fails, fallback to letting registration proceed and handling errors
+        return { exists: false, error: null };
+      }
+      
+      return { exists: data, error: null };
+    } catch (err) {
+      console.error('Error in checkEmailExists:', err);
+      // If there's any error, allow registration to proceed
+      return { exists: false, error: null };
+    }
+  };
+
   const handleSignUp = async () => {
     if (!validateForm()) {
       return;
     }
 
+    if (!termsAccepted) {
+      Alert.alert(
+        'Terms & Conditions Required',
+        'Please accept the Terms & Conditions to create your account.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     try {
+      // Check if email already exists in auth.users
+      const { exists, error: checkError } = await checkEmailExists(email);
+      
+      if (checkError) {
+        Alert.alert(
+          'Error',
+          'Unable to verify email availability. Please try again.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+      
+      if (exists) {
+        Alert.alert(
+          'Email Already Exists',
+          'An account with this email already exists. Please use a different email or sign in to your existing account.',
+          [
+            {
+              text: 'Go to Login',
+              onPress: () => navigation.replace('Login')
+            },
+            { text: 'OK' }
+          ]
+        );
+        return;
+      }
+
+      // Proceed with registration since email doesn't exist
       const { success, error, user, needsVerification } = await register(name.trim(), email.trim(), password);
+      
+      // Handle any unexpected registration errors
+      if (error) {
+        Alert.alert(
+          'Registration Failed',
+          error || 'Unable to create account. Please try again.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
       
       if (success && needsVerification) {
         Alert.alert(
@@ -102,13 +172,19 @@ const SignUpScreen = ({ navigation }) => {
         return;
       }
       
-      if (error) {
-        Alert.alert(
-          'Registration Failed',
-          error || 'Unable to create account. Please try again.',
-          [{ text: 'OK' }]
-        );
+      if (success && user) {
+        // Registration successful, navigate appropriately
+        navigation.replace('Login');
+        return;
       }
+
+      // If we reach here, there was an unexpected error
+      Alert.alert(
+        'Registration Failed',
+        'Unable to create account. Please try again.',
+        [{ text: 'OK' }]
+      );
+
     } catch (err) {
       console.error('SignUp error:', err);
       Alert.alert(
@@ -225,16 +301,24 @@ const SignUpScreen = ({ navigation }) => {
 
             <TouchableOpacity 
               style={styles.termsButton}
-              onPress={() => navigation.navigate('TermsAndConditions')}
+              onPress={() => navigation.navigate('TermsAndConditions', {
+                onAccept: () => setTermsAccepted(true),
+                returnScreen: 'SignUp'
+              })}
               disabled={isLoading}
             >
-              <Text style={styles.termsText}>By signing up, you agree to our Terms & Conditions</Text>
+              <Text style={[styles.termsText, termsAccepted && styles.termsAcceptedText]}>
+                {termsAccepted ? '✓ Terms & Conditions Accepted' : 'By signing up, you agree to our Terms & Conditions'}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
-              style={[styles.signUpButton, isLoading && styles.signUpButtonDisabled]}
+              style={[
+                styles.signUpButton, 
+                (isLoading || !termsAccepted) && styles.signUpButtonDisabled
+              ]}
               onPress={handleSignUp}
-              disabled={isLoading}
+              disabled={isLoading || !termsAccepted}
             >
               {isLoading ? (
                 <ActivityIndicator color="#FFF" />
@@ -315,9 +399,12 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   termsText: {
-    color: '#808080',
+    color: '#FF6B00',
     fontSize: 14,
     textAlign: 'center',
+  },
+  termsAcceptedText: {
+    color: '#4CAF50',
   },
   signUpButton: {
     backgroundColor: '#FF6B00',

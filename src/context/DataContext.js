@@ -3,7 +3,8 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ThemeContext } from './ThemeContext';
 import { supabase } from '../config/supabase';
-import { analyzeExpenses, getRecommendations } from '../config/deepseek';
+import { analyzeExpenses, getRecommendations } from '../config/nvidia';
+import { BudgetDatabaseService } from '../services/BudgetDatabaseService_NEW';
 
 export const DataContext = createContext();
 
@@ -30,21 +31,72 @@ export const DataProvider = ({ children }) => {
   const [expenses, setExpenses] = useState([]);
   const [notes, setNotes] = useState([]);
 
+  // Helper function to get current user ID
+  const getCurrentUserId = async () => {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    if (!session) throw new Error('No authenticated user');
+    return session.user.id;
+  };
+
+  // Helper function to ensure user is authenticated
+  const ensureAuthenticated = async () => {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    if (!session) throw new Error('User not authenticated');
+    return session;
+  };
+
   // Initialize data context
   useEffect(() => {
+    let expenseSubscription = null;
+    let budgetSubscription = null;
+
     const initializeData = async () => {
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (sessionError) throw sessionError;
 
         if (!session) {
+          console.log('No authenticated user found');
           setIsInitialized(true);
           setIsLoading(false);
           return;
         }
 
+        console.log('Loading data for user:', session.user.id);
         await loadData();
         setIsInitialized(true);
+
+        // Set up real-time subscriptions for expenses
+        expenseSubscription = supabase
+          .channel('expenses_changes')
+          .on('postgres_changes', {
+            event: '*', // Listen to all changes (INSERT, UPDATE, DELETE)
+            schema: 'public',
+            table: 'expenses',
+            filter: `user_id=eq.${session.user.id}`
+          }, async (payload) => {
+            console.log('Real-time expense change detected:', payload);
+            // Reload data and regenerate insights when expenses change
+            await loadData();
+          })
+          .subscribe();
+
+        // Set up real-time subscriptions for budget changes
+        budgetSubscription = supabase
+          .channel('budget_changes')
+          .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'budgets',
+            filter: `user_id=eq.${session.user.id}`
+          }, async (payload) => {
+            console.log('Real-time budget change detected:', payload);
+            await loadData();
+          })
+          .subscribe();
+
       } catch (error) {
         console.error('Error initializing data context:', error);
         setError(error.message);
@@ -54,52 +106,113 @@ export const DataProvider = ({ children }) => {
     };
 
     initializeData();
+
+    // Set up auth state listener to reload data when user changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        console.log('User signed in, reloading data for:', session.user.id);
+        await loadData();
+      } else if (event === 'SIGNED_OUT') {
+        console.log('User signed out, clearing data');
+        setBudget(defaultBudget);
+        setExpenses([]);
+        setNotes([]);
+        setInsights([]);
+        
+        // Clean up real-time subscriptions
+        if (expenseSubscription) {
+          expenseSubscription.unsubscribe();
+          expenseSubscription = null;
+        }
+        if (budgetSubscription) {
+          budgetSubscription.unsubscribe();
+          budgetSubscription = null;
+        }
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      if (expenseSubscription) {
+        expenseSubscription.unsubscribe();
+      }
+      if (budgetSubscription) {
+        budgetSubscription.unsubscribe();
+      }
+    };
   }, []);
 
   // Load data from Supabase
   const loadData = async () => {
     try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) throw sessionError;
-
-      if (!session) {
-        console.log('No authentication found, skipping data load');
-        return;
-      }
-
+      const session = await ensureAuthenticated();
       const userId = session.user.id;
 
-      // Load budget data
+      console.log('Loading data for user ID:', userId);
+
+      // Load budget data with explicit user scoping
       const { data: budgetData, error: budgetError } = await supabase
         .from('budgets')
-        .select(`
-          *,
-          budget_categories (*)
-        `)
+        .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
       if (budgetError && budgetError.code !== 'PGRST116') {
+        console.error('Budget load error:', budgetError);
         throw budgetError;
       }
 
-      // Load expenses
+      // Load budget categories separately if budget exists
+      let budgetCategories = [];
+      if (budgetData) {
+        try {
+          const { data: categoriesData, error: categoriesError } = await supabase
+            .from('budget_categories')
+            .select('*')
+            .eq('budget_id', budgetData.id);
+          
+          if (!categoriesError) {
+            budgetCategories = categoriesData || [];
+          }
+        } catch (catError) {
+          console.log('Budget categories table not found, using defaults');
+        }
+      }
+
+      if (budgetError && budgetError.code !== 'PGRST116') {
+        console.error('Budget load error:', budgetError);
+        throw budgetError;
+      }
+
+      // Load expenses with explicit user scoping
       const { data: expensesData, error: expensesError } = await supabase
         .from('expenses')
         .select('*')
         .eq('user_id', userId)
         .order('date', { ascending: false });
 
-      if (expensesError) throw expensesError;
+      if (expensesError) {
+        console.error('Expenses load error:', expensesError);
+        throw expensesError;
+      }
 
-      // Load notes
+      // Load notes with explicit user scoping
       const { data: notesData, error: notesError } = await supabase
         .from('notes')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
-      if (notesError) throw notesError;
+      if (notesError) {
+        console.error('Notes load error:', notesError);
+        throw notesError;
+      }
+
+      console.log('Data loaded successfully:', {
+        budget: budgetData ? 'found' : 'not found',
+        expenses: expensesData?.length || 0,
+        notes: notesData?.length || 0
+      });
 
       // Transform budget data to match app structure
       const transformedBudget = budgetData ? {
@@ -117,11 +230,11 @@ export const DataProvider = ({ children }) => {
       } : defaultBudget;
 
       // Update category limits and spent amounts
-      if (budgetData?.budget_categories) {
-        budgetData.budget_categories.forEach(category => {
-          if (transformedBudget.categories[category.category.toLowerCase()]) {
-            transformedBudget.categories[category.category.toLowerCase()] = {
-              limit: category.limit_amount || 0,
+      if (budgetCategories?.length > 0) {
+        budgetCategories.forEach(category => {
+          if (transformedBudget.categories[category.category_name.toLowerCase()]) {
+            transformedBudget.categories[category.category_name.toLowerCase()] = {
+              limit: category.allocated_amount || 0,
               spent: category.spent_amount || 0
             };
           }
@@ -132,11 +245,29 @@ export const DataProvider = ({ children }) => {
       setExpenses(expensesData || []);
       setNotes(notesData || []);
 
-      // Generate AI insights using Deepseek
+      // Generate AI insights using Nvidia Llama
       if (expensesData?.length > 0) {
-        const insights = await analyzeExpenses(expensesData);
-        const recommendations = await getRecommendations(session.user, expensesData);
-        setInsights([...insights, ...recommendations]);
+        try {
+          const insights = await analyzeExpenses(expensesData, transformedBudget);
+          const recommendations = await getRecommendations(session.user, expensesData, transformedBudget);
+          setInsights([...insights, ...recommendations]);
+          console.log('AI insights generated successfully:', insights.length + recommendations.length, 'insights');
+        } catch (insightError) {
+          console.error('Error generating AI insights:', insightError);
+          // Fall back to basic insights if AI fails
+          const basicInsights = generateBasicInsights(expensesData, transformedBudget);
+          setInsights(basicInsights);
+        }
+      } else {
+        // No expenses yet - show welcome insights
+        setInsights([{
+          id: 'welcome',
+          type: 'info',
+          title: 'Welcome to MoneyTrack',
+          message: 'Start tracking your expenses to get AI-powered insights!',
+          icon: 'bulb-outline',
+          color: '#4CAF50'
+        }]);
       }
 
     } catch (error) {
@@ -146,59 +277,84 @@ export const DataProvider = ({ children }) => {
   };
 
   // Add a new expense
+  // Helper function to normalize category names
+  const normalizeCategory = (category) => {
+    if (!category) return 'others';
+    
+    const normalized = category.toLowerCase().trim();
+    
+    const categoryMap = {
+      'groceries': 'food',
+      'dining': 'food',
+      'restaurant': 'food',
+      'meals': 'food',
+      'fuel': 'transportation',
+      'gas': 'transportation',
+      'commute': 'transportation',
+      'transport': 'transportation',
+      'movies': 'entertainment',
+      'cinema': 'entertainment',
+      'games': 'entertainment',
+      'gaming': 'entertainment',
+      'hobby': 'entertainment',
+      'clothes': 'shopping',
+      'clothing': 'shopping',
+      'gadgets': 'shopping',
+      'electronics': 'shopping',
+      'bills': 'utilities',
+      'electricity': 'utilities',
+      'water': 'utilities',
+      'internet': 'utilities',
+      'phone': 'utilities',
+      'miscellaneous': 'others',
+      'misc': 'others',
+      'other': 'others'
+    };
+    
+    const mappedCategory = categoryMap[normalized] || normalized;
+    const allowedCategories = ['food', 'transportation', 'entertainment', 'shopping', 'utilities', 'others'];
+    
+    return allowedCategories.includes(mappedCategory) ? mappedCategory : 'others';
+  };
+
   const addExpense = async (expense) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('No authenticated user');
+      const session = await ensureAuthenticated();
+      const userId = session.user.id;
 
-      const { data, error } = await supabase
-        .from('expenses')
-        .insert([{
-          user_id: session.user.id,
-          amount: expense.amount,
-          category: expense.category,
-          note: expense.note,
-          date: new Date().toISOString()
-        }])
-        .select()
-        .single();
+      console.log('Adding expense for user:', userId, expense);
 
-      if (error) throw error;
+      // Normalize category before processing
+      const normalizedCategory = normalizeCategory(expense.category);
 
-      // Update local state
-      setExpenses(prev => [data, ...prev]);
+      // Use the enhanced BudgetDatabaseService for expense recording
+      const budgetService = new BudgetDatabaseService();
+      
+      // Prepare transaction data object as expected by recordExpense
+      const transactionData = {
+        amount: parseFloat(expense.amount),
+        category: normalizedCategory,
+        description: expense.note || null,
+        date: expense.date || null, // Pass the selected date or null for current time
+        naturalLanguageInput: null, // null for manual entries
+        confidence: null  // null for manual entries
+      };
+      
+      const result = await budgetService.recordExpense(userId, transactionData);
 
-      // Update category spent amount in budget_categories
-      const { data: categoryData, error: categoryError } = await supabase
-        .from('budget_categories')
-        .select('*')
-        .eq('category', expense.category.toLowerCase())
-        .single();
-
-      if (!categoryError) {
-        await supabase
-          .from('budget_categories')
-          .update({
-            spent_amount: (categoryData.spent_amount || 0) + parseFloat(expense.amount)
-          })
-          .eq('id', categoryData.id);
-
-        // Update local budget state
-        setBudget(prev => ({
-          ...prev,
-          categories: {
-            ...prev.categories,
-            [expense.category.toLowerCase()]: {
-              ...prev.categories[expense.category.toLowerCase()],
-              spent: prev.categories[expense.category.toLowerCase()].spent + parseFloat(expense.amount)
-            }
-          }
-        }));
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to record expense');
       }
+
+      console.log('Expense recorded successfully:', result);
+
+      // Refresh local state by reloading all data
+      await loadData();
 
       return true;
     } catch (error) {
       console.error('Error adding expense:', error);
+      setError(error.message);
       return false;
     }
   };
@@ -206,50 +362,72 @@ export const DataProvider = ({ children }) => {
   // Delete an expense
   const deleteExpense = async (expenseId) => {
     try {
+      const session = await ensureAuthenticated();
+      const userId = session.user.id;
+
       const expense = expenses.find(e => e.id === expenseId);
       if (!expense) return false;
+
+      console.log('Deleting expense for user:', userId, expenseId);
 
       const { error } = await supabase
         .from('expenses')
         .delete()
-        .eq('id', expenseId);
+        .eq('id', expenseId)
+        .eq('user_id', userId); // Ensure user can only delete their own expenses
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error deleting expense:', error);
+        throw error;
+      }
 
       // Update local state
       setExpenses(prev => prev.filter(e => e.id !== expenseId));
 
       // Update category spent amount
-      const { data: categoryData, error: categoryError } = await supabase
-        .from('budget_categories')
-        .select('*')
-        .eq('category', expense.category.toLowerCase())
+      const { data: budgetData, error: budgetError } = await supabase
+        .from('budgets')
+        .select('id')
+        .eq('user_id', userId)
         .single();
 
-      if (!categoryError) {
-        await supabase
+      if (!budgetError && budgetData) {
+        // Normalize category before querying
+        const normalizedCategory = normalizeCategory(expense.category);
+        
+        const { data: categoryData, error: categoryError } = await supabase
           .from('budget_categories')
-          .update({
-            spent_amount: Math.max(0, (categoryData.spent_amount || 0) - parseFloat(expense.amount))
-          })
-          .eq('id', categoryData.id);
+          .select('*')
+          .eq('budget_id', budgetData.id)
+          .eq('category_name', normalizedCategory) // Use normalized category
+          .single();
 
-        // Update local budget state
-        setBudget(prev => ({
-          ...prev,
-          categories: {
-            ...prev.categories,
-            [expense.category.toLowerCase()]: {
-              ...prev.categories[expense.category.toLowerCase()],
-              spent: Math.max(0, prev.categories[expense.category.toLowerCase()].spent - parseFloat(expense.amount))
+        if (!categoryError && categoryData) {
+          await supabase
+            .from('budget_categories')
+            .update({
+              spent_amount: Math.max(0, (categoryData.spent_amount || 0) - parseFloat(expense.amount))
+            })
+            .eq('id', categoryData.id);
+
+          // Update local budget state
+          setBudget(prev => ({
+            ...prev,
+            categories: {
+              ...prev.categories,
+              [normalizedCategory]: { // Use normalized category
+                ...prev.categories[normalizedCategory],
+                spent: Math.max(0, prev.categories[normalizedCategory].spent - parseFloat(expense.amount))
+              }
             }
-          }
-        }));
+          }));
+        }
       }
 
       return true;
     } catch (error) {
       console.error('Error deleting expense:', error);
+      setError(error.message);
       return false;
     }
   };
@@ -257,25 +435,31 @@ export const DataProvider = ({ children }) => {
   // Add a new note
   const addNote = async (note) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('No authenticated user');
+      const session = await ensureAuthenticated();
+      const userId = session.user.id;
+
+      console.log('Adding note for user:', userId, note);
 
       const { data, error } = await supabase
         .from('notes')
         .insert([{
-          user_id: session.user.id,
+          user_id: userId,
           title: note.title,
           content: note.content
         }])
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error adding note:', error);
+        throw error;
+      }
 
       setNotes(prev => [data, ...prev]);
       return true;
     } catch (error) {
       console.error('Error adding note:', error);
+      setError(error.message);
       return false;
     }
   };
@@ -283,17 +467,27 @@ export const DataProvider = ({ children }) => {
   // Delete a note
   const deleteNote = async (noteId) => {
     try {
+      const session = await ensureAuthenticated();
+      const userId = session.user.id;
+
+      console.log('Deleting note for user:', userId, noteId);
+
       const { error } = await supabase
         .from('notes')
         .delete()
-        .eq('id', noteId);
+        .eq('id', noteId)
+        .eq('user_id', userId); // Ensure user can only delete their own notes
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error deleting note:', error);
+        throw error;
+      }
 
       setNotes(prev => prev.filter(note => note.id !== noteId));
       return true;
     } catch (error) {
       console.error('Error deleting note:', error);
+      setError(error.message);
       return false;
     }
   };
@@ -301,6 +495,11 @@ export const DataProvider = ({ children }) => {
   // Edit a note
   const editNote = async (noteId, updatedNote) => {
     try {
+      const session = await ensureAuthenticated();
+      const userId = session.user.id;
+
+      console.log('Updating note for user:', userId, noteId);
+
       const { error } = await supabase
         .from('notes')
         .update({
@@ -308,9 +507,13 @@ export const DataProvider = ({ children }) => {
           content: updatedNote.content,
           updated_at: new Date().toISOString()
         })
-        .eq('id', noteId);
+        .eq('id', noteId)
+        .eq('user_id', userId); // Ensure user can only edit their own notes
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error updating note:', error);
+        throw error;
+      }
 
       setNotes(prev => prev.map(note =>
         note.id === noteId ? { ...note, ...updatedNote } : note
@@ -318,6 +521,7 @@ export const DataProvider = ({ children }) => {
       return true;
     } catch (error) {
       console.error('Error editing note:', error);
+      setError(error.message);
       return false;
     }
   };
@@ -325,42 +529,101 @@ export const DataProvider = ({ children }) => {
   // Update budget settings
   const updateBudget = async (newBudget) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('No authenticated user');
+      const session = await ensureAuthenticated();
+      const userId = session.user.id;
 
-      // Update or create budget
-      const { data: budgetData, error: budgetError } = await supabase
+      console.log('Updating budget for user:', userId, newBudget);
+
+      // Use the enhanced BudgetDatabaseService for budget creation/update
+      const budgetService = new BudgetDatabaseService();
+      
+      // Check if user already has a budget
+      const { data: existingBudget, error: existingBudgetError } = await supabase
         .from('budgets')
-        .upsert({
-          user_id: session.user.id,
-          monthly: newBudget.monthly,
-          weekly: newBudget.weekly,
-          savings_goal: newBudget.savingsGoal
-        })
-        .select()
-        .single();
+        .select('id')
+        .eq('user_id', userId)
+        .maybeSingle();
 
-      if (budgetError) throw budgetError;
-
-      // Update budget categories
-      for (const [category, values] of Object.entries(newBudget.categories)) {
-        const { error: categoryError } = await supabase
-          .from('budget_categories')
-          .upsert({
-            budget_id: budgetData.id,
-            category: category.toLowerCase(),
-            limit_amount: values.limit,
-            spent_amount: budget.categories[category].spent // Preserve existing spent amount
-          });
-
-        if (categoryError) throw categoryError;
+      if (existingBudgetError && existingBudgetError.code !== 'PGRST116') {
+        console.error('Error checking existing budget:', existingBudgetError);
+        // Fallback to local state update
+        setBudget(newBudget);
+        return true;
       }
 
+      if (existingBudget) {
+        // Update existing budget
+        const { data, error: updateError } = await supabase
+          .from('budgets')
+          .update({
+            monthly: newBudget.monthly,
+            weekly: newBudget.weekly,
+            savings_goal: newBudget.savingsGoal
+          })
+          .eq('user_id', userId)
+          .select()
+          .single();
+
+        if (updateError) {
+          console.error('Error updating existing budget:', updateError);
+          setBudget(newBudget);
+          return true;
+        }
+
+        // Update budget categories with user's allocation
+        for (const [category, values] of Object.entries(newBudget.categories)) {
+          const normalizedCategory = normalizeCategory(category);
+          
+          // First try to update existing category
+          const { data: existingCategory, error: checkError } = await supabase
+            .from('budget_categories')
+            .select('id')
+            .eq('budget_id', data.id)
+            .eq('category_name', normalizedCategory)
+            .maybeSingle();
+
+          if (existingCategory) {
+            // Update existing category
+            const { error: updateError } = await supabase
+              .from('budget_categories')
+              .update({
+                allocated_amount: values.limit,
+                spent_amount: budget.categories[normalizedCategory]?.spent || 0
+              })
+              .eq('id', existingCategory.id);
+
+            if (updateError) {
+              console.error('Error updating budget category:', updateError);
+            }
+          } else {
+            // Insert new category
+            const { error: insertError } = await supabase
+              .from('budget_categories')
+              .insert({
+                budget_id: data.id,
+                category_name: normalizedCategory,
+                allocated_amount: values.limit,
+                spent_amount: budget.categories[normalizedCategory]?.spent || 0
+              });
+
+            if (insertError) {
+              console.error('Error inserting budget category:', insertError);
+            }
+          }
+        }
+      } else {
+        // Create new budget using the enhanced service
+        await budgetService.createDefaultBudget(userId, newBudget.monthly, newBudget.savingsGoal);
+      }
+
+      // Update local state
       setBudget(newBudget);
       return true;
     } catch (error) {
       console.error('Error updating budget:', error);
-      return false;
+      // Always update local state as fallback
+      setBudget(newBudget);
+      return true;
     }
   };
 
@@ -385,6 +648,155 @@ export const DataProvider = ({ children }) => {
     return expenseList.reduce((total, expense) => total + parseFloat(expense.amount), 0);
   };
 
+  // Generate insights from expenses data
+  const generateInsights = () => {
+    if (!expenses || expenses.length === 0) {
+      return [
+        {
+          id: 1,
+          type: 'info',
+          title: 'Welcome to MoneyTrack',
+          message: 'Start tracking your expenses to get personalized insights.',
+          icon: '📊'
+        }
+      ];
+    }
+
+    const insights = [];
+    
+    // Calculate spending by category
+    const categorySpending = {};
+    expenses.forEach(expense => {
+      const category = expense.category.toLowerCase();
+      categorySpending[category] = (categorySpending[category] || 0) + parseFloat(expense.amount);
+    });
+
+    // Find top spending category
+    const topCategory = Object.entries(categorySpending)
+      .sort(([,a], [,b]) => b - a)[0];
+    
+    if (topCategory) {
+      insights.push({
+        id: insights.length + 1,
+        type: 'warning',
+        title: 'Top Spending Category',
+        message: `You've spent ₱${topCategory[1].toFixed(2)} on ${topCategory[0]} this period.`,
+        icon: 'trending-up-outline',
+        color: '#FF9800'
+      });
+    }
+
+    // Budget warnings
+    Object.entries(budget.categories).forEach(([category, data]) => {
+      if (data.limit > 0 && data.spent >= data.limit * 0.8) {
+        insights.push({
+          id: insights.length + 1,
+          type: data.spent >= data.limit ? 'error' : 'warning',
+          title: `${category.charAt(0).toUpperCase() + category.slice(1)} Budget Alert`,
+          message: data.spent >= data.limit 
+            ? `You've exceeded your ${category} budget by ₱${(data.spent - data.limit).toFixed(2)}`
+            : `You've used ${((data.spent / data.limit) * 100).toFixed(1)}% of your ${category} budget`,
+          icon: data.spent >= data.limit ? 'alert-circle-outline' : 'warning-outline',
+          color: data.spent >= data.limit ? '#F44336' : '#FF9800'
+        });
+      }
+    });
+
+    // Recent spending trend
+    const recentExpenses = expenses
+      .filter(expense => {
+        const expenseDate = new Date(expense.date);
+        const threeDaysAgo = new Date();
+        threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+        return expenseDate >= threeDaysAgo;
+      });
+
+    if (recentExpenses.length > 5) {
+      const recentTotal = calculateTotalExpenses(recentExpenses);
+      insights.push({
+        id: insights.length + 1,
+        type: 'info',
+        title: 'Recent Activity',
+        message: `You've spent ₱${recentTotal.toFixed(2)} in the last 3 days across ${recentExpenses.length} transactions.`,
+        icon: 'stats-chart-outline',
+        color: '#2196F3'
+      });
+    }
+
+    return insights.length > 0 ? insights : [
+      {
+        id: 1,
+        type: 'success',
+        title: 'Great Job!',
+        message: 'Your spending looks healthy. Keep up the good work!',
+        icon: 'checkmark-circle-outline',
+        color: '#4CAF50'
+      }
+    ];
+  };
+
+  // Generate basic insights as fallback when AI fails
+  const generateBasicInsights = (expensesData, budgetData) => {
+    const insights = [];
+    const totalSpent = expensesData.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+    
+    // Category analysis
+    const categorySpending = {};
+    expensesData.forEach(expense => {
+      const cat = expense.category.toLowerCase();
+      categorySpending[cat] = (categorySpending[cat] || 0) + parseFloat(expense.amount);
+    });
+
+    const topCategory = Object.entries(categorySpending).sort(([,a], [,b]) => b - a)[0];
+    
+    if (topCategory) {
+      insights.push({
+        id: 'top-spending',
+        type: 'info',
+        title: 'Top Spending Category',
+        message: `You spent most on ${topCategory[0]}: ₱${topCategory[1].toLocaleString()}`,
+        icon: 'trending-up-outline',
+        color: '#FF9800'
+      });
+    }
+
+    // Budget analysis
+    if (budgetData?.monthly > 0) {
+      const percentage = (totalSpent / budgetData.monthly) * 100;
+      if (percentage > 80) {
+        insights.push({
+          id: 'budget-alert',
+          type: 'warning',
+          title: 'Budget Alert',
+          message: `You've used ${percentage.toFixed(0)}% of your monthly budget`,
+          icon: 'warning-outline',
+          color: '#F44336'
+        });
+      } else {
+        insights.push({
+          id: 'budget-good',
+          type: 'success',
+          title: 'On Track',
+          message: `${(100 - percentage).toFixed(0)}% of budget remaining`,
+          icon: 'checkmark-circle-outline',
+          color: '#4CAF50'
+        });
+      }
+    }
+
+    // Add a tip
+    insights.push({
+      id: 'tip',
+      type: 'info',
+      title: 'Saving Tip',
+      message: 'Try cooking meals at home to save ₱500+ monthly',
+      icon: 'bulb-outline',
+      color: '#2196F3'
+    });
+
+    return insights;
+  };
+
   return (
     <DataContext.Provider 
       value={{
@@ -397,6 +809,7 @@ export const DataProvider = ({ children }) => {
         updateBudget,
         getExpensesByDateRange,
         calculateTotalExpenses,
+        generateInsights,
         addNote,
         deleteNote,
         editNote,
@@ -408,4 +821,13 @@ export const DataProvider = ({ children }) => {
       {children}
     </DataContext.Provider>
   );
+};
+
+// Custom hook to use DataContext
+export const useData = () => {
+  const context = useContext(DataContext);
+  if (!context) {
+    throw new Error('useData must be used within a DataProvider');
+  }
+  return context;
 };

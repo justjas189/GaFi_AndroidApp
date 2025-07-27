@@ -14,6 +14,8 @@ import AddNoteScreen from '../screens/main/AddNoteScreen';
 import SettingsScreen from '../screens/main/SettingsScreen';
 import LearnScreen from '../screens/main/LearnScreen';
 import SavingsGoalsScreen from '../screens/main/SavingsGoalsScreen';
+import ChatScreen from '../screens/main/EnhancedChatScreen';
+import ChatHistorySettingsScreen from '../screens/main/ChatHistorySettingsScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -32,12 +34,12 @@ const TabNavigator = () => {
             iconName = focused ? 'stats-chart' : 'stats-chart-outline';
           } else if (route.name === 'Calendar') {
             iconName = focused ? 'calendar' : 'calendar-outline';
+          } else if (route.name === 'MonT AI') {
+            iconName = focused ? 'chatbubble' : 'chatbubble-outline';
           } else if (route.name === 'Learn') {
             iconName = focused ? 'book' : 'book-outline';
           } else if (route.name === 'Goals') {
             iconName = focused ? 'trophy' : 'trophy-outline';
-          } else if (route.name === 'Notes') {
-            iconName = focused ? 'document-text' : 'document-text-outline';
           } else if (route.name === 'Settings') {
             iconName = focused ? 'settings' : 'settings-outline';
           }
@@ -59,9 +61,9 @@ const TabNavigator = () => {
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Expenses" component={ExpenseScreen} />
       <Tab.Screen name="Calendar" component={CalendarScreen} />
+      <Tab.Screen name="MonT AI" component={ChatScreen} />
       <Tab.Screen name="Learn" component={LearnScreen} />
       <Tab.Screen name="Goals" component={SavingsGoalsScreen} />
-      <Tab.Screen name="Notes" component={NoteScreen} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );
@@ -78,6 +80,8 @@ const MainNavigator = () => {
       <Stack.Screen name="MainTabs" component={TabNavigator} />
       <Stack.Screen name="ExpenseGraph" component={ExpenseGraphScreen} />
       <Stack.Screen name="AddNote" component={AddNoteScreen} />
+      <Stack.Screen name="Notes" component={NoteScreen} />
+      <Stack.Screen name="ChatHistorySettings" component={ChatHistorySettingsScreen} />
     </Stack.Navigator>
   );
 };

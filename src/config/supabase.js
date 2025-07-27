@@ -42,7 +42,7 @@ const supabaseConfig = {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
-    flowType: 'pkce',
+    flowType: 'implicit', // Change from 'pkce' to 'implicit' to avoid WebCrypto requirement
     debug: __DEV__
   },
   db: {
