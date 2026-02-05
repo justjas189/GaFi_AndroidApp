@@ -738,6 +738,37 @@ export class BudgetAlertManager {
     this.saveAlertStates();
     DebugUtils.log('BUDGET_ALERTS', 'BudgetAlertManager destroyed');
   }
+
+  /**
+   * Trigger a test alert for testing purposes
+   * @param {string} userId - User ID
+   * @param {string} alertType - Type of alert to test ('warning', 'critical', 'exceeded')
+   * @returns {Promise<boolean>} Success status
+   */
+  async triggerTestAlert(userId, alertType = 'warning') {
+    try {
+      const testAlert = {
+        id: `test-alert-${Date.now()}`,
+        userId,
+        type: alertType,
+        category: 'Monthly Budget',
+        amount: 1000,
+        threshold: alertType === 'warning' ? 0.8 : alertType === 'critical' ? 0.95 : 1.1,
+        timestamp: new Date(),
+        message: `Test ${alertType} alert - Your budget is ${alertType === 'exceeded' ? 'over' : 'approaching'} the limit!`,
+        isTest: true
+      };
+
+      // Trigger the alert through the notification system
+      await this.sendAlert(testAlert);
+      
+      DebugUtils.log('BUDGET_ALERTS', 'Test alert triggered', { userId, alertType });
+      return true;
+    } catch (error) {
+      DebugUtils.error('BUDGET_ALERTS', 'Failed to trigger test alert', error);
+      return false;
+    }
+  }
 }
 
 // Export singleton instance

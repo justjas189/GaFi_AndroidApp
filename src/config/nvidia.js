@@ -15,7 +15,7 @@ const NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1";
 const NVIDIA_MODEL = "nvidia/llama-3.1-nemotron-ultra-253b-v1";
 
 // Your NVIDIA API key
-const NVIDIA_API_KEY = "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";
+const NVIDIA_API_KEY = process.env.EXPO_PUBLIC_NVIDIA_API_KEY || "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";
 
 // Enhanced chat completion function with error recovery
 export const getChatCompletion = async (messages, options = {}) => {
@@ -36,7 +36,10 @@ export const getChatCompletion = async (messages, options = {}) => {
       maxTokens: max_tokens,
       freqPenalty: frequency_penalty,
       presencePenalty: presence_penalty,
-      temperature
+      temperature,
+      apiKeyPresent: !!NVIDIA_API_KEY,
+      apiKeyLength: NVIDIA_API_KEY ? NVIDIA_API_KEY.length : 0,
+      apiKeyStart: NVIDIA_API_KEY ? NVIDIA_API_KEY.substring(0, 10) + '...' : 'MISSING'
     });
 
     const response = await fetch(`${NVIDIA_BASE_URL}/chat/completions`, {
@@ -62,8 +65,19 @@ export const getChatCompletion = async (messages, options = {}) => {
       DebugUtils.error('NVIDIA_API', 'API request failed', {
         status: response.status,
         statusText: response.statusText,
-        error: errorData
+        error: errorData,
+        url: `${NVIDIA_BASE_URL}/chat/completions`,
+        apiKeyPresent: !!NVIDIA_API_KEY
       });
+      
+      // Check for specific error types
+      if (response.status === 401) {
+        throw new Error('NVIDIA API authentication failed - API key may be invalid or expired');
+      } else if (response.status === 429) {
+        throw new Error('NVIDIA API rate limit exceeded - please try again later');
+      } else if (response.status === 500) {
+        throw new Error('NVIDIA API server error - please try again later');
+      }
       
       throw new Error(`NVIDIA API error: ${response.status} - ${response.statusText}`);
     }
@@ -71,12 +85,53 @@ export const getChatCompletion = async (messages, options = {}) => {
     const data = await response.json();
     const responseTime = Date.now() - startTime;
     
+    // Log the full response for debugging
+    DebugUtils.log('NVIDIA_API', 'Raw API response', {
+      hasData: !!data,
+      hasChoices: !!data?.choices,
+      choicesLength: data?.choices?.length,
+      firstChoice: data?.choices?.[0] ? 'exists' : 'missing',
+      responseTime
+    });
+    
+    // Check if response has valid content
+    if (!data || !data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
+      DebugUtils.error('NVIDIA_API', 'Invalid API response structure - no choices', { 
+        data: JSON.stringify(data).substring(0, 500) 
+      });
+      throw new Error('Invalid API response structure - no choices');
+    }
+    
+    const firstChoice = data.choices[0];
+    if (!firstChoice || !firstChoice.message) {
+      DebugUtils.error('NVIDIA_API', 'Invalid API response structure - no message', { 
+        firstChoice: JSON.stringify(firstChoice).substring(0, 500)
+      });
+      throw new Error('Invalid API response structure - no message');
+    }
+    
+    // NVIDIA reasoning models may return content in 'reasoning_content' field
+    const content = firstChoice.message.content || firstChoice.message.reasoning_content;
+    
+    // Check if content is null or empty
+    if (!content || content === null || content === undefined || content === '') {
+      DebugUtils.error('NVIDIA_API', 'API returned null or empty content', { 
+        message: firstChoice.message,
+        hasContent: !!firstChoice.message.content,
+        hasReasoningContent: !!firstChoice.message.reasoning_content,
+        responseTime 
+      });
+      throw new Error('API returned null or empty content');
+    }
+    
     DebugUtils.log('NVIDIA_API', 'Chat completion successful', {
       responseTime,
-      tokensUsed: data.usage?.total_tokens || 'unknown'
+      tokensUsed: data.usage?.total_tokens || 'unknown',
+      contentLength: content.length,
+      contentPreview: content.substring(0, 100)
     });
 
-    return data.choices[0].message.content;
+    return content;
   } catch (error) {
     const responseTime = Date.now() - startTime;
     DebugUtils.error('NVIDIA_API', 'Chat completion failed', {
@@ -102,12 +157,12 @@ export const getChatCompletion = async (messages, options = {}) => {
 
 // System prompts for different scenarios
 export const SYSTEM_PROMPTS = {
-  COMPLEX_ANALYSIS: `You are MoneyTrack AI, a financial assistant for university/college students in the Philippines. 
+  COMPLEX_ANALYSIS: `You are GaFI AI, a financial assistant for university/college students in the Philippines. 
 Use detailed thinking for complex financial analysis. Always respond in a helpful, friendly tone.
 Focus on practical money-saving tips for students. Use Philippine Peso (₱) currency.
 Think step by step when analyzing spending patterns and providing financial advice.`,
 
-  SIMPLE_QUERIES: `You are MoneyTrack AI, a financial assistant for university/college students in the Philippines.
+  SIMPLE_QUERIES: `You are GaFI AI, a financial assistant for university/college students in the Philippines.
 Provide quick, direct answers to simple questions. Use Philippine Peso (₱) currency.
 Keep responses concise and actionable.`,
 
@@ -184,7 +239,7 @@ export const analyzeExpenses = async (expenses, budget = null) => {
     return [{
       id: 'welcome',
       type: 'info',
-      title: 'Welcome to MoneyTrack',
+      title: 'Welcome to GaFI',
       message: 'Start tracking your expenses to get AI-powered insights!',
       icon: 'bulb-outline',
       color: '#4CAF50'
@@ -485,35 +540,54 @@ Focus on: Filipino student context, practical savings tips, budget optimization,
 // Helper function to extract JSON from mixed text responses
 const extractJSON = (response) => {
   try {
+    // Check if response is null or undefined
+    if (!response || response === null || response === undefined) {
+      DebugUtils.error('NVIDIA_AI', 'Response is null or undefined');
+      throw new Error('Response is null or undefined');
+    }
+    
+    // Convert to string if not already
+    const responseStr = typeof response === 'string' ? response : String(response);
+    
     DebugUtils.log('NVIDIA_AI', 'Attempting to extract JSON from response', { 
-      responseStart: response.substring(0, 100) 
+      responseStart: responseStr.substring(0, 100),
+      responseType: typeof response,
+      responseLength: responseStr.length
     });
     
     // Check for truncated response first
-    if (response.trim().endsWith(',') || 
-        response.trim().endsWith('"') || 
-        (!response.trim().endsWith(']') && !response.trim().endsWith('}'))) {
+    if (responseStr.trim().endsWith(',') || 
+        responseStr.trim().endsWith('"') || 
+        (!responseStr.trim().endsWith(']') && !responseStr.trim().endsWith('}'))) {
       DebugUtils.warn('NVIDIA_AI', 'Response appears to be truncated', { 
-        responseEnd: response.slice(-50) 
+        responseEnd: responseStr.slice(-50) 
       });
       throw new Error('Response is truncated - insufficient tokens');
     }
     
     // First, try to parse as-is
-    JSON.parse(response);
-    return response;
+    JSON.parse(responseStr);
+    return responseStr;
   } catch (error) {
     // If direct parsing fails, try to extract JSON from the response
     
+    // Ensure response is a string
+    const responseStr = typeof response === 'string' ? response : (response ? String(response) : '');
+    
+    if (!responseStr) {
+      DebugUtils.error('NVIDIA_AI', 'Cannot extract JSON from empty response');
+      return '[]';
+    }
+    
     // Look for JSON array patterns
-    const arrayMatch = response.match(/\[\s*\{[\s\S]*\}\s*\]/);
+    const arrayMatch = responseStr.match(/\[\s*\{[\s\S]*\}\s*\]/);
     if (arrayMatch) {
       DebugUtils.log('NVIDIA_AI', 'Found JSON array pattern', { match: arrayMatch[0].substring(0, 100) });
       return arrayMatch[0];
     }
     
     // Try to fix incomplete JSON by finding the start and attempting completion
-    const incompleteMatch = response.match(/\[\s*\{[\s\S]*$/);
+    const incompleteMatch = responseStr.match(/\[\s*\{[\s\S]*$/);
     if (incompleteMatch) {
       const incomplete = incompleteMatch[0];
       DebugUtils.warn('NVIDIA_AI', 'Found incomplete JSON, attempting to complete it', { 
@@ -545,7 +619,7 @@ const extractJSON = (response) => {
     }
     
     // Look for JSON object patterns (single object that should be wrapped in array)
-    const objectMatch = response.match(/\{[\s\S]*\}/);
+    const objectMatch = responseStr.match(/\{[\s\S]*\}/);
     if (objectMatch) {
       // Check if it's a valid single object by trying to parse it
       try {
@@ -560,14 +634,14 @@ const extractJSON = (response) => {
     }
     
     // Try to find content between code blocks
-    const codeBlockMatch = response.match(/```(?:json)?\s*(\[[\s\S]*?\]|\{[\s\S]*?\})\s*```/);
+    const codeBlockMatch = responseStr.match(/```(?:json)?\s*(\[[\s\S]*?\]|\{[\s\S]*?\})\s*```/);
     if (codeBlockMatch) {
       DebugUtils.log('NVIDIA_AI', 'Found JSON in code block', { match: codeBlockMatch[1].substring(0, 100) });
       return codeBlockMatch[1];
     }
     
     // Try to clean up common issues
-    let cleaned = response.trim();
+    let cleaned = responseStr.trim();
     
     // Remove common prefixes
     cleaned = cleaned.replace(/^(Here's?|Here are|Based on|The analysis shows?)[\s\S]*?(\[|\{)/, '$2');
@@ -598,7 +672,7 @@ const extractJSON = (response) => {
     }
     
     DebugUtils.error('NVIDIA_AI', 'Could not extract valid JSON from response', { 
-      response: response.substring(0, 200) 
+      response: responseStr.substring(0, 200) 
     });
     
     // Return empty array as last resort

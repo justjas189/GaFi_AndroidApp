@@ -1,0 +1,101 @@
+<!-- Updated Supabase Email Template for Signup Confirmation -->
+<!-- Copy this HTML and paste it in Supabase Dashboard > Authentication > Email Templates > Confirm signup -->
+
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+  
+  <!-- Header -->
+  <div style="background: linear-gradient(135deg, #FF6B00, #FFB366); padding: 40px 30px; text-align: center;">
+    <div style="width: 60px; height: 60px; background: rgba(255, 255, 255, 0.2); border-radius: 50%; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(10px);">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="white">
+        <path d="M21,18V19A2,2 0 0,1 19,21H5A2,2 0 0,1 3,19V5A2,2 0 0,1 5,3H19A2,2 0 0,1 21,5V6H12A2,2 0 0,0 10,8V16A2,2 0 0,0 12,18M12,16H22V8H12M16,13.5A1.5,1.5 0 0,1 14.5,12A1.5,1.5 0 0,1 16,10.5A1.5,1.5 0 0,1 17.5,12A1.5,1.5 0 0,1 16,13.5Z"/>
+      </svg>
+    </div>
+    <h1 style="color: white; font-size: 28px; font-weight: 700; margin: 0; text-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+      Welcome to MoneyTrack!
+    </h1>
+    <p style="color: rgba(255, 255, 255, 0.9); font-size: 16px; margin: 10px 0 0 0;">
+      Confirm your email to start tracking your finances
+    </p>
+  </div>
+
+  <!-- Content -->
+  <div style="padding: 40px 30px;">
+    <div style="text-align: center; margin-bottom: 30px;">
+      <h2 style="color: #2c3e50; font-size: 24px; font-weight: 600; margin: 0 0 15px 0;">
+        Almost there! 🎉
+      </h2>
+      <p style="color: #7f8c8d; font-size: 16px; line-height: 1.6; margin: 0;">
+        We're excited to have you join MoneyTrack. To complete your registration and start managing your finances, please confirm your email address.
+      </p>
+    </div>
+
+    <!-- Confirmation Button -->
+    <div style="text-align: center; margin: 40px 0;">
+      <a href="{{ .ConfirmationURL }}" 
+         style="background: linear-gradient(135deg, #FF6B00, #FFB366); 
+                color: white; 
+                padding: 16px 32px; 
+                text-decoration: none; 
+                border-radius: 12px; 
+                font-size: 16px; 
+                font-weight: 600; 
+                display: inline-block; 
+                box-shadow: 0 4px 12px rgba(255, 107, 0, 0.3);
+                transition: all 0.3s ease;">
+        ✓ Confirm Your Email
+      </a>
+    </div>
+
+    <!-- What's Next Section -->
+    <div style="background: linear-gradient(135deg, #f8f9fa, #e9ecef); padding: 25px; border-radius: 12px; margin: 30px 0; border-left: 4px solid #FF6B00;">
+      <h3 style="color: #FF6B00; font-size: 18px; font-weight: 600; margin: 0 0 15px 0;">
+        What's next?
+      </h3>
+      <p style="color: #495057; font-size: 14px; line-height: 1.6; margin: 0 0 15px 0;">
+        After confirming your email, you'll be able to:
+      </p>
+      <ul style="color: #6c757d; font-size: 14px; line-height: 1.6; margin: 0; padding-left: 20px;">
+        <li style="margin-bottom: 8px;">📊 Track your daily expenses and income</li>
+        <li style="margin-bottom: 8px;">🎯 Set up personalized budget goals</li>
+        <li style="margin-bottom: 8px;">🤖 Get AI-powered financial insights</li>
+        <li style="margin-bottom: 8px;">📈 Monitor your spending patterns and trends</li>
+      </ul>
+    </div>
+
+    <!-- Alternative Link -->
+    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center; margin: 30px 0;">
+      <p style="color: #6c757d; font-size: 14px; margin: 0 0 10px 0;">
+        Button not working? Copy and paste this link in your browser:
+      </p>
+      <p style="color: #FF6B00; font-size: 12px; word-break: break-all; margin: 0;">
+        {{ .ConfirmationURL }}
+      </p>
+    </div>
+
+    <!-- Security Note -->
+    <div style="border: 1px solid #e9ecef; padding: 20px; border-radius: 8px; background: #fff;">
+      <p style="color: #495057; font-size: 14px; line-height: 1.6; margin: 0;">
+        <strong>🔒 Security Note:</strong> This email was sent because someone created a MoneyTrack account with this email address. If this wasn't you, please ignore this email and your address will not be added to our system.
+      </p>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div style="background: #2c3e50; padding: 30px; text-align: center;">
+    <p style="color: #bdc3c7; font-size: 14px; margin: 0 0 10px 0;">
+      Thank you for choosing MoneyTrack!
+    </p>
+    <p style="color: #95a5a6; font-size: 12px; margin: 0;">
+      Need help? Contact us at 
+      <a href="mailto:support@moneytrack.app" style="color: #FF6B00; text-decoration: none;">
+        support@moneytrack.app
+      </a>
+    </p>
+    <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #34495e;">
+      <p style="color: #7f8c8d; font-size: 11px; margin: 0;">
+        © 2025 MoneyTrack. All rights reserved.
+      </p>
+    </div>
+  </div>
+
+</div>

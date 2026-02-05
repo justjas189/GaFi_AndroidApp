@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthContext } from '../../context/AuthContext';
 import { supabase } from '../../config/supabase';
+import { navigationRef, reset } from '../../navigation/navigationRef';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -30,7 +31,10 @@ const LoginScreen = ({ navigation }) => {
     }
 
     try {
+      console.log('[LOGIN] Starting login process');
       const { success, error, session, needsVerification, needsOnboarding } = await login(email.trim(), password);
+      
+      console.log('[LOGIN] Login result:', { success, needsVerification, needsOnboarding, hasSession: !!session });
       
       if (needsVerification) {
         Alert.alert(
@@ -58,26 +62,16 @@ const LoginScreen = ({ navigation }) => {
       }
       
       if (success && session) {
-        if (needsOnboarding) {
-          navigation.reset({
-            index: 0,
-            routes: [{ 
-              name: 'Onboarding',
-              state: {
-                routes: [{ name: 'GetStarted' }]
-              }
-            }]
-          });
-        } else {
-          navigation.replace('Main');
-        }
+        console.log('[LOGIN] Login successful, navigation will update automatically');
+        // The AppNavigator will automatically update based on AuthContext state changes
+        // No need for manual navigation since we have dynamic navigation now
       } else {
-        Alert.alert('Invalid Credentials', 'Incorrect email or password');
+        console.log('[LOGIN] Login failed:', error);
+        Alert.alert('Login Failed', error || 'Please check your credentials and try again.');
       }
     } catch (err) {
-      // Log error for debugging but don't expose details to user
-      console.log('Login attempt failed');
-      Alert.alert('Error', 'Incorrect email or password');
+      console.error('Login error:', err);
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
     }
   };
 

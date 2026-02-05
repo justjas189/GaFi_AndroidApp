@@ -245,17 +245,39 @@ export const DataProvider = ({ children }) => {
       setExpenses(expensesData || []);
       setNotes(notesData || []);
 
-      // Generate AI insights using Nvidia Llama
+      // Generate AI insights using Nvidia Llama - FILTER TO CURRENT MONTH
       if (expensesData?.length > 0) {
         try {
-          const insights = await analyzeExpenses(expensesData, transformedBudget);
-          const recommendations = await getRecommendations(session.user, expensesData, transformedBudget);
+          // Filter expenses to current month only for AI analysis
+          const now = new Date();
+          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          monthStart.setHours(0, 0, 0, 0);
+          const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+          
+          const currentMonthExpenses = expensesData.filter(exp => {
+            const expDate = new Date(exp.date);
+            return expDate >= monthStart && expDate <= monthEnd;
+          });
+
+          // Generate insights based on current month data only
+          const insights = await analyzeExpenses(currentMonthExpenses, transformedBudget);
+          const recommendations = await getRecommendations(session.user, currentMonthExpenses, transformedBudget);
           setInsights([...insights, ...recommendations]);
-          console.log('AI insights generated successfully:', insights.length + recommendations.length, 'insights');
+          console.log('AI insights generated successfully for current month:', insights.length + recommendations.length, 'insights');
         } catch (insightError) {
           console.error('Error generating AI insights:', insightError);
           // Fall back to basic insights if AI fails
-          const basicInsights = generateBasicInsights(expensesData, transformedBudget);
+          const now = new Date();
+          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          monthStart.setHours(0, 0, 0, 0);
+          const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+          
+          const currentMonthExpenses = expensesData.filter(exp => {
+            const expDate = new Date(exp.date);
+            return expDate >= monthStart && expDate <= monthEnd;
+          });
+          
+          const basicInsights = generateBasicInsights(currentMonthExpenses, transformedBudget);
           setInsights(basicInsights);
         }
       } else {
@@ -263,7 +285,7 @@ export const DataProvider = ({ children }) => {
         setInsights([{
           id: 'welcome',
           type: 'info',
-          title: 'Welcome to MoneyTrack',
+          title: 'Welcome to GaFI',
           message: 'Start tracking your expenses to get AI-powered insights!',
           icon: 'bulb-outline',
           color: '#4CAF50'
@@ -648,14 +670,14 @@ export const DataProvider = ({ children }) => {
     return expenseList.reduce((total, expense) => total + parseFloat(expense.amount), 0);
   };
 
-  // Generate insights from expenses data
+  // Generate insights from expenses data - FOCUS ON CURRENT MONTH
   const generateInsights = () => {
     if (!expenses || expenses.length === 0) {
       return [
         {
           id: 1,
           type: 'info',
-          title: 'Welcome to MoneyTrack',
+          title: 'Welcome to GaFI',
           message: 'Start tracking your expenses to get personalized insights.',
           icon: '📊'
         }
@@ -664,14 +686,38 @@ export const DataProvider = ({ children }) => {
 
     const insights = [];
     
-    // Calculate spending by category
+    // Filter to current month only
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    monthStart.setHours(0, 0, 0, 0);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    
+    const currentMonthExpenses = expenses.filter(expense => {
+      const expenseDate = new Date(expense.date);
+      return expenseDate >= monthStart && expenseDate <= monthEnd;
+    });
+
+    if (currentMonthExpenses.length === 0) {
+      return [
+        {
+          id: 1,
+          type: 'info',
+          title: 'No expenses this month',
+          message: 'Start tracking your expenses this month to get personalized insights.',
+          icon: 'calendar-outline',
+          color: '#2196F3'
+        }
+      ];
+    }
+    
+    // Calculate spending by category for CURRENT MONTH
     const categorySpending = {};
-    expenses.forEach(expense => {
+    currentMonthExpenses.forEach(expense => {
       const category = expense.category.toLowerCase();
       categorySpending[category] = (categorySpending[category] || 0) + parseFloat(expense.amount);
     });
 
-    // Find top spending category
+    // Find top spending category for current month
     const topCategory = Object.entries(categorySpending)
       .sort(([,a], [,b]) => b - a)[0];
     
@@ -679,8 +725,8 @@ export const DataProvider = ({ children }) => {
       insights.push({
         id: insights.length + 1,
         type: 'warning',
-        title: 'Top Spending Category',
-        message: `You've spent ₱${topCategory[1].toFixed(2)} on ${topCategory[0]} this period.`,
+        title: 'Top Spending Category This Month',
+        message: `You've spent ₱${topCategory[1].toFixed(2)} on ${topCategory[0]} this month.`,
         icon: 'trending-up-outline',
         color: '#FF9800'
       });
@@ -694,16 +740,16 @@ export const DataProvider = ({ children }) => {
           type: data.spent >= data.limit ? 'error' : 'warning',
           title: `${category.charAt(0).toUpperCase() + category.slice(1)} Budget Alert`,
           message: data.spent >= data.limit 
-            ? `You've exceeded your ${category} budget by ₱${(data.spent - data.limit).toFixed(2)}`
-            : `You've used ${((data.spent / data.limit) * 100).toFixed(1)}% of your ${category} budget`,
+            ? `You've exceeded your ${category} budget by ₱${(data.spent - data.limit).toFixed(2)} this month`
+            : `You've used ${((data.spent / data.limit) * 100).toFixed(1)}% of your ${category} budget this month`,
           icon: data.spent >= data.limit ? 'alert-circle-outline' : 'warning-outline',
           color: data.spent >= data.limit ? '#F44336' : '#FF9800'
         });
       }
     });
 
-    // Recent spending trend
-    const recentExpenses = expenses
+    // Recent spending trend (last 3 days of current month)
+    const recentExpenses = currentMonthExpenses
       .filter(expense => {
         const expenseDate = new Date(expense.date);
         const threeDaysAgo = new Date();

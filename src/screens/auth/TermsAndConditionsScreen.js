@@ -26,7 +26,7 @@ const TermsAndConditionsScreen = ({ navigation, route }) => {
         
         <Text style={styles.sectionTitle}>1. Acceptance of Terms</Text>
         <Text style={styles.text}>
-          By accessing and using MoneyTrack, you accept and agree to be bound by the terms and provision of this agreement.
+          By accessing and using GaFI, you accept and agree to be bound by the terms and provision of this agreement.
         </Text>
 
         <Text style={styles.sectionTitle}>2. Privacy Policy</Text>

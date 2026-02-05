@@ -176,7 +176,15 @@ const CalendarScreen = ({ navigation }) => {
               <Text style={[styles.noExpensesText, { color: theme.colors.text }]}>Start tracking your daily expenses</Text>
               <TouchableOpacity 
                 style={[styles.addExpenseButton, { backgroundColor: theme.colors.primary }]}
-                onPress={() => navigation.navigate('Expenses', { showForm: true })}
+                onPress={() => {
+                  navigation.navigate('MainTabs', { 
+                    screen: 'Expenses',
+                    params: { 
+                      showForm: true,
+                      preselectedDate: selected 
+                    }
+                  });
+                }}
               >
                 <Ionicons name="add" size={20} color={theme.colors.background} />
                 <Text style={[styles.addExpenseButtonText, { color: theme.colors.background }]}>Add Expense</Text>
@@ -191,7 +199,15 @@ const CalendarScreen = ({ navigation }) => {
           backgroundColor: theme.colors.primary,
           shadowColor: theme.colors.text,
         }]}
-        onPress={() => navigation.navigate('Expenses', { showForm: true })}
+        onPress={() => {
+          navigation.navigate('MainTabs', { 
+            screen: 'Expenses',
+            params: { 
+              showForm: true,
+              preselectedDate: selected || currentDate 
+            }
+          });
+        }}
       >
         <Ionicons name="add" size={24} color="#FFF" />
       </TouchableOpacity>

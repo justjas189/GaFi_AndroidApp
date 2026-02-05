@@ -1,31 +1,48 @@
 {
   "expo": {
-    "name": "MoneyTrack",
-    "slug": "moneytrack",
+    "name": "GaFI",
+    "slug": "gafi-android",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/logo.svg",
-    "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "scheme": "gafi",
     "splash": {
-      "image": "./assets/logo.svg",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FF6B00"
     },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gafi.app"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo.svg",
-        "backgroundColor": "#FFFFFF"
-      }
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FF6B00"
+      },
+      "package": "com.gafi.app",
+      "permissions": [
+        "NOTIFICATIONS",
+        "SCHEDULE_EXACT_ALARM"
+      ]
     },
     "web": {
-      "favicon": "./assets/logo.svg"
+      "favicon": "./assets/favicon.png"
     },
-    "scheme": "moneytrack"
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#FF6B00"
+        }
+      ],
+      "@react-native-community/datetimepicker"
+    ],
+    "sdkVersion": "54.0.0"
   }
 }

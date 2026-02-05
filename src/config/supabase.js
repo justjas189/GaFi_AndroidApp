@@ -33,8 +33,8 @@ if (typeof crypto === 'undefined') {
   };
 }
 
-const supabaseUrl = 'https://dfhhocaenejltfxxzaky.supabase.co'
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRmaGhvY2FlbmVqbHRmeHh6YWt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4MjkzNzIsImV4cCI6MjA2NTQwNTM3Mn0.eLc1Qt0AIkLIeTaQDnai6aoxT0scYOClaLLIvXusvf4'
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://dfhhocaenejltfxxzaky.supabase.co'
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRmaGhvY2FlbmVqbHRmeHh6YWt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4MjkzNzIsImV4cCI6MjA2NTQwNTM3Mn0.eLc1Qt0AIkLIeTaQDnai6aoxT0scYOClaLLIvXusvf4'
 
 const supabaseConfig = {
   auth: {
@@ -50,7 +50,7 @@ const supabaseConfig = {
   },
   global: {
     headers: {
-      'X-Client-Info': 'MoneyTrack React Native'
+      'X-Client-Info': 'GaFI React Native'
     }
   },
   realtime: {

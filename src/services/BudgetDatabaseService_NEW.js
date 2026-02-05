@@ -558,7 +558,7 @@ export class BudgetDatabaseService {
         date: (() => {
           try {
             // If a specific date is provided (from UI date picker), use it
-            if (date && date.trim() !== '') {
+            if (date && typeof date === 'string' && date.trim() !== '') {
               const dateObj = new Date(date);
               if (!isNaN(dateObj.getTime())) {
                 // Valid date provided - use it as-is (includes time from date picker)
@@ -567,6 +567,11 @@ export class BudgetDatabaseService {
                 console.warn(`Invalid date provided: ${date}, using current timestamp`);
                 return new Date().toISOString();
               }
+            }
+            
+            // Handle Date objects passed directly
+            if (date instanceof Date && !isNaN(date.getTime())) {
+              return date.toISOString();
             }
             
             // For chatbot/AI entries without specific date, use current timestamp

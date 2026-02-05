@@ -1,5 +1,6 @@
 # OSX
 .DS_Store
+*.DS_Store
 
 # Xcode
 build/
@@ -22,20 +23,24 @@ ios/.xcode.env.local
 
 # Android/IntelliJ
 build/
-.idea
-.gradle
+.idea/
+.gradle/
 local.properties
 *.iml
 *.hprof
 .cxx/
 *.keystore
 !debug.keystore
+android/app/debug.keystore
 
 # node.js
 node_modules/
 npm-debug.log
 yarn-debug.log
 yarn-error.log
+.pnp/
+.pnp.js
+package-lock.json
 
 # fastlane
 */fastlane/report.xml
@@ -49,6 +54,7 @@ yarn-error.log
 .expo/
 web-build/
 dist/
+.expo-shared/
 
 # Native
 *.orig.*
@@ -61,17 +67,85 @@ dist/
 # Metro
 .metro-health-check*
 
-# debug
+# Debug logs
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+*.log
+logs/
 
 # macOS
 .DS_Store
 *.pem
 
-# local env files
+# Environment files (IMPORTANT: Never commit these!)
+.env
+.env.local
+.env.development
+.env.production
+.env.staging
 .env*.local
+.env copy
+*.env
 
-# typescript
+# Keep example env file
+!.env.example
+
+# API keys and sensitive data
+config/keys.js
+src/config/keys.js
+**/secrets.js
+**/credentials.js
+
+# TypeScript
 *.tsbuildinfo
+
+# IDE and Editor configs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+# Test files (keep in repo but ignore coverage)
+coverage/
+.nyc_output/
+*.lcov
+
+# Temporary files
+*.tmp
+*.temp
+*.cache
+.cache/
+tmp/
+temp/
+
+# Python (backend)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+.venv/
+*.egg-info/
+.eggs/
+
+# Supabase local
+.supabase/
+
+# EAS Build
+.eas/
+
+# Local development scripts (not needed in repo)
+*.local.js
+*.local.ts
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini

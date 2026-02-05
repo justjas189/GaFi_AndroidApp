@@ -17,6 +17,11 @@ import { supabase } from '../../config/supabase';
 import { AuthContext } from '../../context/AuthContext';
 import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
+import { useMascot } from '../../MonT/context/MascotContext';
+import { MonTMascot } from '../../MonT/components/MascotSystem';
+import { MascotIntegrationHelpers } from '../../MonT/utils/IntegrationHelpers';
+import { MonTNotificationToast, MonTDailyMessage, MonTBudgetAlert } from '../../components/MonTNotificationToast';
+import { useMonTNotifications } from '../../utils/MonTNotificationManager';
 
 const HomeScreen = ({ navigation }) => {
   const { userInfo } = useContext(AuthContext);
@@ -29,10 +34,17 @@ const HomeScreen = ({ navigation }) => {
     insights: contextInsights
   } = useContext(DataContext);
   const { theme } = useContext(ThemeContext);
+  const mascot = useMascot();
+  const montNotifications = useMonTNotifications();
   
   const [refreshing, setRefreshing] = useState(false);
   const [recentExpenses, setRecentExpenses] = useState([]);
   const [insights, setInsights] = useState([]);
+  
+  // MonT notification states
+  const [showDailyMessage, setShowDailyMessage] = useState(false);
+  const [showBudgetAlert, setShowBudgetAlert] = useState(false);
+  const [budgetAlertData, setBudgetAlertData] = useState(null);
 
   // Test function to reset onboarding status for testing
   const resetOnboardingForTesting = async () => {
@@ -170,6 +182,44 @@ const HomeScreen = ({ navigation }) => {
     // Update insights from context
     setInsights(contextInsights || []);
   }, [expenses, contextInsights]);
+
+  // Trigger mascot welcome reaction when home screen loads
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (monthlyRemaining <= 0) {
+        // Use new global notification system
+        montNotifications.budgetWarning(Math.abs(monthlyRemaining));
+        
+        MascotIntegrationHelpers.onBudgetExceeded(mascot, Math.abs(monthlyRemaining));
+        // Show budget alert notification
+        setBudgetAlertData({
+          category: 'Monthly Budget',
+          exceeded: Math.abs(monthlyRemaining),
+          budget: budget.monthly
+        });
+        setShowBudgetAlert(true);
+      } else if (monthlySpent < budget.monthly * 0.5) {
+        // Show encouraging message for good spending
+        montNotifications.budgetOnTrack(monthlyRemaining, daysLeft);
+        
+        MascotIntegrationHelpers.onGoodSpendingDay(mascot, monthlyRemaining);
+        // Show encouraging daily message
+        setTimeout(() => setShowDailyMessage(true), 3000);
+      } else {
+        // Welcome back message
+        montNotifications.welcomeBack(userInfo?.name || 'User');
+        
+        MascotIntegrationHelpers.onHomeScreenOpen(mascot, {
+          currentStreak: 1, // You can get this from your user data
+          totalSaved: Math.max(0, budget.monthly - monthlySpent)
+        });
+        // Show daily message after a delay
+        setTimeout(() => setShowDailyMessage(true), 4000);
+      }
+    }, 2000); // Delay to let the screen load
+
+    return () => clearTimeout(timer);
+  }, [monthlyRemaining, monthlySpent, budget.monthly, mascot, montNotifications, daysLeft, userInfo]);
   
   const formatCurrency = (amount) => {
     return '₱' + parseFloat(amount).toFixed(2);
@@ -303,9 +353,15 @@ const HomeScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <View style={styles.header}>
-        <View>
+        <View style={styles.userInfoContainer}>
           <Text style={[styles.greeting, { color: theme.colors.text, opacity: 0.6 }]}>Hello,</Text>
-          <Text style={[styles.name, { color: theme.colors.text }]}>{userInfo?.name || 'User'}</Text>
+          <Text 
+            style={[styles.name, { color: theme.colors.text }]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {userInfo?.name || 'User'}
+          </Text>
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity
@@ -314,8 +370,8 @@ const HomeScreen = ({ navigation }) => {
           >
             <Ionicons name="document-text" size={20} color={theme.colors.primary} />
           </TouchableOpacity>
-
-          {/* Test Button for Onboarding Reset - Remove in production */}
+          
+          
           {__DEV__ && (
             <TouchableOpacity
               style={[styles.testButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.primary }]}
@@ -324,6 +380,15 @@ const HomeScreen = ({ navigation }) => {
               <Text style={[styles.testButtonText, { color: theme.colors.primary }]}>🧪</Text>
             </TouchableOpacity>
           )}
+          {/*
+          {__DEV__ && (
+            <TouchableOpacity
+              style={[styles.testButton, { backgroundColor: theme.colors.card, borderColor: '#FF6B00' }]}
+              onPress={() => navigation.navigate('MonTBubbleTest')}
+            >
+              <Text style={[styles.testButtonText, { color: '#FF6B00' }]}>🎯</Text>
+            </TouchableOpacity>
+          )} */}
           
           <TouchableOpacity
             style={[styles.settingsButton, { backgroundColor: theme.colors.card }]}
@@ -411,6 +476,42 @@ const HomeScreen = ({ navigation }) => {
         </View>
       </View>
 
+      {/* Quick Access Feature Cards 
+      <View style={styles.quickAccessContainer}>
+        <Text style={[styles.quickAccessTitle, { color: theme.colors.text }]}>Quick Access</Text>
+        <View style={styles.featureCardsRow}>
+          <TouchableOpacity 
+            style={[styles.featureCard, { backgroundColor: theme.colors.card }]}
+            onPress={() => navigation.navigate('Achievements')}
+          >
+            <View style={[styles.featureIcon, { backgroundColor: '#FFD700' + '20' }]}>
+              <Ionicons name="trophy" size={24} color="#FFD700" />
+            </View>
+            <Text style={[styles.featureTitle, { color: theme.colors.text }]}>Achievements</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.featureCard, { backgroundColor: theme.colors.card }]}
+            onPress={() => navigation.navigate('FriendRequests')}
+          >
+            <View style={[styles.featureIcon, { backgroundColor: theme.colors.primary + '20' }]}>
+              <Ionicons name="people" size={24} color={theme.colors.primary} />
+            </View>
+            <Text style={[styles.featureTitle, { color: theme.colors.text }]}>Friends</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.featureCard, { backgroundColor: theme.colors.card }]}
+            onPress={() => navigation.navigate('Calendar')}
+          >
+            <View style={[styles.featureIcon, { backgroundColor: '#4CAF50' + '20' }]}>
+              <Ionicons name="calendar" size={24} color="#4CAF50" />
+            </View>
+            <Text style={[styles.featureTitle, { color: theme.colors.text }]}>Calendar</Text>
+          </TouchableOpacity>
+        </View>
+      </View>*/}
+
       <SectionList
         sections={sections}
         keyExtractor={(item, index) => item.id || index.toString()}
@@ -421,6 +522,27 @@ const HomeScreen = ({ navigation }) => {
         directionalLockEnabled={true}
         showsVerticalScrollIndicator={false}
       />
+
+      {/* MonT Global Draggable Chat Bubble replaces the floating mascot */}
+      
+      {/* MonT Notification Toasts */}
+      <MonTDailyMessage 
+        visible={showDailyMessage}
+        onDismiss={() => setShowDailyMessage(false)}
+      />
+      
+      {budgetAlertData && (
+        <MonTBudgetAlert
+          visible={showBudgetAlert}
+          category={budgetAlertData.category}
+          exceeded={budgetAlertData.exceeded}
+          budget={budgetAlertData.budget}
+          onDismiss={() => {
+            setShowBudgetAlert(false);
+            setBudgetAlertData(null);
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -435,10 +557,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
+  userInfoContainer: {
+    flex: 1,
+    marginRight: 16,
+  },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flexShrink: 0,
   },
   chatHeaderButton: {
     width: 40,
@@ -455,6 +582,7 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 24,
     fontWeight: 'bold',
+    flexShrink: 1,
   },
   settingsButton: {
     width: 40,
@@ -754,6 +882,47 @@ const styles = StyleSheet.create({
     color: '#808080',
     fontSize: 16,
     marginTop: 10,
+  },
+  quickAccessContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  quickAccessTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  featureCardsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  featureCard: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  featureIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  featureTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   addButton: {
     position: 'absolute',

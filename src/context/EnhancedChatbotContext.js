@@ -134,7 +134,7 @@ export const ChatbotProvider = ({ children }) => {
         const userName = user.name || user.email?.split('@')[0] || 'there';
         const welcomeMessage = {
           id: '1',
-          text: `Hi ${userName}! 👋\n\nI'm MonT, your MoneyTrack AI assistant powered by NVIDIA LLaMA. I can help you:\n\n💰 Record expenses: "I spent ₱250 on lunch"\n📊 Check your budget: "How much have I spent this month?"\n📈 Update budget: "Set my budget to ₱15,000"\n📋 Get financial tips: "Give me money saving tips"\n📈 Analyze spending patterns with AI insights\n\n${historyEnabled ? '💾 Your conversation history is being saved for continuity.' : '🔒 Chat history is disabled for privacy.'}\n\n🤖 Powered by advanced AI for intelligent financial assistance!\n\nWhat would you like to do today?`,
+          text: `Hi ${userName}! 👋\n\nI'm MonT, your GaFI AI assistant powered by NVIDIA LLaMA. I can help you:\n\n💰 Record expenses: "I spent ₱250 on lunch"\n📊 Check your budget: "How much have I spent this month?"\n📋 Get financial tips: "Give me money saving tips"\n📈 Analyze spending patterns with AI insights\n\n${historyEnabled ? '💾 Your conversation history is being saved for continuity.' : '🔒 Chat history is disabled for privacy.'}\n\n🤖 Powered by advanced AI for intelligent financial assistance!\n\nWhat would you like to do today?`,
           isBot: true,
           timestamp: new Date()
         };
@@ -160,7 +160,7 @@ export const ChatbotProvider = ({ children }) => {
         const userName = user.name || user.email?.split('@')[0] || 'there';
         setMessages([{
           id: '1',
-          text: `Hi ${userName}! 👋\n\nI'm MonT, your MoneyTrack AI assistant. I can help you manage your finances.\n\nWhat would you like to do today?`,
+          text: `Hi ${userName}! 👋\n\nI'm MonT, your GaFI AI assistant. I can help you manage your finances.\n\nWhat would you like to do today?`,
           isBot: true,
           timestamp: new Date()
         }]);
@@ -369,24 +369,38 @@ export const ChatbotProvider = ({ children }) => {
   const handleIntentBasedRequest = async (nlpResult) => {
     const { intent, entities, validation } = nlpResult;
 
+    // Debug logging
+    DebugUtils.log('ENHANCED_CHATBOT', 'handleIntentBasedRequest called', { 
+      intent, 
+      entities, 
+      confidence: nlpResult.confidence,
+      originalInput: nlpResult.originalInput 
+    });
+
     try {
       switch (intent) {
         case 'expense_log':
+          DebugUtils.log('ENHANCED_CHATBOT', 'Routing to handleExpenseLogging');
           return await handleExpenseLogging(entities, validation);
           
         case 'budget_update':
+          DebugUtils.log('ENHANCED_CHATBOT', 'Routing to handleBudgetUpdate');
           return await handleBudgetUpdate(entities, validation);
           
         case 'budget_query':
+          DebugUtils.log('ENHANCED_CHATBOT', 'Routing to handleBudgetQuery');
           return await handleBudgetQuery(entities);
           
         case 'category_query':
+          DebugUtils.log('ENHANCED_CHATBOT', 'Routing to handleCategoryQuery');
           return await handleCategoryQuery(entities);
           
         case 'debug_data':
+          DebugUtils.log('ENHANCED_CHATBOT', 'Routing to handleDataDiagnostic');
           return await handleDataDiagnostic();
           
         default:
+          DebugUtils.log('ENHANCED_CHATBOT', 'No specific handler, routing to handleGeneralQuery', { intent });
           return await handleGeneralQuery(nlpResult.originalInput, nlpResult, []);
       }
     } catch (error) {
@@ -619,14 +633,35 @@ export const ChatbotProvider = ({ children }) => {
   const handleCategoryQuery = async (entities) => {
     const { category, period = 'this_month' } = entities;
     
+    // Debug logging
+    DebugUtils.log('ENHANCED_CHATBOT', 'handleCategoryQuery called', { 
+      entities, 
+      category, 
+      period,
+      userId: user?.id 
+    });
+    
     if (!category) {
+      DebugUtils.log('ENHANCED_CHATBOT', 'No category detected in handleCategoryQuery');
       return {
         success: false,
         text: "Please specify which category you'd like to know about (e.g., food, transportation, entertainment)."
       };
     }
 
+    DebugUtils.log('ENHANCED_CHATBOT', 'Calling dbService.getCategorySpending', { 
+      userId: user.id, 
+      category, 
+      period 
+    });
+
     const result = await dbService.getCategorySpending(user.id, category, period);
+    
+    DebugUtils.log('ENHANCED_CHATBOT', 'dbService.getCategorySpending result', { 
+      success: result.success, 
+      error: result.error,
+      category: category 
+    });
     
     if (result.success) {
       const data = result.data;
@@ -901,7 +936,7 @@ export const ChatbotProvider = ({ children }) => {
         id: 'food_spending',
         text: 'Food Spending',
         icon: '🍔',
-        action: () => sendMessage("How much did I spend on food this month?")
+        action: () => sendMessage("Show my food spending this month")
       },
       {
         id: 'money_tips',

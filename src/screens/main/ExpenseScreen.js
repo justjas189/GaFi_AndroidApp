@@ -5,80 +5,45 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  FlatList,
   Alert,
   Dimensions,
-  processColor,
   ScrollView,
-  ActivityIndicator,
-  Platform
+  Platform,
+  SectionList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
-import { LineChart, PieChart, BarChart } from 'react-native-chart-kit';
-import { analyzeExpenses, getRecommendations } from '../../config/nvidia';
+import { PieChart, BarChart } from 'react-native-chart-kit';
+import { AchievementService } from '../../services/AchievementService';
 
 const screenWidth = Dimensions.get('window').width;
 
 const ExpenseScreen = ({ navigation, route }) => {
   const { expenses, addExpense, deleteExpense, budget } = useContext(DataContext);
   const { theme } = useContext(ThemeContext);
+  
+  // View states
+  const [viewMode, setViewMode] = useState('statistics'); // 'statistics' or 'detailed'
+  const [showForm, setShowForm] = useState(false);
+  
+  // Form states
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('');
   const [note, setNote] = useState('');
   const [description, setDescription] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [selectedPeriod, setSelectedPeriod] = useState('week'); // 'week' or 'month'
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
-  const [predictions, setPredictions] = useState({
-    nextMonthExpense: 0,
-    recommendations: []
-  });
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState(null);
-
-  // Check if we should show the form based on navigation params
-  useEffect(() => {
-    if (route?.params?.showForm) {
-      setShowForm(true);
-      // Clear the navigation param to prevent showing form again on re-render
-      navigation.setParams({ showForm: false });
-    }
-  }, [route?.params?.showForm, navigation]);
   
-  // Format dates for display
-  const formatSelectedDate = (date) => {
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: '2-digit',
-      year: 'numeric'
-    });
-  };
-
-  const formatSelectedTime = (date) => {
-    return date.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    });
-  };
+  // Statistics view states
+  const [selectedPeriod, setSelectedPeriod] = useState('week'); // 'week' or 'month'
   
-  const currentDate = new Date();
-  const formattedDate = currentDate.toLocaleDateString('en-US', {
-    month: 'short',
-    day: '2-digit',
-    year: 'numeric'
-  });
-  const formattedTime = currentDate.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  });
+  // Detailed view states
+  const [detailFilter, setDetailFilter] = useState('all'); // 'all', 'week', 'month'
+  const [categoryFilter, setCategoryFilter] = useState('all'); // 'all' or specific category
 
   const categories = [
     'Food',
@@ -89,58 +54,79 @@ const ExpenseScreen = ({ navigation, route }) => {
     'Others'
   ];
 
+  const categoryColors = {
+    food: '#FF6B6B',
+    transportation: '#4ECDC4',
+    entertainment: '#45B7D1',
+    shopping: '#96CEB4',
+    utilities: '#FFEAA7',
+    others: '#DDA0DD'
+  };
+
+  // Check if we should show the form based on navigation params
+  useEffect(() => {
+    if (route?.params?.showForm) {
+      setShowForm(true);
+      if (route?.params?.preselectedDate) {
+        setSelectedDate(new Date(route.params.preselectedDate));
+      }
+      navigation.setParams({ showForm: false, preselectedDate: undefined });
+    }
+  }, [route?.params?.showForm, route?.params?.preselectedDate, navigation]);
+
   // Process expenses data for charts
   const charts = useMemo(() => {
     const categoryTotals = {};
     const dailyTotals = {};
     let totalExpenses = 0;
 
-    // Initialize category totals
     categories.forEach(cat => {
       categoryTotals[cat.toLowerCase()] = 0;
     });
 
-    // Process each expense
-    expenses.forEach(expense => {
-      // Update category totals
+    const now = new Date();
+    let filteredExpenses = [];
+
+    if (selectedPeriod === 'week') {
+      const weekAgo = new Date(now);
+      weekAgo.setDate(now.getDate() - 6);
+      weekAgo.setHours(0, 0, 0, 0);
+      filteredExpenses = expenses.filter(exp => new Date(exp.date) >= weekAgo);
+    } else {
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      filteredExpenses = expenses.filter(exp => {
+        const expDate = new Date(exp.date);
+        return expDate >= monthStart && expDate <= monthEnd;
+      });
+    }
+
+    filteredExpenses.forEach(expense => {
       const cat = expense.category.toLowerCase();
       categoryTotals[cat] = (categoryTotals[cat] || 0) + expense.amount;
       totalExpenses += expense.amount;
 
-      // Update daily totals
       const date = new Date(expense.date).toISOString().split('T')[0];
       dailyTotals[date] = (dailyTotals[date] || 0) + expense.amount;
     });
 
-    const categoryColors = {
-      food: '#FF6B6B',           // Coral red
-      transportation: '#4ECDC4', // Teal
-      entertainment: '#45B7D1',  // Blue
-      shopping: '#96CEB4',       // Mint green
-      utilities: '#FFEAA7',      // Light yellow
-      others: '#DDA0DD'          // Plum
-    };
-
-    // Prepare pie chart data and sort by amount
     const pieChartData = Object.entries(categoryTotals)
       .filter(([_, value]) => value > 0)
-      .sort(([_, a], [__, b]) => b - a) // Sort by amount descending
+      .sort(([_, a], [__, b]) => b - a)
       .map(([category, amount]) => ({
         name: category.charAt(0).toUpperCase() + category.slice(1),
         amount,
-        percentage: (amount / totalExpenses) * 100,
+        percentage: totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0,
         color: categoryColors[category.toLowerCase()] || categoryColors.others,
         legendFontColor: theme.colors.text,
         legendFontSize: 12,
       }));
 
-    // Prepare line chart data
     const today = new Date();
     const dates = [];
     const amounts = [];
     
     if (selectedPeriod === 'week') {
-      // Daily data for week view
       for (let i = 6; i >= 0; i--) {
         const date = new Date(today);
         date.setDate(date.getDate() - i);
@@ -149,40 +135,84 @@ const ExpenseScreen = ({ navigation, route }) => {
         amounts.push(dailyTotals[dateStr] || 0);
       }
     } else {
-      // Weekly data for month view
-      const weeksToShow = 4;
-      for (let i = weeksToShow - 1; i >= 0; i--) {
-        const endDate = new Date(today);
-        endDate.setDate(today.getDate() - (i * 7));
-        const startDate = new Date(endDate);
-        startDate.setDate(endDate.getDate() - 6);
+      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      const totalDaysInMonth = monthEnd.getDate();
+      const weeksInMonth = Math.ceil(totalDaysInMonth / 7);
+      
+      for (let weekNum = 0; weekNum < weeksInMonth; weekNum++) {
+        const weekStart = new Date(monthStart);
+        weekStart.setDate(1 + (weekNum * 7));
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+        if (weekEnd > monthEnd) weekEnd.setTime(monthEnd.getTime());
         
-        // Calculate weekly total
         let weeklyTotal = 0;
-        for (let j = 0; j < 7; j++) {
-          const date = new Date(startDate);
-          date.setDate(startDate.getDate() + j);
-          const dateStr = date.toISOString().split('T')[0];
+        const currentDate = new Date(weekStart);
+        while (currentDate <= weekEnd) {
+          const dateStr = currentDate.toISOString().split('T')[0];
           weeklyTotal += dailyTotals[dateStr] || 0;
+          currentDate.setDate(currentDate.getDate() + 1);
         }
         
-        // Format date range for label (e.g., "Jun 1-7")
-        const label = `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}-${endDate.getDate()}`;
-        dates.push(label);
+        dates.push(`${weekStart.getDate()}-${weekEnd.getDate()}`);
         amounts.push(weeklyTotal);
       }
     }
 
     return {
       pieChart: pieChartData,
-      lineChart: {
+      barChart: {
         labels: dates,
-        datasets: [{
-          data: amounts,
-        }]
-      }
+        datasets: [{ data: amounts.length > 0 ? amounts : [0] }]
+      },
+      totalExpenses,
+      filteredCount: filteredExpenses.length
     };
   }, [expenses, selectedPeriod, theme.colors.text]);
+
+  // Group expenses by date for detailed view
+  const groupedExpenses = useMemo(() => {
+    let filtered = [...expenses];
+    const now = new Date();
+
+    // Apply time filter
+    if (detailFilter === 'week') {
+      const weekAgo = new Date(now);
+      weekAgo.setDate(now.getDate() - 6);
+      weekAgo.setHours(0, 0, 0, 0);
+      filtered = filtered.filter(exp => new Date(exp.date) >= weekAgo);
+    } else if (detailFilter === 'month') {
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      filtered = filtered.filter(exp => new Date(exp.date) >= monthStart);
+    }
+
+    // Apply category filter
+    if (categoryFilter !== 'all') {
+      filtered = filtered.filter(exp => exp.category.toLowerCase() === categoryFilter.toLowerCase());
+    }
+
+    // Sort by date descending
+    filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    // Group by date
+    const groups = {};
+    filtered.forEach(expense => {
+      const dateKey = new Date(expense.date).toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+      if (!groups[dateKey]) {
+        groups[dateKey] = { title: dateKey, data: [], total: 0 };
+      }
+      groups[dateKey].data.push(expense);
+      groups[dateKey].total += expense.amount;
+    });
+
+    return Object.values(groups);
+  }, [expenses, detailFilter, categoryFilter]);
 
   const chartConfig = {
     backgroundColor: theme.colors.background,
@@ -192,126 +222,24 @@ const ExpenseScreen = ({ navigation, route }) => {
     labelColor: (opacity = 1) => theme.colors.text + Math.round(opacity * 255).toString(16).padStart(2, '0'),
     strokeWidth: 2,
     barPercentage: 0.7,
-    useShadowColorFromDataset: false,
     decimalPlaces: 0,
     propsForBackgroundLines: {
-      strokeDasharray: "", // solid background lines
+      strokeDasharray: "",
       stroke: theme.colors.text + '20',
       strokeWidth: 1
     },
-    propsForLabels: {
-      fontSize: 12,
-      fontWeight: '500'
-    }
-  };
-
-  const handleSave = () => {
-    if (!amount || !category) {
-      Alert.alert('Error', 'Please fill in amount and category');
-      return;
-    }
-
-    const newExpense = {
-      amount: parseFloat(amount),
-      category,
-      note,
-      description,
-      date: selectedDate.toISOString() // Use the selected date instead of current date
-    };
-
-    addExpense(newExpense);
-    setShowForm(false);
-    resetForm();
-  };
-
-  const resetForm = () => {
-    setAmount('');
-    setCategory('');
-    setNote('');
-    setDescription('');
-    setSelectedDate(new Date()); // Reset to current date
-  };
-
-  // Date picker handlers
-  const onDateChange = (event, date) => {
-    setShowDatePicker(Platform.OS === 'ios'); // Keep open on iOS, close on Android
-    if (date) {
-      // Preserve the time when changing date
-      const newDate = new Date(selectedDate);
-      newDate.setFullYear(date.getFullYear());
-      newDate.setMonth(date.getMonth());
-      newDate.setDate(date.getDate());
-      setSelectedDate(newDate);
-    }
-  };
-
-  const onTimeChange = (event, time) => {
-    setShowTimePicker(Platform.OS === 'ios'); // Keep open on iOS, close on Android
-    if (time) {
-      // Preserve the date when changing time
-      const newDate = new Date(selectedDate);
-      newDate.setHours(time.getHours());
-      newDate.setMinutes(time.getMinutes());
-      setSelectedDate(newDate);
-    }
   };
 
   const formatCurrency = (amount) => {
     return `₱${parseFloat(amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
   };
 
-  const handleDelete = (id) => {
-    Alert.alert(
-      'Delete Expense',
-      'Are you sure you want to delete this expense?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => deleteExpense(id)
-        }
-      ]
-    );
+  const formatSelectedDate = (date) => {
+    return date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
   };
 
-  const renderExpenseItem = ({ item }) => {
-    const expenseDate = new Date(item.date);
-    const dateString = expenseDate.toLocaleDateString('en-US', {
-      month: 'short',
-      day: '2-digit',
-      year: 'numeric'
-    });
-    const timeString = expenseDate.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-
-    return (
-      <TouchableOpacity 
-        style={[styles.expenseItem, { backgroundColor: theme.colors.card }]}
-        onLongPress={() => handleDelete(item.id)}
-      >
-        <View style={styles.expenseLeft}>
-          <View style={[styles.expenseIcon, { backgroundColor: theme.colors.primary + '20' }]}>
-            <Ionicons name={getCategoryIcon(item.category)} size={20} color={theme.colors.primary} />
-          </View>
-          <View style={styles.expenseInfo}>
-            <Text style={[styles.category, { color: theme.colors.text }]}>{item.category}</Text>
-            {item.note && (
-              <Text style={[styles.note, { color: theme.colors.text, opacity: 0.7 }]}>{item.note}</Text>
-            )}
-            <Text style={[styles.date, { color: theme.colors.text, opacity: 0.5 }]}>{dateString} • {timeString}</Text>
-          </View>
-        </View>
-        <View style={styles.expenseRight}>
-          <Text style={[styles.amount, { color: '#FF4444' }]}>-₱{item.amount.toFixed(2)}</Text>
-          <View style={[styles.deleteHint, { backgroundColor: theme.colors.background }]}>
-            <Text style={[styles.deleteHintText, { color: theme.colors.text, opacity: 0.5 }]}>Hold to delete</Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
+  const formatSelectedTime = (date) => {
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
   };
 
   const getCategoryIcon = (category) => {
@@ -326,591 +254,527 @@ const ExpenseScreen = ({ navigation, route }) => {
     return categoryMap[category.toLowerCase()] || 'apps-outline';
   };
 
-  // Validate icon names to prevent warnings
-  const validateIconName = (iconName) => {
-    if (!iconName || typeof iconName !== 'string') {
-      return 'bulb-outline';
+  const handleSave = async () => {
+    if (!amount || !category) {
+      Alert.alert('Error', 'Please fill in amount and category');
+      return;
     }
-    
-    // List of known valid Ionicons (modern format)
-    const validIcons = [
-      'bulb-outline', 'warning-outline', 'checkmark-circle-outline', 'trending-up-outline', 'trending-down-outline',
-      'wallet-outline', 'restaurant-outline', 'car-outline', 'film-outline', 'bag-outline', 'build-outline',
-      'analytics-outline', 'rocket-outline', 'school-outline', 'happy-outline', 'list-outline',
-      'information-circle-outline', 'alert-circle-outline', 'close-circle-outline', 'fast-food-outline',
-      'bus-outline', 'cart-outline', 'apps-outline', 'ellipsis-horizontal-outline'
-    ];
-    
-    // If it's valid, return it
-    if (validIcons.includes(iconName)) {
-      return iconName;
-    }
-    
-    // Convert common old formats
-    const iconMappings = {
-      'ion-ios-list': 'list-outline',
-      'ion-ios-pie': 'analytics-outline', 
-      'ion-ios-warning': 'warning-outline',
-      'ion-md-cash': 'wallet-outline',
-      'ion-md-close': 'close-circle-outline'
+
+    const newExpense = {
+      amount: parseFloat(amount),
+      category,
+      note,
+      description,
+      date: selectedDate.toISOString()
     };
+
+    addExpense(newExpense);
     
-    return iconMappings[iconName] || 'bulb-outline';
+    try {
+      const achievements = await AchievementService.checkAndAwardAchievements(null, 'expense_track');
+      if (achievements.length > 0) {
+        const achievement = achievements[0];
+        setTimeout(() => {
+          Alert.alert(
+            '🏆 Achievement Unlocked!',
+            `${achievement.icon} ${achievement.title}\n${achievement.description}\n\n+${achievement.points} points!`,
+            [{ text: 'Awesome!', style: 'default' }]
+          );
+        }, 500);
+      }
+    } catch (error) {
+      console.error('Error checking achievements:', error);
+    }
+    
+    setShowForm(false);
+    resetForm();
   };
 
-  // Enhanced AI predictions and recommendations using NVIDIA API
-  useEffect(() => {
-    const generateAIInsights = async () => {
-      if (!expenses || expenses.length === 0) {
-        // Show welcome message for new users
-        setPredictions({
-          nextMonthExpense: 0,
-          recommendations: [{
-            type: 'info',
-            category: 'welcome',
-            message: 'Start tracking your expenses to receive AI-powered insights and recommendations!',
-            icon: 'rocket-outline',
-            color: '#2196F3'
-          }]
-        });
-        return;
-      }
+  const resetForm = () => {
+    setAmount('');
+    setCategory('');
+    setNote('');
+    setDescription('');
+    setSelectedDate(new Date());
+  };
 
-      setAiLoading(true);
-      setAiError(null);
+  const onDateChange = (event, date) => {
+    setShowDatePicker(Platform.OS === 'ios');
+    if (date) {
+      const newDate = new Date(selectedDate);
+      newDate.setFullYear(date.getFullYear());
+      newDate.setMonth(date.getMonth());
+      newDate.setDate(date.getDate());
+      setSelectedDate(newDate);
+    }
+  };
 
-      try {
-        // Calculate basic stats for display
-        const monthStart = new Date();
-        monthStart.setDate(1);
-        const monthExpenses = expenses.filter(exp => new Date(exp.date) >= monthStart);
-        const dailyRate = monthExpenses.reduce((sum, exp) => sum + exp.amount, 0) / 
-          (new Date().getDate());
+  const onTimeChange = (event, time) => {
+    setShowTimePicker(Platform.OS === 'ios');
+    if (time) {
+      const newDate = new Date(selectedDate);
+      newDate.setHours(time.getHours());
+      newDate.setMinutes(time.getMinutes());
+      setSelectedDate(newDate);
+    }
+  };
 
-        // Predict next month's expenses (basic calculation for display)
-        const daysInNextMonth = new Date(
-          new Date().getFullYear(),
-          new Date().getMonth() + 2,
-          0
-        ).getDate();
-        const predictedExpense = dailyRate * daysInNextMonth;
+  const handleDelete = (id) => {
+    Alert.alert(
+      'Delete Expense',
+      'Are you sure you want to delete this expense?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => deleteExpense(id) }
+      ]
+    );
+  };
 
-        // Get AI-powered insights and recommendations
-        const [aiInsights, aiRecommendations] = await Promise.all([
-          analyzeExpenses(expenses, budget),
-          getRecommendations(
-            { id: 'user-1' }, // User profile - you can enhance this
-            expenses,
-            budget
-          )
-        ]);
+  // Render expense item for detailed view
+  const renderExpenseItem = ({ item }) => {
+    const expenseDate = new Date(item.date);
+    const timeString = expenseDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
-        // Combine AI insights and recommendations
-        const allRecommendations = [
-          ...aiInsights.map(insight => ({
-            type: insight.type,
-            category: insight.category || 'general',
-            message: insight.message,
-            icon: insight.icon,
-            color: insight.color
-          })),
-          ...aiRecommendations.map(rec => ({
-            type: rec.type,
-            category: rec.category || 'general',
-            message: rec.message,
-            icon: rec.icon,
-            color: rec.color
-          }))
-        ];
-
-        setPredictions({
-          nextMonthExpense: predictedExpense,
-          recommendations: allRecommendations.slice(0, 6) // Limit to 6 items for UI
-        });
-
-        setAiLoading(false);
-
-      } catch (error) {
-        console.error('Error generating AI insights:', error);
-        setAiError(error.message);
-        setAiLoading(false);
-        
-        // Fallback to basic recommendations if AI fails
-        const basicRecommendations = [
-          {
-            type: 'warning',
-            category: 'system',
-            message: 'AI insights temporarily unavailable. Using basic recommendations.',
-            icon: 'warning-outline',
-            color: '#FF9800'
-          },
-          {
-            type: 'info',
-            category: 'general',
-            message: 'Track your expenses daily to identify spending patterns',
-            icon: 'analytics-outline',
-            color: '#2196F3'
-          },
-          {
-            type: 'success',
-            category: 'savings',
-            message: 'Set aside 20% of your income for savings',
-            icon: 'wallet-outline',
-            color: '#4CAF50'
-          }
-        ];
-
-        const monthStart = new Date();
-        monthStart.setDate(1);
-        const monthExpenses = expenses.filter(exp => new Date(exp.date) >= monthStart);
-        const dailyRate = monthExpenses.reduce((sum, exp) => sum + exp.amount, 0) / 
-          (new Date().getDate());
-        const daysInNextMonth = new Date(
-          new Date().getFullYear(),
-          new Date().getMonth() + 2,
-          0
-        ).getDate();
-
-        setPredictions({
-          nextMonthExpense: dailyRate * daysInNextMonth,
-          recommendations: basicRecommendations
-        });
-      }
-    };
-
-    generateAIInsights();
-  }, [expenses, budget]);
-
-  const renderPredictions = () => (
-    <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}>
-        <Text style={[styles.cardTitle, { color: theme.colors.text, flex: 1 }]}>AI Insights</Text>
-        {aiLoading && (
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Text style={[{ color: theme.colors.text, opacity: 0.6, fontSize: 12, marginRight: 8 }]}>
-              Analyzing...
-            </Text>
-            <Ionicons name="refresh-outline" size={16} color={theme.colors.primary} />
+    return (
+      <TouchableOpacity 
+        style={[styles.expenseItem, { backgroundColor: theme.colors.card }]}
+        onLongPress={() => handleDelete(item.id)}
+      >
+        <View style={styles.expenseLeft}>
+          <View style={[styles.expenseIcon, { backgroundColor: categoryColors[item.category.toLowerCase()] + '20' }]}>
+            <Ionicons name={getCategoryIcon(item.category)} size={20} color={categoryColors[item.category.toLowerCase()]} />
           </View>
-        )}
-        {aiError && (
-          <Ionicons name="warning-outline" size={16} color="#FF9800" />
-        )}
-      </View>
+          <View style={styles.expenseInfo}>
+            <Text style={[styles.expenseCategory, { color: theme.colors.text }]}>{item.category}</Text>
+            {item.note && (
+              <Text style={[styles.expenseNote, { color: theme.colors.text }]} numberOfLines={1}>{item.note}</Text>
+            )}
+            <Text style={[styles.expenseTime, { color: theme.colors.text }]}>{timeString}</Text>
+          </View>
+        </View>
+        <Text style={[styles.expenseAmount, { color: '#FF4444' }]}>-₱{item.amount.toFixed(2)}</Text>
+      </TouchableOpacity>
+    );
+  };
 
-      {/* Category Rankings */}
-      <View style={styles.rankingsContainer}>
-        <Text style={[styles.rankingsTitle, { color: theme.colors.text }]}>
-          Category Rankings
-        </Text>
-        {charts.pieChart.map((category, index) => (
-          <View key={category.name} style={styles.rankingItem}>
-            <View style={styles.rankingLeft}>
-              <Text style={[styles.rankingNumber, { color: theme.colors.text }]}>
-                {index + 1}.
-              </Text>
-              <View style={[styles.colorDot, { backgroundColor: category.color }]} />
-              <Text style={[styles.rankingName, { color: theme.colors.text }]}>
-                {category.name}
-              </Text>
-            </View>
-            <View>
-              <Text style={[styles.rankingAmount, { color: theme.colors.primary }]}>
-                ₱{category.amount.toFixed(2)}
-              </Text>
-              <Text style={[styles.rankingPercentage, { color: theme.colors.text, opacity: 0.6 }]}>
-                {category.percentage.toFixed(1)}%
-              </Text>
-            </View>
-          </View>
-        ))}
-      </View>
-
-      <View style={styles.predictionContainer}>
-        <Text style={[styles.predictionLabel, { color: theme.colors.text }]}>
-          Predicted Next Month Expenses
-        </Text>
-        <Text style={[styles.predictionAmount, { color: theme.colors.primary }]}>
-          ₱{predictions.nextMonthExpense.toFixed(2)}
-        </Text>
-        
-        {predictions.nextMonthExpense > budget.monthly && (
-          <View style={styles.warningContainer}>
-            <Ionicons name="warning-outline" size={20} color="#FF3B30" />
-            <Text style={styles.warningText}>
-              This exceeds your monthly budget by ₱{(predictions.nextMonthExpense - budget.monthly).toFixed(2)}
-            </Text>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.recommendationsContainer}>
-        <Text style={[styles.recommendationsTitle, { color: theme.colors.text }]}>
-          AI-Powered Insights & Recommendations
-        </Text>
-        {predictions.recommendations.map((rec, index) => (
-          <View key={index} style={styles.recommendationItem}>
-            <Ionicons
-              name={validateIconName(rec.icon) || (
-                rec.type === 'warning' ? 'alert-circle-outline' :
-                rec.type === 'error' ? 'close-circle-outline' :
-                rec.type === 'success' ? 'checkmark-circle-outline' :
-                rec.type === 'info' ? 'information-circle-outline' :
-                rec.type === 'optimization' ? 'trending-up-outline' :
-                'bulb-outline'
-              )}
-              size={24}
-              color={rec.color || (
-                rec.type === 'warning' ? '#FF9800' :
-                rec.type === 'error' ? '#FF3B30' :
-                rec.type === 'success' ? '#4CAF50' :
-                rec.type === 'info' ? '#2196F3' :
-                rec.type === 'optimization' ? '#4CD964' :
-                theme.colors.primary
-              )}
-            />
-            <Text style={[styles.recommendationText, { color: theme.colors.text }]}>
-              {rec.message}
-            </Text>
-          </View>
-        ))}
-        {predictions.recommendations.length === 0 && (
-          <View style={styles.recommendationItem}>
-            <Ionicons name="bulb-outline" size={24} color={theme.colors.primary} />
-            <Text style={[styles.recommendationText, { color: theme.colors.text, fontStyle: 'italic' }]}>
-              Add more expenses to get personalized AI insights!
-            </Text>
-          </View>
-        )}
-      </View>
+  // Render section header for grouped expenses
+  const renderSectionHeader = ({ section }) => (
+    <View style={[styles.sectionHeader, { backgroundColor: theme.colors.background }]}>
+      <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{section.title}</Text>
+      <Text style={[styles.sectionTotal, { color: theme.colors.primary }]}>
+        {formatCurrency(section.total)}
+      </Text>
     </View>
   );
 
+  // ========== ADD EXPENSE FORM ==========
   if (showForm) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <ScrollView>
-          <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
-            <TouchableOpacity 
-              style={styles.backButton}
-              onPress={() => setShowForm(false)}
-            >
+          <View style={[styles.formHeader, { borderBottomColor: theme.colors.border }]}>
+            <TouchableOpacity style={styles.backButton} onPress={() => setShowForm(false)}>
               <Ionicons name="chevron-back" size={24} color={theme.colors.text} />
             </TouchableOpacity>
-            <Text style={[styles.title, { color: theme.colors.text }]}>Add Expense</Text>
+            <Text style={[styles.formTitle, { color: theme.colors.text }]}>Add Expense</Text>
             <View style={[styles.badge, { backgroundColor: theme.colors.primary }]}>
               <Text style={styles.badgeText}>New</Text>
             </View>
           </View>
 
-        <View style={[styles.dateTime, { borderBottomColor: theme.colors.border }]}>
-          <Text style={[styles.label, { color: theme.colors.text, opacity: 0.6 }]}>Date & Time</Text>
-          <View style={styles.dateTimeContent}>
-            <TouchableOpacity 
-              style={[styles.dateTimeButton, { backgroundColor: theme.colors.background }]}
-              onPress={() => setShowDatePicker(true)}
-            >
-              <Ionicons name="calendar-outline" size={20} color={theme.colors.primary} />
-              <Text style={[styles.dateText, { color: theme.colors.text }]}>
-                {formatSelectedDate(selectedDate)}
-              </Text>
-            </TouchableOpacity>
+          <View style={[styles.dateTimeSection, { borderBottomColor: theme.colors.border }]}>
+            <Text style={[styles.label, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>Date & Time</Text>
+            <View style={styles.dateTimeContent}>
+              <TouchableOpacity 
+                style={[styles.dateTimeButton, { backgroundColor: theme.colors.card }]}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Ionicons name="calendar-outline" size={20} color={theme.colors.primary} />
+                <Text style={[styles.dateTimeText, { color: theme.colors.text }]}>
+                  {formatSelectedDate(selectedDate)}
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.dateTimeButton, { backgroundColor: theme.colors.card }]}
+                onPress={() => setShowTimePicker(true)}
+              >
+                <Ionicons name="time-outline" size={20} color={theme.colors.primary} />
+                <Text style={[styles.dateTimeText, { color: theme.colors.text }]}>
+                  {formatSelectedTime(selectedDate)}
+                </Text>
+              </TouchableOpacity>
+            </View>
             
-            <TouchableOpacity 
-              style={[styles.dateTimeButton, { backgroundColor: theme.colors.background }]}
-              onPress={() => setShowTimePicker(true)}
-            >
-              <Ionicons name="time-outline" size={20} color={theme.colors.primary} />
-              <Text style={[styles.timeText, { color: theme.colors.text }]}>
-                {formatSelectedTime(selectedDate)}
-              </Text>
-            </TouchableOpacity>
-          </View>
-          
-          {/* Date Picker */}
-          {showDatePicker && (
-            <DateTimePicker
-              value={selectedDate}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={onDateChange}
-              maximumDate={new Date()} // Don't allow future dates
-            />
-          )}
-          
-          {/* Time Picker */}
-          {showTimePicker && (
-            <DateTimePicker
-              value={selectedDate}
-              mode="time"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={onTimeChange}
-            />
-          )}
-        </View>
-
-        <View style={styles.form}>
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: theme.colors.text, opacity: 0.6 }]}>Amount</Text>
-            <TextInput
-              style={[styles.input, { 
-                backgroundColor: theme.colors.card,
-                color: theme.colors.text,
-                borderColor: theme.colors.border 
-              }]}
-              value={amount}
-              onChangeText={setAmount}
-              keyboardType="decimal-pad"
-              placeholderTextColor={theme.colors.text + '80'}
-              placeholder="0.00"
-            />
+            {showDatePicker && (
+              <DateTimePicker
+                value={selectedDate}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={onDateChange}
+                maximumDate={new Date()}
+              />
+            )}
+            
+            {showTimePicker && (
+              <DateTimePicker
+                value={selectedDate}
+                mode="time"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={onTimeChange}
+              />
+            )}
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: theme.colors.text, opacity: 0.6 }]}>Category</Text>
-            <View style={styles.categoryContainer}>
-              {categories.map((cat) => (
-                <TouchableOpacity
-                  key={cat}
-                  style={[
-                    styles.categoryButton,
-                    { backgroundColor: theme.colors.card },
-                    category === cat && { backgroundColor: theme.colors.primary }
-                  ]}
-                  onPress={() => setCategory(cat)}
-                >
-                  <Text style={[
-                    styles.categoryButtonText,
-                    { color: theme.colors.text, opacity: 0.6 },
-                    category === cat && { color: '#FFF', opacity: 1 }
-                  ]}>
-                    {cat}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+          <View style={styles.form}>
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>Amount</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.colors.card, color: theme.colors.text, borderColor: theme.colors.border }]}
+                value={amount}
+                onChangeText={setAmount}
+                keyboardType="decimal-pad"
+                placeholderTextColor={theme.colors.text + '80'}
+                placeholder="0.00"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>Category</Text>
+              <View style={styles.categoryContainer}>
+                {categories.map((cat) => (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[
+                      styles.categoryButton,
+                      { backgroundColor: theme.colors.card },
+                      category === cat && { backgroundColor: theme.colors.primary }
+                    ]}
+                    onPress={() => setCategory(cat)}
+                  >
+                    <Text style={[
+                      styles.categoryButtonText,
+                      { color: theme.colors.textSecondary || theme.colors.text + '80' },
+                      category === cat && { color: '#FFF' }
+                    ]}>
+                      {cat}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>Note</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.colors.card, color: theme.colors.text, borderColor: theme.colors.border }]}
+                value={note}
+                onChangeText={setNote}
+                placeholderTextColor={theme.colors.text + '80'}
+                placeholder="Add a short note"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>Description</Text>
+              <TextInput
+                style={[styles.input, styles.descriptionInput, { backgroundColor: theme.colors.card, color: theme.colors.text, borderColor: theme.colors.border }]}
+                value={description}
+                onChangeText={setDescription}
+                multiline
+                numberOfLines={4}
+                placeholderTextColor={theme.colors.text + '80'}
+                placeholder="Add details (optional)"
+                textAlignVertical="top"
+              />
             </View>
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: theme.colors.text, opacity: 0.6 }]}>Note</Text>
-            <TextInput
-              style={[styles.input, { 
-                backgroundColor: theme.colors.card,
-                color: theme.colors.text,
-                borderColor: theme.colors.border 
-              }]}
-              value={note}
-              onChangeText={setNote}
-              placeholderTextColor={theme.colors.text + '80'}
-              placeholder="Add a short note"
-            />
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity 
+              style={[styles.saveButton, { backgroundColor: theme.colors.primary }]}
+              onPress={handleSave}
+            >
+              <Text style={styles.saveButtonText}>Save Expense</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.cancelButton, { backgroundColor: theme.colors.card }]}
+              onPress={() => { setShowForm(false); resetForm(); }}
+            >
+              <Text style={[styles.cancelButtonText, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>Cancel</Text>
+            </TouchableOpacity>
           </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: theme.colors.text, opacity: 0.6 }]}>Description</Text>
-            <TextInput
-              style={[styles.input, styles.descriptionInput, { 
-                backgroundColor: theme.colors.card,
-                color: theme.colors.text,
-                borderColor: theme.colors.border 
-              }]}
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              numberOfLines={4}
-              placeholderTextColor={theme.colors.text + '80'}
-              placeholder="Add details (optional)"
-              textAlignVertical="top"
-            />
-          </View>
-        </View>
-
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity 
-            style={[styles.saveButton, { backgroundColor: theme.colors.primary }]}
-            onPress={handleSave}
-          >
-            <Text style={styles.saveButtonText}>Save Expense</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[styles.cancelButton, { backgroundColor: theme.colors.card }]}
-            onPress={() => {
-              setShowForm(false);
-              resetForm();
-            }}
-          >
-            <Text style={[styles.cancelButtonText, { color: theme.colors.text, opacity: 0.6 }]}>
-              Cancel
-            </Text>
-          </TouchableOpacity>
-        </View>
         </ScrollView>
       </SafeAreaView>
     );
   }
 
-  return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <View style={styles.mainContainer}>
-        <View style={[styles.headerContainer, { borderBottomColor: theme.colors.border }]}>
-          <View style={styles.headerContent}>
-            <Text style={[styles.title, { color: theme.colors.text }]}>Expenses</Text>
-            <View style={[styles.expensesBadge, { backgroundColor: theme.colors.primary + '15' }]}>
-              <Text style={[styles.expensesBadgeText, { color: theme.colors.primary }]}>
-                {expenses.length} total
+  // ========== STATISTICS VIEW ==========
+  if (viewMode === 'statistics') {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View style={styles.mainContainer}>
+          {/* Header */}
+          <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
+            <View>
+              <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Expenses</Text>
+              <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>
+                {selectedPeriod === 'week' ? 'This Week' : 'This Month'} Overview
               </Text>
             </View>
+            <TouchableOpacity 
+              style={[styles.detailedButton, { backgroundColor: theme.colors.primary }]}
+              onPress={() => setViewMode('detailed')}
+            >
+              <Ionicons name="list" size={16} color="#FFF" />
+              <Text style={styles.detailedButtonText}>Detailed</Text>
+            </TouchableOpacity>
           </View>
-        </View>
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-          bounces={true}
-          nestedScrollEnabled={true}
-        >
-          {/* Charts Section */}
-          <View style={[styles.chartsSection, { backgroundColor: theme.colors.card }]}>
-            <View style={styles.chartHeader}>
-              <Text style={[styles.chartTitle, { color: theme.colors.text }]}>Expense Analytics</Text>
-              <View style={[styles.periodSelector, { backgroundColor: theme.colors.background }]}>
-                <TouchableOpacity
-                  style={[
-                    styles.periodButton,
-                    selectedPeriod === 'week' && { backgroundColor: theme.colors.primary }
-                  ]}
-                  onPress={() => setSelectedPeriod('week')}
-                >
-                  <Text style={[
-                    styles.periodButtonText,
-                    { color: theme.colors.text },
-                    selectedPeriod === 'week' && { color: '#FFF' }
-                  ]}>Week</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.periodButton,
-                    selectedPeriod === 'month' && { backgroundColor: theme.colors.primary }
-                  ]}
-                  onPress={() => setSelectedPeriod('month')}
-                >
-                  <Text style={[
-                    styles.periodButtonText,
-                    { color: theme.colors.text },
-                    selectedPeriod === 'month' && { color: '#FFF' }
-                  ]}>Month</Text>
-                </TouchableOpacity>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+            {/* Summary Cards */}
+            <View style={styles.summaryRow}>
+              <View style={[styles.summaryCard, { backgroundColor: theme.colors.card }]}>
+                <Ionicons name="wallet-outline" size={24} color={theme.colors.primary} />
+                <Text style={[styles.summaryAmount, { color: theme.colors.text }]}>
+                  {formatCurrency(charts.totalExpenses)}
+                </Text>
+                <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>Total Spent</Text>
+              </View>
+              <View style={[styles.summaryCard, { backgroundColor: theme.colors.card }]}>
+                <Ionicons name="receipt-outline" size={24} color="#4ECDC4" />
+                <Text style={[styles.summaryAmount, { color: theme.colors.text }]}>{charts.filteredCount}</Text>
+                <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>Transactions</Text>
               </View>
             </View>
 
-            {/* Charts */}
-            <View style={styles.chartContainer}>
-              {/* Pie Chart */}
+            {/* Period Selector */}
+            <View style={[styles.periodContainer, { backgroundColor: theme.colors.card }]}>
+              <TouchableOpacity
+                style={[styles.periodTab, selectedPeriod === 'week' && { backgroundColor: theme.colors.primary }]}
+                onPress={() => setSelectedPeriod('week')}
+              >
+                <Text style={[styles.periodTabText, { color: selectedPeriod === 'week' ? '#FFF' : theme.colors.text }]}>
+                  Week
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.periodTab, selectedPeriod === 'month' && { backgroundColor: theme.colors.primary }]}
+                onPress={() => setSelectedPeriod('month')}
+              >
+                <Text style={[styles.periodTabText, { color: selectedPeriod === 'month' ? '#FFF' : theme.colors.text }]}>
+                  Month
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Spending by Category - Pie Chart */}
+            <View style={[styles.chartCard, { backgroundColor: theme.colors.card }]}>
+              <Text style={[styles.chartTitle, { color: theme.colors.text }]}>Spending by Category</Text>
+              
               {charts.pieChart.length > 0 ? (
-                <View style={styles.chartWrapper}>
-                  <Text style={[styles.chartSubtitle, { color: theme.colors.text }]}>Expenses by Category</Text>
+                <>
                   <PieChart
                     data={charts.pieChart}
-                    width={screenWidth - 50}
-                    height={220}
-                    chartConfig={{
-                      ...chartConfig,
-                      color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-                    }}
+                    width={screenWidth - 64}
+                    height={200}
+                    chartConfig={chartConfig}
                     accessor="amount"
                     backgroundColor="transparent"
                     paddingLeft="15"
                     center={[10, 0]}
                     absolute
-                    hasLegend={true}
-                    style={styles.pieChart}
+                    hasLegend={false}
                   />
-                </View>
+                  
+                  {/* Category Rankings */}
+                  <View style={styles.rankingsContainer}>
+                    <Text style={[styles.rankingsTitle, { color: theme.colors.text }]}>
+                      Category Rankings
+                    </Text>
+                    {charts.pieChart.map((item, index) => (
+                      <View key={item.name} style={styles.rankingItem}>
+                        <View style={styles.rankingLeft}>
+                          <View style={[styles.rankBadge, { backgroundColor: index === 0 ? '#FFD700' : index === 1 ? '#C0C0C0' : index === 2 ? '#CD7F32' : theme.colors.border }]}>
+                            <Text style={[styles.rankNumber, { color: index < 3 ? '#000' : theme.colors.text }]}>{index + 1}</Text>
+                          </View>
+                          <View style={[styles.categoryDot, { backgroundColor: item.color }]} />
+                          <Text style={[styles.rankingName, { color: theme.colors.text }]}>{item.name}</Text>
+                        </View>
+                        <View style={styles.rankingRight}>
+                          <Text style={[styles.rankingAmount, { color: theme.colors.primary }]}>
+                            {formatCurrency(item.amount)}
+                          </Text>
+                          <Text style={[styles.rankingPercent, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>
+                            {item.percentage.toFixed(1)}%
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </>
               ) : (
                 <View style={styles.noDataContainer}>
-                  <Ionicons name="pie-chart-outline" size={40} color={theme.colors.text} opacity={0.3} />
-                  <Text style={[styles.noDataText, { color: theme.colors.text }]}>No expense data available</Text>
+                  <Ionicons name="pie-chart-outline" size={48} color={theme.colors.textSecondary || theme.colors.text + '80'} />
+                  <Text style={[styles.noDataText, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>No expenses yet</Text>
                 </View>
               )}
-
-              {/* Bar Chart */}
-              <View style={styles.chartWrapper}>
-                <Text style={[styles.chartSubtitle, { color: theme.colors.text }]}>
-                  {selectedPeriod === 'week' ? 'Daily' : 'Weekly'} Trends
-                </Text>
-                <BarChart
-                  data={charts.lineChart}
-                  width={screenWidth - 80}
-                  height={220}
-                  chartConfig={{
-                    ...chartConfig,
-                    fillShadowGradient: theme.colors.primary,
-                    fillShadowGradientOpacity: 0.8,
-                    barRadius: 4,
-                    propsForBackgroundLines: {
-                      strokeDasharray: "3,3",
-                      stroke: theme.colors.text + '15',
-                      strokeWidth: 1
-                    }
-                  }}
-                  style={styles.barChart}
-                  fromZero
-                  showBarTops={false}
-                  showValuesOnTopOfBars={true}
-                />
-              </View>
             </View>
-          </View>
 
-          {/* AI Predictions */}
-          {renderPredictions()}
+            {/* Spending Trends - Bar Chart */}
+            <View style={[styles.chartCard, { backgroundColor: theme.colors.card }]}>
+              <Text style={[styles.chartTitle, { color: theme.colors.text }]}>
+                {selectedPeriod === 'week' ? 'Daily Spending' : 'Weekly Spending'}
+              </Text>
+              
+              <BarChart
+                data={charts.barChart}
+                width={screenWidth - 64}
+                height={220}
+                chartConfig={{
+                  ...chartConfig,
+                  fillShadowGradient: theme.colors.primary,
+                  fillShadowGradientOpacity: 0.8,
+                  barRadius: 6,
+                }}
+                style={styles.chart}
+                fromZero
+                showBarTops={false}
+                showValuesOnTopOfBars={true}
+              />
+            </View>
 
-          {/* Expense List */}
-          <View style={styles.expenseListContainer}>
-            <View style={styles.expenseListHeader}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Recent Expenses</Text>
-              {expenses.length > 0 && (
-                <View style={[styles.totalBadge, { backgroundColor: theme.colors.primary + '15' }]}>
-                  <Text style={[styles.totalBadgeText, { color: theme.colors.primary }]}>
-                    Total: {formatCurrency(expenses.reduce((sum, exp) => sum + exp.amount, 0))}
+            {/* Highest Expense Card */}
+            {charts.pieChart.length > 0 && (
+              <View style={[styles.highlightCard, { backgroundColor: theme.colors.primary + '15' }]}>
+                <View style={[styles.highlightIcon, { backgroundColor: theme.colors.primary }]}>
+                  <Ionicons name="trending-up" size={24} color="#FFF" />
+                </View>
+                <View style={styles.highlightContent}>
+                  <Text style={[styles.highlightLabel, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>Highest Expense</Text>
+                  <Text style={[styles.highlightCategory, { color: theme.colors.text }]}>{charts.pieChart[0].name}</Text>
+                  <Text style={[styles.highlightAmount, { color: theme.colors.primary }]}>
+                    {formatCurrency(charts.pieChart[0].amount)} ({charts.pieChart[0].percentage.toFixed(1)}%)
                   </Text>
                 </View>
-              )}
-            </View>
-            {expenses.length > 0 ? (
-              <FlatList
-                data={expenses.slice()}
-                renderItem={renderExpenseItem}
-                keyExtractor={item => item.id}
-                scrollEnabled={false}
-                showsVerticalScrollIndicator={false}
-              />
-            ) : (
-              <View style={styles.emptyState}>
-                <View style={[styles.emptyStateIcon, { backgroundColor: theme.colors.background }]}>
-                  <Ionicons name="receipt-outline" size={40} color={theme.colors.text} opacity={0.3} />
-                </View>
-                <Text style={[styles.emptyStateText, { color: theme.colors.text }]}>
-                  No expenses recorded yet
-                </Text>
-                <Text style={[styles.emptyStateSubtext, { color: theme.colors.text, opacity: 0.6 }]}>
-                  Start tracking your expenses to see insights
-                </Text>
               </View>
             )}
-          </View>
-        </ScrollView>
 
+            <View style={{ height: 100 }} />
+          </ScrollView>
+
+          {/* FAB 
+          <TouchableOpacity
+            style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+            onPress={() => setShowForm(true)}
+          >
+            <Ionicons name="add" size={28} color="#FFF" />
+          </TouchableOpacity>*/}
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ========== DETAILED VIEW ==========
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View style={styles.mainContainer}>
+        {/* Header */}
+        <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
+          <View style={styles.headerLeft}>
+            <TouchableOpacity 
+              style={[styles.backButtonSmall, { backgroundColor: theme.colors.card }]}
+              onPress={() => setViewMode('statistics')}
+            >
+              <Ionicons name="arrow-back" size={20} color={theme.colors.text} />
+            </TouchableOpacity>
+            <View style={{ marginLeft: 12 }}>
+              <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Detailed Expenses</Text>
+              <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>
+                {groupedExpenses.reduce((sum, g) => sum + g.data.length, 0)} transactions
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Filters */}
+        <View style={[styles.filtersContainer, { backgroundColor: theme.colors.card }]}>
+          {/* Time Filter */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
+            <Text style={[styles.filterLabel, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>Period:</Text>
+            {['all', 'week', 'month'].map(filter => (
+              <TouchableOpacity
+                key={filter}
+                style={[styles.filterChip, detailFilter === filter && { backgroundColor: theme.colors.primary }]}
+                onPress={() => setDetailFilter(filter)}
+              >
+                <Text style={[styles.filterChipText, { color: detailFilter === filter ? '#FFF' : theme.colors.text }]}>
+                  {filter === 'all' ? 'All Time' : filter === 'week' ? 'This Week' : 'This Month'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* Category Filter */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
+            <Text style={[styles.filterLabel, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>Category:</Text>
+            <TouchableOpacity
+              style={[styles.filterChip, categoryFilter === 'all' && { backgroundColor: theme.colors.primary }]}
+              onPress={() => setCategoryFilter('all')}
+            >
+              <Text style={[styles.filterChipText, { color: categoryFilter === 'all' ? '#FFF' : theme.colors.text }]}>
+                All
+              </Text>
+            </TouchableOpacity>
+            {categories.map(cat => (
+              <TouchableOpacity
+                key={cat}
+                style={[
+                  styles.filterChip, 
+                  categoryFilter.toLowerCase() === cat.toLowerCase() && { backgroundColor: categoryColors[cat.toLowerCase()] }
+                ]}
+                onPress={() => setCategoryFilter(cat)}
+              >
+                <Text style={[
+                  styles.filterChipText, 
+                  { color: categoryFilter.toLowerCase() === cat.toLowerCase() ? '#FFF' : theme.colors.text }
+                ]}>
+                  {cat}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Expense List Grouped by Date */}
+        {groupedExpenses.length > 0 ? (
+          <SectionList
+            sections={groupedExpenses}
+            keyExtractor={(item) => item.id}
+            renderItem={renderExpenseItem}
+            renderSectionHeader={renderSectionHeader}
+            stickySectionHeadersEnabled={true}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+          />
+        ) : (
+          <View style={styles.emptyState}>
+            <Ionicons name="receipt-outline" size={64} color={theme.colors.textSecondary || theme.colors.text + '80'} />
+            <Text style={[styles.emptyStateText, { color: theme.colors.text }]}>No expenses found</Text>
+            <Text style={[styles.emptyStateSubtext, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>
+              Try adjusting your filters
+            </Text>
+          </View>
+        )}
+
+        {/* FAB 
         <TouchableOpacity
-          style={[styles.addButton, { 
-          backgroundColor: theme.colors.primary,
-          shadowColor: theme.colors.text,
-        }]}
+          style={[styles.fab, { backgroundColor: theme.colors.primary }]}
           onPress={() => setShowForm(true)}
         >
-          <Ionicons name="add" size={24} color="#FFF" />
-        </TouchableOpacity>
+          <Ionicons name="add" size={28} color="#FFF" />
+        </TouchableOpacity>*/}
       </View>
     </SafeAreaView>
   );
@@ -922,121 +786,323 @@ const styles = StyleSheet.create({
   },
   mainContainer: {
     flex: 1,
-    position: 'relative',
   },
+  
+  // Header
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  detailedButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+  },
+  detailedButtonText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  backButtonSmall: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Summary Cards
+  summaryRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    gap: 12,
+  },
+  summaryCard: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  summaryAmount: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginTop: 8,
+  },
+  summaryLabel: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+
+  // Period Selector
+  periodContainer: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 12,
+    padding: 4,
+  },
+  periodTab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  periodTabText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Charts
+  chartCard: {
+    margin: 16,
+    marginTop: 16,
+    padding: 20,
+    borderRadius: 16,
+  },
+  chartTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 16,
+  },
+  chart: {
+    borderRadius: 16,
+    marginLeft: -16,
+  },
+  noDataContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  noDataText: {
+    marginTop: 12,
+    fontSize: 14,
+  },
+
+  // Rankings
   rankingsContainer: {
-    marginBottom: 20,
-    paddingTop: 10,
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
   },
   rankingsTitle: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 15,
+    marginBottom: 16,
   },
   rankingItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 10,
   },
   rankingLeft: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  rankingNumber: {
-    width: 25,
-    fontSize: 14,
+  rankBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
   },
-  colorDot: {
+  rankNumber: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  categoryDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    marginRight: 8,
+    marginRight: 10,
   },
   rankingName: {
     fontSize: 14,
     fontWeight: '500',
   },
+  rankingRight: {
+    alignItems: 'flex-end',
+  },
   rankingAmount: {
     fontSize: 14,
     fontWeight: '600',
-    textAlign: 'right',
   },
-  rankingPercentage: {
+  rankingPercent: {
     fontSize: 12,
-    textAlign: 'right',
+    marginTop: 2,
   },
-  headerContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+
+  // Highlight Card
+  highlightCard: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    padding: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  highlightIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  highlightContent: {
+    flex: 1,
+  },
+  highlightLabel: {
+    fontSize: 12,
+  },
+  highlightCategory: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 2,
+  },
+  highlightAmount: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+
+  // Filters
+  filtersContainer: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
   },
-  headerContent: {
+  filterRow: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  filterLabel: {
+    fontSize: 12,
+    marginRight: 10,
+    alignSelf: 'center',
+  },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 8,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+
+  // Section Headers
+  sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  expensesBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  sectionTotal: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Expense Item
+  expenseItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 14,
     borderRadius: 12,
   },
-  expensesBadgeText: {
-    fontSize: 12,
+  expenseLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  expenseIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  expenseInfo: {
+    flex: 1,
+  },
+  expenseCategory: {
+    fontSize: 15,
     fontWeight: '600',
+  },
+  expenseNote: {
+    fontSize: 13,
+    opacity: 0.7,
+    marginTop: 2,
+  },
+  expenseTime: {
+    fontSize: 12,
+    opacity: 0.5,
+    marginTop: 2,
+  },
+  expenseAmount: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+
+  // List
+  listContent: {
+    paddingBottom: 100,
   },
   scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 100, // Extra padding for FAB
+    paddingBottom: 20,
   },
-  chartsSection: {
-    margin: 16,
-    padding: 20,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  chartContainer: {
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  chartWrapper: {
-    marginBottom: 24,
-    width: '100%',
-    alignItems: 'center',
-  },
-  noDataContainer: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    marginBottom: 24,
-  },
-  expenseListContainer: {
+
+  // Empty State
+  emptyState: {
     flex: 1,
-    paddingTop: 10,
-    paddingHorizontal: 16,
-  },
-  expenseListHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    paddingVertical: 60,
   },
-  totalBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  totalBadgeText: {
-    fontSize: 12,
+  emptyStateText: {
+    fontSize: 18,
     fontWeight: '600',
+    marginTop: 16,
   },
-  addButton: {
+  emptyStateSubtext: {
+    fontSize: 14,
+    marginTop: 8,
+  },
+
+  // FAB
+  fab: {
     position: 'absolute',
     right: 20,
     bottom: 20,
@@ -1046,28 +1112,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 8,
-    zIndex: 999,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
-  header: {
+
+  // Form Styles
+  formHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 20,
+    borderBottomWidth: 1,
+  },
+  formTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
   },
   backButton: {
     padding: 5,
   },
-  title: {
-    color: '#FFF',
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
   badge: {
-    backgroundColor: '#FF6B00',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 15,
@@ -1077,7 +1143,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
-  dateTime: {
+  dateTimeSection: {
     padding: 20,
     borderBottomWidth: 1,
   },
@@ -1090,17 +1156,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 8,
     flex: 0.48,
     justifyContent: 'center',
   },
-  dateText: {
-    fontSize: 16,
-    marginLeft: 8,
-  },
-  timeText: {
-    fontSize: 16,
+  dateTimeText: {
+    fontSize: 14,
     marginLeft: 8,
   },
   form: {
@@ -1110,15 +1172,12 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   label: {
-    color: '#808080',
     fontSize: 14,
-    marginBottom: 5,
+    marginBottom: 8,
   },
   input: {
-    backgroundColor: '#2C2C2C',
     borderRadius: 8,
-    padding: 15,
-    color: '#FFF',
+    padding: 14,
     fontSize: 16,
   },
   categoryContainer: {
@@ -1127,21 +1186,13 @@ const styles = StyleSheet.create({
     marginHorizontal: -5,
   },
   categoryButton: {
-    backgroundColor: '#2C2C2C',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 20,
     margin: 5,
   },
-  categoryButtonActive: {
-    backgroundColor: '#FF6B00',
-  },
   categoryButtonText: {
-    color: '#808080',
     fontSize: 14,
-  },
-  categoryButtonTextActive: {
-    color: '#FFF',
   },
   descriptionInput: {
     height: 100,
@@ -1149,12 +1200,10 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     padding: 20,
-    marginTop: 'auto',
   },
   saveButton: {
-    backgroundColor: '#FF6B00',
-    padding: 15,
-    borderRadius: 8,
+    padding: 16,
+    borderRadius: 12,
     alignItems: 'center',
     marginBottom: 10,
   },
@@ -1164,236 +1213,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   cancelButton: {
-    backgroundColor: '#2C2C2C',
-    padding: 15,
-    borderRadius: 8,
+    padding: 16,
+    borderRadius: 12,
     alignItems: 'center',
   },
   cancelButtonText: {
-    color: '#808080',
     fontSize: 16,
-  },
-  list: {
-    flex: 1,
-  },
-  listContent: {
-    paddingHorizontal: 15,
-    paddingBottom: 20,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  emptyStateIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  emptyStateText: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  emptyStateSubtext: {
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  expenseItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  expenseLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  expenseIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  expenseInfo: {
-    flex: 1,
-  },
-  expenseRight: {
-    alignItems: 'flex-end',
-  },
-  category: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 2,
-    textTransform: 'capitalize',
-  },
-  note: {
-    fontSize: 14,
-    marginBottom: 2,
-    textTransform: 'capitalize',
-  },
-  date: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  amount: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  deleteHint: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  deleteHintText: {
-    fontSize: 10,
-    fontWeight: '500',
-  },
-  addButton: {
-    position: 'absolute',
-    right: 20,
-    bottom: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 8,
-    zIndex: 999,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-  },
-  chartsSection: {
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-  },
-  chartHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  chartTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  periodSelector: {
-    flexDirection: 'row',
-    backgroundColor: '#2C2C2C',
-    borderRadius: 20,
-    padding: 4,
-  },
-  periodButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-  },
-  periodButtonText: {
-    color: '#808080',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  chartContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  chartSubtitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 15,
-    textAlign: 'center',
-  },
-  pieChart: {
-    marginVertical: 8,
-    borderRadius: 16,
-    alignSelf: 'center',
-  },
-  barChart: {
-    marginVertical: 8,
-    borderRadius: 16,
-    alignSelf: 'center',
-  },
-  noDataText: {
-    textAlign: 'center',
-    marginVertical: 20,
-    fontStyle: 'italic',
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    paddingHorizontal: 20,
-  },
-  card: {
-    margin: 15,
-    padding: 15,
-    borderRadius: 12,
-  },
-  cardTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 15,
-  },
-  predictionContainer: {
-    marginBottom: 20,
-  },
-  predictionLabel: {
-    fontSize: 14,
-    marginBottom: 5,
-  },
-  predictionAmount: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  warningContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FF3B3020',
-    padding: 10,
-    borderRadius: 8,
-  },
-  warningText: {
-    color: '#FF3B30',
-    marginLeft: 8,
-    fontSize: 14,
-  },
-  recommendationsContainer: {
-    marginTop: 10,
-  },
-  recommendationsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 15,
-  },
-  recommendationItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 15,
-  },
-  recommendationText: {
-    flex: 1,
-    marginLeft: 10,
-    fontSize: 14,
-    lineHeight: 20,
   },
 });
 

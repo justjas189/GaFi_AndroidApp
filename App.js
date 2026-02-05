@@ -1,12 +1,14 @@
-// App.js - Main entry point for the MoneyTrack App
+// App.js - Main entry point for the GaFI App
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
+import { View, Text, ActivityIndicator } from 'react-native';
+import { NotificationService } from './src/MonT/services/NotificationService';
 
 // Enhanced Components & Utilities
 import ErrorBoundary from './src/components/ErrorBoundary';
@@ -24,18 +26,170 @@ import OnboardingNavigator from './src/navigation/OnboardingNavigator';
 import { navigationRef } from './src/navigation/navigationRef';
 
 // Context Providers
-import { AuthProvider } from './src/context/AuthContext';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { DataProvider } from './src/context/DataContext';
-import { ThemeProvider } from './src/context/ThemeContext';
+import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { ChatbotProvider } from './src/context/EnhancedChatbotContext';
+import { MascotProvider } from './src/MonT/context/MascotContext';
 
 const Stack = createStackNavigator();
 
+// Simple loading screen component
+const LoadingScreen = ({ message }) => (
+  <View style={{ 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    backgroundColor: '#1C1C1C' 
+  }}>
+    <ActivityIndicator size="large" color="#FF6B00" />
+    <Text style={{ 
+      color: '#FFF', 
+      marginTop: 20, 
+      fontSize: 16 
+    }}>
+      {message || 'Loading...'}
+    </Text>
+  </View>
+);
+
+// Navigation container with theme from ThemeContext
+const ThemedNavigationContainer = ({ children }) => {
+  const { theme } = useTheme();
+  // Ensure theme is valid for NavigationContainer
+  const navigationTheme = theme && theme.colors ? theme : {
+    dark: true,
+    colors: {
+      primary: '#FF6B00',
+      background: '#1C1C1C',
+      card: '#2C2C2C',
+      text: '#FFFFFF',
+      border: '#3C3C3C',
+      notification: '#FF6B00',
+    },
+  };
+  return (
+    <NavigationContainer ref={navigationRef} theme={navigationTheme}>
+      {children}
+    </NavigationContainer>
+  );
+};
+
+// Inner App component that has access to AuthContext
+const AppNavigator = () => {
+  const { isLoading, userToken, userInfo } = useAuth();
+  const [hasOnboarded, setHasOnboarded] = useState(null); // Use null to indicate uninitialized state
+  const [checkingOnboarding, setCheckingOnboarding] = useState(false);
+
+  useEffect(() => {
+    // Set a timeout to prevent infinite loading
+    const timeout = setTimeout(() => {
+      if (checkingOnboarding) {
+        DebugUtils.warn('APP', 'Onboarding check timed out, proceeding with default');
+        setHasOnboarded(true); // Default to onboarded to show main app
+        setCheckingOnboarding(false);
+      }
+    }, 3000); // 3 second timeout
+
+    if (!isLoading && userToken && userInfo) {
+      setCheckingOnboarding(true);
+      checkOnboardingStatus();
+    } else if (!isLoading && !userToken) {
+      setCheckingOnboarding(false);
+      setHasOnboarded(null);
+    } else if (!isLoading) {
+      // Auth is loaded but no token - show auth screen
+      setCheckingOnboarding(false);
+      setHasOnboarded(null);
+    }
+
+    return () => clearTimeout(timeout);
+  }, [isLoading, userToken, userInfo]);
+
+  const checkOnboardingStatus = async () => {
+    try {
+      DebugUtils.debug('APP', 'Checking onboarding status', { userId: userInfo?.id });
+      
+      if (!userInfo?.id) {
+        DebugUtils.warn('APP', 'No user ID found, defaulting to onboarded');
+        setHasOnboarded(true);
+        setCheckingOnboarding(false);
+        return;
+      }
+
+      const hasOnboardedFlag = await AsyncStorage.getItem(`hasOnboarded_${userInfo.id}`);
+      const isOnboarded = hasOnboardedFlag === 'true';
+      
+      setHasOnboarded(isOnboarded);
+      DebugUtils.debug('APP', 'Onboarding status checked', { 
+        userId: userInfo.id, 
+        hasOnboarded: isOnboarded,
+        rawFlag: hasOnboardedFlag
+      });
+    } catch (error) {
+      DebugUtils.error('APP', 'Error checking onboarding status', error);
+      // Default to onboarded to prevent infinite loading
+      setHasOnboarded(true);
+    } finally {
+      setCheckingOnboarding(false);
+    }
+  };
+
+  // Make setHasOnboarded available globally
+  global.setHasOnboarded = setHasOnboarded;
+
+  // Show loading only if auth is loading OR we're actively checking onboarding
+  if (isLoading) {
+    DebugUtils.debug('APP', 'Auth is loading');
+    return <LoadingScreen message="Authenticating..." />;
+  }
+
+  if (checkingOnboarding) {
+    DebugUtils.debug('APP', 'Checking onboarding status');
+    return <LoadingScreen message="Loading your profile..." />;
+  }
+
+  // Determine which navigator to show
+  DebugUtils.debug('APP', 'Rendering navigation', { 
+    userToken: !!userToken, 
+    hasOnboarded,
+    userInfo: !!userInfo,
+    isLoading,
+    checkingOnboarding
+  });
+
+  return (
+    <Stack.Navigator 
+      screenOptions={{ headerShown: false }}
+    >
+      {userToken && userInfo ? (
+        hasOnboarded === false ? (
+          <Stack.Screen 
+            name="Onboarding" 
+            component={OnboardingNavigator} 
+            options={{ gestureEnabled: false }}
+          />
+        ) : (
+          <Stack.Screen 
+            name="Main" 
+            component={MainNavigator} 
+            options={{ gestureEnabled: false }}
+          />
+        )
+      ) : (
+        <Stack.Screen 
+          name="Auth" 
+          component={AuthNavigator} 
+          options={{ gestureEnabled: false }}
+        />
+      )}
+    </Stack.Navigator>
+  );
+};
+
 // Root App component with authentication flow
 export default function App() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasOnboarded, setHasOnboarded] = useState(false);
-  const [initialRoute, setInitialRoute] = useState('Auth');
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
     initializeApp();
@@ -43,7 +197,7 @@ export default function App() {
 
   const initializeApp = async () => {
     try {
-      DebugUtils.log('APP', 'Initializing MoneyTrack application');
+      DebugUtils.log('APP', 'Initializing GaFI application');
       
       // Reset NVIDIA API circuit breaker (temporary fix)
       try {
@@ -61,116 +215,53 @@ export default function App() {
       await SecurityManager.initialize();
       DebugUtils.debug('APP', 'Security manager initialized');
       
-      // Check initial state
-      await checkInitialState();
-      
-      DebugUtils.log('APP', 'Application initialization completed', {
-        initialRoute,
-        hasOnboarded
+      // Initialize notifications
+      NotificationService.initialize();
+      // Handle notification taps
+      const subscription = NotificationService.addNotificationResponseListener(response => {
+        const data = response.notification.request.content.data;
+        
+        if (data.screen) {
+          // Navigate to appropriate screen
+          navigationRef.current?.navigate(data.screen);
+        }
       });
+
+      DebugUtils.log('APP', 'Application initialization completed');
+      setIsInitialized(true);
+      
+      return () => subscription?.remove();
     } catch (error) {
       DebugUtils.error('APP', 'Failed to initialize application', error);
-      // Fallback to auth screen if initialization fails
-      setInitialRoute('Auth');
-      setIsLoading(false);
+      // Still allow app to continue
+      setIsInitialized(true);
     }
   };
 
-  const checkInitialState = async () => {
-    try {
-      DebugUtils.debug('APP', 'Checking initial authentication state');
-      
-      const [token, storedUserInfo] = await Promise.all([
-        AsyncStorage.getItem('userToken'),
-        AsyncStorage.getItem('userInfo')
-      ]);
-
-      if (!token || !storedUserInfo) {
-        DebugUtils.debug('APP', 'No valid authentication found, routing to Auth');
-        setInitialRoute('Auth');
-        setIsLoading(false);
-        return;
-      }
-
-      const userInfo = JSON.parse(storedUserInfo);
-      
-      // Ensure user has an ID
-      if (!userInfo.id) {
-        userInfo.id = 'user-' + Math.random().toString(36).substr(2, 9);
-        await AsyncStorage.setItem('userInfo', JSON.stringify(userInfo));
-        DebugUtils.debug('APP', 'Generated user ID for existing user', { userId: userInfo.id });
-      }
-      
-      const hasOnboarded = await AsyncStorage.getItem(`hasOnboarded_${userInfo.id}`);
-      
-      // If hasOnboarded is true, ensure all onboarding flags are in sync
-      if (hasOnboarded === 'true') {
-        await AsyncStorage.setItem('onboardingComplete', 'true');
-        setHasOnboarded(true);
-        setInitialRoute('Main');
-        DebugUtils.debug('APP', 'User has completed onboarding, routing to Main', { userId: userInfo.id });
-      } else {
-        // Handle new or incomplete onboarding users
-        await AsyncStorage.setItem('onboardingComplete', 'false');
-        setHasOnboarded(false);
-        setInitialRoute('Onboarding');
-        DebugUtils.debug('APP', 'User needs onboarding, routing to Onboarding', { userId: userInfo.id });
-      }
-      setIsLoading(false);
-    } catch (error) {
-      DebugUtils.error('APP', 'Error checking initial state', error);
-      // If there's an error, default to Auth screen
-      setInitialRoute('Auth');
-      setIsLoading(false);
-    }
-  };
-
-  // Make setHasOnboarded available globally
-  global.setHasOnboarded = setHasOnboarded;
-
-  if (isLoading) {
-    DebugUtils.debug('APP', 'App is still loading, showing loading state');
-    return null; // Or a loading screen
+  if (!isInitialized) {
+    DebugUtils.debug('APP', 'App is still initializing');
+    return <LoadingScreen message="Initializing GaFI..." />;
   }
 
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
-          <NavigationContainer ref={navigationRef}>
-            <ThemeProvider>
+          <ThemeProvider>
+            <ThemedNavigationContainer>
               <AuthProvider>
                 <DataProvider>
                   <ChatbotProvider>
-                    <StatusBar style="auto" />
-                    <Stack.Navigator 
-                      screenOptions={{ headerShown: false }}
-                      initialRouteName={initialRoute}
-                    >
-                      <Stack.Screen 
-                        name="Auth" 
-                        component={AuthNavigator} 
-                        options={{ gestureEnabled: false }}
-                      />
-                      <Stack.Screen 
-                        name="Onboarding" 
-                        component={OnboardingNavigator} 
-                        options={{ gestureEnabled: false }}
-                      />
-                      <Stack.Screen 
-                        name="Main" 
-                        component={MainNavigator} 
-                        options={{ gestureEnabled: false }}
-                      />
-                    </Stack.Navigator>
+                    <MascotProvider>
+                      <StatusBar style="auto" />
+                      <AppNavigator />
+                    </MascotProvider>
                   </ChatbotProvider>
                 </DataProvider>
               </AuthProvider>
-            </ThemeProvider>
-          </NavigationContainer>
-        </SafeAreaProvider>
+            </ThemedNavigationContainer>
+          </ThemeProvider>        </SafeAreaProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>
   );
 }
-

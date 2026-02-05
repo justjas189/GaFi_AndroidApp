@@ -1,76 +1,106 @@
 import React, { useContext } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemeContext } from '../../context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import MascotImage from '../../components/MascotImage';
+
+const { width } = Dimensions.get('window');
 
 const GetStartedScreen = ({ navigation }) => {
   const { theme } = useContext(ThemeContext);
 
   const handleGetStarted = async () => {
     try {
-      // Ensure onboarding is marked as not completed
       await AsyncStorage.setItem('onboardingComplete', 'false');
-      
-      // Update global state
       if (global.setHasOnboarded) {
         global.setHasOnboarded(false);
       }
-      
-      // Navigate to budget goals screen
-      navigation.replace('BudgetGoals');
+      navigation.navigate('UserType');
     } catch (error) {
       console.error('Error in GetStartedScreen:', error);
     }
   };
 
+  const features = [
+    {
+      icon: 'game-controller',
+      color: '#E91E63',
+      title: 'Gamified Savings',
+      description: 'Save money through fun challenges',
+    },
+    {
+      icon: 'sparkles',
+      color: '#00D4FF',
+      title: 'AI Insights',
+      description: 'Smart spending recommendations',
+    },
+    {
+      icon: 'analytics',
+      color: '#4CAF50',
+      title: 'Predictions',
+      description: 'Forecast your expenses',
+    },
+    {
+      icon: 'trophy',
+      color: '#FFCC00',
+      title: 'Achievements',
+      description: 'Earn rewards as you save',
+    },
+  ];
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <View style={styles.content}>
-        <View style={styles.logo}>
-          <Ionicons name="wallet" size={80} color={theme.colors.primary} />
-        </View>
-        
-        <Text style={[styles.title, { color: theme.colors.text }]}>Welcome to MoneyTrack</Text>
-        <Text style={[styles.subtitle, { color: theme.colors.text }]}>
-          Your AI-powered personal finance companion with advanced analytics and smart insights
-        </Text>
-
-        <View style={styles.featuresContainer}>
-          <View style={styles.featureSection}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>💰 Smart Expense Tracking</Text>
-            <Text style={[styles.featureText, { color: theme.colors.text }]}>✓ Track daily expenses with categories</Text>
-            <Text style={[styles.featureText, { color: theme.colors.text }]}>✓ Visual charts and analytics</Text>
-            <Text style={[styles.featureText, { color: theme.colors.text }]}>✓ Calendar view for expense history</Text>
+        {/* Hero Section */}
+        <View style={styles.heroSection}>
+          <View style={[styles.mascotGlow, { backgroundColor: theme.colors.primary + '20' }]}>
+            <MascotImage size={100} />
           </View>
-
-          <View style={styles.featureSection}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>🤖 AI-Powered Intelligence</Text>
-            <Text style={[styles.featureText, { color: theme.colors.text }]}>✓ NVIDIA AI expense analysis</Text>
-            <Text style={[styles.featureText, { color: theme.colors.text }]}>✓ Personalized spending recommendations</Text>
-            <Text style={[styles.featureText, { color: theme.colors.text }]}>✓ Smart budget predictions</Text>
-          </View>
-
-          <View style={styles.featureSection}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>🎯 Advanced Features</Text>
-            <Text style={[styles.featureText, { color: theme.colors.text }]}>✓ Savings goals with progress tracking</Text>
-            <Text style={[styles.featureText, { color: theme.colors.text }]}>✓ Financial calculators & tools</Text>
-            <Text style={[styles.featureText, { color: theme.colors.text }]}>✓ Educational content & tips</Text>
-            
-          </View>
+          <Text style={[styles.title, { color: theme.colors.text }]}>Welcome to GaFI</Text>
+          <Text style={[styles.subtitle, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>
+            Your gamified finance companion
+          </Text>
         </View>
 
-        <TouchableOpacity 
-          style={[styles.button, { backgroundColor: theme.colors.primary }]}
-          onPress={handleGetStarted}
-        >
-          <Text style={styles.buttonText}>Get Started</Text>
-        </TouchableOpacity>
+        {/* Features Grid */}
+        <View style={styles.featuresGrid}>
+          {features.map((feature, index) => (
+            <View 
+              key={index} 
+              style={[styles.featureCard, { backgroundColor: theme.colors.card }]}
+            >
+              <View style={[styles.featureIconContainer, { backgroundColor: feature.color + '20' }]}>
+                <Ionicons name={feature.icon} size={24} color={feature.color} />
+              </View>
+              <Text style={[styles.featureTitle, { color: theme.colors.text }]}>
+                {feature.title}
+              </Text>
+              <Text style={[styles.featureDescription, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>
+                {feature.description}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        {/* CTA Button */}
+        <View style={styles.ctaContainer}>
+          <TouchableOpacity 
+            style={[styles.button, { backgroundColor: theme.colors.primary }]}
+            onPress={handleGetStarted}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.buttonText}>Get Started</Text>
+            <Ionicons name="arrow-forward" size={20} color="#FFF" />
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   );
 };
+
+const cardWidth = (width - 60) / 2;
 
 const styles = StyleSheet.create({
   container: {
@@ -79,51 +109,84 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  logo: {
+  heroSection: {
+    alignItems: 'center',
+    marginTop: 40,
     marginBottom: 40,
   },
+  mascotGlow: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: 'bold',
-    marginBottom: 12,
+    marginBottom: 8,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
     textAlign: 'center',
-    marginBottom: 40,
-    paddingHorizontal: 20,
-    opacity: 0.8,
   },
-  featuresContainer: {
-    alignSelf: 'stretch',
-    marginBottom: 30,
-    paddingHorizontal: 20,
+  featuresGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 32,
   },
-  featureSection: {
-    marginBottom: 20,
+  featureCard: {
+    width: cardWidth,
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 16,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 8,
-    textAlign: 'left',
+  featureIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
   },
-  featureText: {
+  featureTitle: {
     fontSize: 14,
-    marginBottom: 6,
-    paddingLeft: 8,
-    opacity: 0.9,
+    fontWeight: '600',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  featureDescription: {
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  ctaContainer: {
+    marginTop: 'auto',
+    paddingBottom: 20,
   },
   button: {
+    flexDirection: 'row',
     paddingVertical: 16,
     paddingHorizontal: 32,
-    borderRadius: 12,
-    width: '100%',
+    borderRadius: 16,
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    shadowColor: '#FF6B00',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   buttonText: {
     color: '#FFFFFF',

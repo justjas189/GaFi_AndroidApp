@@ -1,8 +1,75 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '../../context/ThemeContext';
 
 const AccountRecoveryScreen = ({ navigation }) => {
+  const { colors, spacing, borderRadius, shadows, createThemedStyles } = useTheme();
+
+  const styles = createThemedStyles((theme) => StyleSheet.create({
+    container: {
+      flex: 1,
+      padding: theme.spacing.lg,
+      backgroundColor: theme.colors.background,
+    },
+    title: {
+      fontSize: 28,
+      fontWeight: 'bold',
+      color: theme.colors.text,
+      marginBottom: theme.spacing.sm,
+      textAlign: 'center',
+    },
+    subtitle: {
+      fontSize: 16,
+      color: theme.colors.textSecondary,
+      marginBottom: theme.spacing.xl,
+      textAlign: 'center',
+    },
+    stepContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: theme.spacing.lg,
+      backgroundColor: theme.colors.surface,
+      padding: theme.spacing.md,
+      borderRadius: theme.borderRadius.md,
+      ...theme.shadows.small,
+    },
+    stepNumber: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: theme.colors.primary,
+      marginRight: theme.spacing.md,
+      width: 30,
+      textAlign: 'center',
+    },
+    stepText: {
+      fontSize: 16,
+      color: theme.colors.text,
+      flex: 1,
+    },
+    button: {
+      backgroundColor: theme.colors.primary,
+      padding: theme.spacing.md,
+      borderRadius: theme.borderRadius.md,
+      alignItems: 'center',
+      marginTop: theme.spacing.xl,
+      ...theme.shadows.small,
+    },
+    buttonText: {
+      color: '#FFF',
+      fontSize: 16,
+      fontWeight: 'bold',
+    },
+    backButton: {
+      alignItems: 'center',
+      marginTop: theme.spacing.lg,
+    },
+    backButtonText: {
+      color: theme.colors.primary,
+      fontSize: 16,
+    },
+  }));
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView>
@@ -41,66 +108,5 @@ const AccountRecoveryScreen = ({ navigation }) => {
     </SafeAreaView>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: '#fff',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    textAlign: 'center',
-    marginTop: 40,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 30,
-    textAlign: 'center',
-  },
-  stepContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-    padding: 15,
-    backgroundColor: '#f8f8f8',
-    borderRadius: 8,
-  },
-  stepNumber: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#4A90E2',
-    marginRight: 15,
-  },
-  stepText: {
-    fontSize: 16,
-    color: '#333',
-    flex: 1,
-  },
-  button: {
-    backgroundColor: '#4A90E2',
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  backButton: {
-    marginTop: 20,
-    padding: 15,
-    alignItems: 'center',
-  },
-  backButtonText: {
-    color: '#4A90E2',
-    fontSize: 16,
-  },
-});
 
 export default AccountRecoveryScreen;

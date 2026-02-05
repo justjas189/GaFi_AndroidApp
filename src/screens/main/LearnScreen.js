@@ -16,6 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { ThemeContext } from '../../context/ThemeContext';
 import { AuthContext } from '../../context/AuthContext';
 import LearningProgressDatabaseService from '../../services/LearningProgressDatabaseService';
+import { MonTMascot } from '../../MonT/components/MascotSystem';
+import { MASCOT_STATES } from '../../MonT/constants/MascotStates';
 
 const { width } = Dimensions.get('window');
 
@@ -903,8 +905,19 @@ const LearnScreen = () => {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.colors.text }]}>Learn</Text>
+      {/* MonT Learning Center Header */}
+      <View style={[styles.header, { backgroundColor: theme.colors.card }]}>
+        <MonTMascot 
+          graphicsMode="piggy-emoji"
+          currentState={MASCOT_STATES.FOCUSED}
+          size="medium"
+          showBubble={true}
+          bubbleText="Ready to learn about money? 📚✨"
+          onTap={() => {
+            Alert.alert('Gafi Says', 'Learning about money is the best investment you can make! Let\'s get smarter together! 🐷🧠');
+          }}
+        />
+        <Text style={[styles.title, { color: theme.colors.text }]}>Learn with Gafi</Text>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>

@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Confirmed - MoneyTrack</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+            animation: slideUp 0.6s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .logo-container {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #FF6B00, #FFB366);
+            border-radius: 50%;
+            margin: 0 auto 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 16px rgba(255, 107, 0, 0.3);
+        }
+
+        .logo-container svg {
+            width: 40px;
+            height: 40px;
+            fill: white;
+        }
+
+        .checkmark {
+            width: 60px;
+            height: 60px;
+            background: #4CAF50;
+            border-radius: 50%;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: checkmark 0.6s ease-in-out 0.3s both;
+        }
+
+        @keyframes checkmark {
+            0% {
+                transform: scale(0);
+            }
+            50% {
+                transform: scale(1.2);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .checkmark svg {
+            width: 30px;
+            height: 30px;
+            fill: white;
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 16px;
+        }
+
+        .subtitle {
+            font-size: 18px;
+            color: #7f8c8d;
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+
+        .message {
+            font-size: 16px;
+            color: #34495e;
+            line-height: 1.6;
+            margin-bottom: 40px;
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 12px;
+            border-left: 4px solid #FF6B00;
+        }
+
+        .action-button {
+            background: linear-gradient(135deg, #FF6B00, #FFB366);
+            color: white;
+            padding: 16px 32px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(255, 107, 0, 0.3);
+            margin-bottom: 20px;
+        }
+
+        .action-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(255, 107, 0, 0.4);
+        }
+
+        .footer {
+            font-size: 14px;
+            color: #95a5a6;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ecf0f1;
+        }
+
+        .app-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 8px;
+        }
+
+        .app-info h3 {
+            color: #FF6B00;
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+
+        .app-info p {
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 30px 20px;
+                margin: 10px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+
+            .subtitle {
+                font-size: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo-container">
+            <svg viewBox="0 0 24 24">
+                <path d="M21,18V19A2,2 0 0,1 19,21H5A2,2 0 0,1 3,19V5A2,2 0 0,1 5,3H19A2,2 0 0,1 21,5V6H12A2,2 0 0,0 10,8V16A2,2 0 0,0 12,18M12,16H22V8H12M16,13.5A1.5,1.5 0 0,1 14.5,12A1.5,1.5 0 0,1 16,10.5A1.5,1.5 0 0,1 17.5,12A1.5,1.5 0 0,1 16,13.5Z"/>
+            </svg>
+        </div>
+
+        <div class="checkmark">
+            <svg viewBox="0 0 24 24">
+                <path d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z"/>
+            </svg>
+        </div>
+
+        <h1>Email Confirmed!</h1>
+        <p class="subtitle">Welcome to MoneyTrack</p>
+
+        <div class="message">
+            <strong>🎉 Your email has been successfully verified!</strong><br><br>
+            You can now return to the MoneyTrack app and sign in with your credentials to start tracking your expenses and managing your finances.
+        </div>
+
+        <a href="#" class="action-button" onclick="openApp()">
+            Open MoneyTrack App
+        </a>
+
+        <div class="app-info">
+            <h3>What's Next?</h3>
+            <p>Return to the app and sign in to:</p>
+            <ul style="text-align: left; margin-top: 10px; color: #6c757d;">
+                <li>Track your daily expenses</li>
+                <li>Set up budget goals</li>
+                <li>Get AI-powered financial insights</li>
+                <li>Monitor your spending patterns</li>
+            </ul>
+        </div>
+
+        <div class="footer">
+            <p>Thank you for choosing MoneyTrack!</p>
+            <p style="margin-top: 10px;">
+                Need help? Contact us at <a href="mailto:support@moneytrack.app" style="color: #FF6B00;">support@moneytrack.app</a>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        function openApp() {
+            // Try to open the app with deep link
+            const appScheme = 'moneytrack://';
+            const fallbackUrl = 'https://moneytrack.app'; // Replace with your app store URL
+            
+            // Try to open the app
+            window.location.href = appScheme;
+            
+            // Fallback after a short delay
+            setTimeout(() => {
+                // If still on this page, show instruction to manually open the app
+                alert('Please open the MoneyTrack app manually and sign in with your credentials.');
+            }, 2000);
+        }
+
+        // Auto-redirect after 5 seconds if user doesn't click
+        setTimeout(() => {
+            const button = document.querySelector('.action-button');
+            if (button) {
+                button.style.background = 'linear-gradient(135deg, #28a745, #20c997)';
+                button.innerHTML = 'Redirecting to app...';
+                setTimeout(openApp, 1000);
+            }
+        }, 5000);
+    </script>
+</body>
+</html>

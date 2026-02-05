@@ -15,11 +15,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 import { supabase } from '../../config/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import ProfileService from '../../services/ProfileService';
 
 const SignUpScreen = ({ navigation }) => {
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -27,7 +30,48 @@ const SignUpScreen = ({ navigation }) => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState({});
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [checkingUsername, setCheckingUsername] = useState(false);
+  const [usernameAvailable, setUsernameAvailable] = useState(null);
   const { register, error, isLoading } = useContext(AuthContext);
+  const { colors, spacing, borderRadius, shadows, createThemedStyles } = useTheme();
+
+  // Check username availability with debounce
+  const checkUsernameAvailability = async (usernameToCheck) => {
+    if (!usernameToCheck || usernameToCheck.length < 3) {
+      setUsernameAvailable(null);
+      return;
+    }
+
+    const validation = ProfileService.validateUsername(usernameToCheck);
+    if (!validation.valid) {
+      setUsernameAvailable(false);
+      return;
+    }
+
+    setCheckingUsername(true);
+    try {
+      const available = await ProfileService.isUsernameAvailable(usernameToCheck);
+      setUsernameAvailable(available);
+    } catch (error) {
+      console.error('Error checking username availability:', error);
+      setUsernameAvailable(false);
+    } finally {
+      setCheckingUsername(false);
+    }
+  };
+
+  // Debounced username check
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (username.trim()) {
+        checkUsernameAvailability(username.trim());
+      } else {
+        setUsernameAvailable(null);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [username]);
 
   const validateForm = () => {
     const newErrors = {};
@@ -37,6 +81,18 @@ const SignUpScreen = ({ navigation }) => {
       newErrors.name = 'Name is required';
     } else if (name.trim().length < 2) {
       newErrors.name = 'Name must be at least 2 characters';
+    }
+
+    // Validate username (optional but if provided must be valid)
+    if (username.trim()) {
+      const usernameValidation = ProfileService.validateUsername(username.trim());
+      if (!usernameValidation.valid) {
+        newErrors.username = usernameValidation.error;
+      } else if (usernameAvailable === false) {
+        newErrors.username = 'Username is already taken';
+      } else if (checkingUsername) {
+        newErrors.username = 'Checking username availability...';
+      }
     }
 
     // Validate email
@@ -132,7 +188,13 @@ const SignUpScreen = ({ navigation }) => {
       }
 
       // Proceed with registration since email doesn't exist
-      const { success, error, user, needsVerification } = await register(name.trim(), email.trim(), password);
+      const usernameToRegister = username.trim() || null;
+      const { success, error, user, needsVerification } = await register(
+        name.trim(), 
+        email.trim(), 
+        password,
+        usernameToRegister
+      );
       
       // Handle any unexpected registration errors
       if (error) {
@@ -195,6 +257,118 @@ const SignUpScreen = ({ navigation }) => {
     }
   };
 
+  const styles = createThemedStyles((theme) => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    content: {
+      flex: 1,
+      padding: theme.spacing.lg,
+    },
+    backButton: {
+      marginBottom: theme.spacing.lg,
+    },
+    header: {
+      marginBottom: theme.spacing.xl,
+    },
+    title: {
+      fontSize: 28,
+      fontWeight: 'bold',
+      color: theme.colors.text,
+      marginBottom: theme.spacing.sm,
+    },
+    subtitle: {
+      fontSize: 16,
+      color: theme.colors.textSecondary,
+    },
+    form: {
+      marginBottom: theme.spacing.lg,
+    },
+    inputContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.borderRadius.md,
+      marginBottom: theme.spacing.md,
+      paddingHorizontal: theme.spacing.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    inputIcon: {
+      marginRight: theme.spacing.sm,
+    },
+    input: {
+      flex: 1,
+      color: theme.colors.text,
+      fontSize: 16,
+      paddingVertical: theme.spacing.md,
+    },
+    inputError: {
+      borderColor: theme.colors.error,
+    },
+    errorText: {
+      color: theme.colors.error,
+      fontSize: 12,
+      marginTop: -theme.spacing.xs,
+      marginBottom: theme.spacing.xs,
+      marginLeft: theme.spacing.xs * 3,
+    },
+    hintText: {
+      fontSize: 12,
+      marginTop: -theme.spacing.xs,
+      marginBottom: theme.spacing.xs,
+      marginLeft: theme.spacing.xs * 3,
+    },
+    successText: {
+      color: theme.colors.success,
+    },
+    showPasswordButton: {
+      padding: theme.spacing.xs,
+    },
+    termsButton: {
+      marginBottom: theme.spacing.lg,
+    },
+    termsText: {
+      color: theme.colors.primary,
+      fontSize: 14,
+      textAlign: 'center',
+    },
+    termsAcceptedText: {
+      color: theme.colors.success,
+    },
+    signUpButton: {
+      backgroundColor: theme.colors.primary,
+      padding: theme.spacing.md,
+      borderRadius: theme.borderRadius.md,
+      alignItems: 'center',
+      ...theme.shadows.small,
+    },
+    signUpButtonDisabled: {
+      backgroundColor: theme.colors.disabled,
+    },
+    signUpButtonText: {
+      color: '#FFF',
+      fontSize: 16,
+      fontWeight: 'bold',
+    },
+    footer: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      marginTop: theme.spacing.lg,
+      marginBottom: theme.spacing.lg,
+    },
+    footerText: {
+      color: theme.colors.textSecondary,
+      fontSize: 14,
+    },
+    loginText: {
+      color: theme.colors.primary,
+      fontSize: 14,
+      fontWeight: 'bold',
+    },
+  }));
+
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView 
@@ -207,21 +381,21 @@ const SignUpScreen = ({ navigation }) => {
             onPress={() => navigation.goBack()}
             disabled={isLoading}
           >
-            <Ionicons name="chevron-back" size={24} color="#FFF" />
+            <Ionicons name="chevron-back" size={24} color={colors.text} />
           </TouchableOpacity>
 
           <View style={styles.header}>
             <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Track your expenses with MoneyTrack</Text>
+            <Text style={styles.subtitle}>Track your expenses with GaFI</Text>
           </View>
 
           <View style={styles.form}>
             <View style={styles.inputContainer}>
-              <Ionicons name="person-outline" size={20} color="#808080" style={styles.inputIcon} />
+              <Ionicons name="person-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
               <TextInput
                 style={[styles.input, errors.name && styles.inputError]}
                 placeholder="Full Name"
-                placeholderTextColor="#808080"
+                placeholderTextColor={colors.placeholder}
                 value={name}
                 onChangeText={(text) => {
                   setName(text);
@@ -232,12 +406,45 @@ const SignUpScreen = ({ navigation }) => {
             </View>
             {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
 
+            <View style={[styles.inputContainer, errors.username && styles.inputError]}>
+              <Ionicons name="at-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Username (optional)"
+                placeholderTextColor={colors.placeholder}
+                value={username}
+                onChangeText={(text) => {
+                  setUsername(text);
+                  setErrors({ ...errors, username: null });
+                }}
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!isLoading}
+                maxLength={30}
+              />
+              {checkingUsername && (
+                <ActivityIndicator size="small" color={colors.primary} style={{ marginRight: 8 }} />
+              )}
+              {!checkingUsername && usernameAvailable === true && (
+                <Ionicons name="checkmark-circle" size={20} color={colors.success} style={{ marginRight: 8 }} />
+              )}
+              {!checkingUsername && usernameAvailable === false && (
+                <Ionicons name="close-circle" size={20} color={colors.error} style={{ marginRight: 8 }} />
+              )}
+            </View>
+            {errors.username && <Text style={styles.errorText}>{errors.username}</Text>}
+            {username.trim() && !errors.username && !checkingUsername && (
+              <Text style={[styles.hintText, usernameAvailable ? styles.successText : styles.errorText]}>
+                {usernameAvailable ? '✓ Username is available' : '✗ Username is not available'}
+              </Text>
+            )}
+
             <View style={styles.inputContainer}>
-              <Ionicons name="mail-outline" size={20} color="#808080" style={styles.inputIcon} />
+              <Ionicons name="mail-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
               <TextInput
                 style={[styles.input, errors.email && styles.inputError]}
                 placeholder="Email"
-                placeholderTextColor="#808080"
+                placeholderTextColor={colors.placeholder}
                 value={email}
                 onChangeText={(text) => {
                   setEmail(text);
@@ -251,11 +458,11 @@ const SignUpScreen = ({ navigation }) => {
             {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
 
             <View style={styles.inputContainer}>
-              <Ionicons name="lock-closed-outline" size={20} color="#808080" style={styles.inputIcon} />
+              <Ionicons name="lock-closed-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
               <TextInput
                 style={[styles.input, errors.password && styles.inputError]}
                 placeholder="Password"
-                placeholderTextColor="#808080"
+                placeholderTextColor={colors.placeholder}
                 value={password}
                 onChangeText={(text) => {
                   setPassword(text);
@@ -272,18 +479,18 @@ const SignUpScreen = ({ navigation }) => {
                 <Ionicons 
                   name={showPassword ? "eye-off-outline" : "eye-outline"} 
                   size={20} 
-                  color="#808080" 
+                  color={colors.textSecondary} 
                 />
               </TouchableOpacity>
             </View>
             {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
 
             <View style={styles.inputContainer}>
-              <Ionicons name="lock-closed-outline" size={20} color="#808080" style={styles.inputIcon} />
+              <Ionicons name="lock-closed-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
               <TextInput
                 style={[styles.input, errors.confirmPassword && styles.inputError]}
                 placeholder="Confirm Password"
-                placeholderTextColor="#808080"
+                placeholderTextColor={colors.placeholder}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
                 secureTextEntry={!showConfirmPassword}
@@ -293,7 +500,7 @@ const SignUpScreen = ({ navigation }) => {
                 <Ionicons 
                   name={showConfirmPassword ? "eye-off-outline" : "eye-outline"} 
                   size={20} 
-                  color="#808080" 
+                  color={colors.textSecondary} 
                 />
               </TouchableOpacity>
             </View>
@@ -339,102 +546,5 @@ const SignUpScreen = ({ navigation }) => {
     </SafeAreaView>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1C1C1C',
-  },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
-  backButton: {
-    marginBottom: 20,
-  },
-  header: {
-    marginBottom: 40,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#FFF',
-    marginBottom: 10,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#808080',
-  },
-  form: {
-    marginBottom: 20,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#2C2C2C',
-    borderRadius: 8,
-    marginBottom: 15,
-    paddingHorizontal: 15,
-  },
-  inputIcon: {
-    marginRight: 10,
-  },
-  input: {
-    flex: 1,
-    color: '#FFF',
-    fontSize: 16,
-    paddingVertical: 15,
-  },
-  inputError: {
-    borderColor: '#FF3B30',
-  },
-  errorText: {
-    color: '#FF3B30',
-    fontSize: 12,
-    marginTop: -8,
-    marginBottom: 8,
-    marginLeft: 12,
-  },
-  termsButton: {
-    marginBottom: 20,
-  },
-  termsText: {
-    color: '#FF6B00',
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  termsAcceptedText: {
-    color: '#4CAF50',
-  },
-  signUpButton: {
-    backgroundColor: '#FF6B00',
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  signUpButtonDisabled: {
-    backgroundColor: '#666',
-  },
-  signUpButtonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 20,
-    marginBottom: 20,
-  },
-  footerText: {
-    color: '#808080',
-    fontSize: 14,
-  },
-  loginText: {
-    color: '#FF6B00',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-});
 
 export default SignUpScreen;

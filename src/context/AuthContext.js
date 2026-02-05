@@ -29,10 +29,10 @@ export const AuthProvider = ({ children }) => {
       console.log('Auth state changed:', event, session?.user?.id);
       
       if (event === 'SIGNED_IN' && session) {
-        // Get user profile data from database to get the full name
+        // Get user profile data from database to get the full name and username
         const { data: profileData } = await supabase
           .from('profiles')
-          .select('full_name')
+          .select('full_name, username')
           .eq('id', session.user.id)
           .single();
 
@@ -40,6 +40,7 @@ export const AuthProvider = ({ children }) => {
         const enhancedUserInfo = {
           ...session.user,
           name: profileData?.full_name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+          username: profileData?.username || null,
           email: session.user.email
         };
 
@@ -70,10 +71,10 @@ export const AuthProvider = ({ children }) => {
       if (error) throw error;
       
       if (session) {
-        // Get user profile data from database to get the full name
+        // Get user profile data from database to get the full name and username
         const { data: profileData } = await supabase
           .from('profiles')
-          .select('full_name')
+          .select('full_name, username')
           .eq('id', session.user.id)
           .single();
 
@@ -81,6 +82,7 @@ export const AuthProvider = ({ children }) => {
         const enhancedUserInfo = {
           ...session.user,
           name: profileData?.full_name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+          username: profileData?.username || null,
           email: session.user.email
         };
 
@@ -348,21 +350,36 @@ export const AuthProvider = ({ children }) => {
         throw new Error('User not logged in');
       }
 
+      // Prepare update data
+      const updateData = {
+        full_name: profileData.name,
+        updated_at: new Date().toISOString()
+      };
+
+      // Add username if provided
+      if (profileData.username) {
+        updateData.username = profileData.username;
+      }
+
       // Update profile in database
       const { error: updateError } = await supabase
         .from('profiles')
-        .update({
-          full_name: profileData.name,
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', userInfo.id);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        // Handle unique constraint violation for username
+        if (updateError.code === '23505' && updateError.message.includes('username')) {
+          throw new Error('Username already taken. Please choose a different one.');
+        }
+        throw updateError;
+      }
 
       // Update local user info
       const updatedUserInfo = {
         ...userInfo,
-        name: profileData.name
+        name: profileData.name,
+        ...(profileData.username && { username: profileData.username })
       };
 
       setUserInfo(updatedUserInfo);

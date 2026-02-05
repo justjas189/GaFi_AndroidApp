@@ -78,20 +78,46 @@ npx expo start
 
 ## Project Structure
 
-\`\`\`
-MoneyTrack/
-├── src/
-│   ├── context/          # Global state management
-│   │   ├── AuthContext.js
-│   │   └── DataContext.js
-│   └── screens/
-│       ├── auth/         # Authentication screens
-│       ├── main/         # Main app screens
-│       └── onboarding/   # Onboarding screens
-├── assets/               # Images and assets
-├── App.js               # Main application file
-└── package.json         # Project dependencies
-\`\`\`
+```
+MoneyTrack-Android/
+├── App.js                 # Main application entry point
+├── app.json               # Expo configuration
+├── package.json           # Dependencies and scripts
+│
+├── src/                   # Main source code
+│   ├── components/        # Reusable UI components
+│   │   └── gamification/  # Game-related components
+│   ├── config/            # App configuration (Supabase, etc.)
+│   ├── context/           # React contexts (Auth, Data, Theme)
+│   ├── hooks/             # Custom React hooks
+│   ├── navigation/        # Navigation setup
+│   ├── screens/           # Screen components
+│   │   ├── auth/          # Authentication screens
+│   │   ├── main/          # Main app screens
+│   │   └── onboarding/    # Onboarding screens
+│   ├── services/          # API and database services
+│   └── utils/             # Utility functions
+│
+├── assets/                # Static assets
+│   ├── Game_Graphics/     # Game maps, sprites, animations
+│   ├── mascot/            # MonT mascot images
+│   └── mont/              # Additional mascot assets
+│
+├── backend/               # Python backend for AI features
+│   ├── app.py             # Main Flask API
+│   ├── mascot.py          # MonT AI chatbot
+│   └── requirements.txt   # Python dependencies
+│
+├── supabase/              # Database migrations
+│   └── migrations/        # SQL migration files
+│
+├── scripts/               # Build and migration scripts
+│
+└── docs/                  # Documentation
+    ├── setup/             # Setup guides
+    ├── features/          # Feature documentation
+    └── troubleshooting/   # Fix guides
+```
 
 ## Technologies Used
 

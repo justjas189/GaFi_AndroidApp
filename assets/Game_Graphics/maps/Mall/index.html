@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Tile-Based Game - Mall Map</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: #2c3e50;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+        
+        #gameCanvas {
+            border: 3px solid #34495e;
+            background-color: #000;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+        
+        .controls {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .controls h3 {
+            margin: 10px 0;
+        }
+        
+        .controls p {
+            margin: 5px 0;
+            color: #ecf0f1;
+        }
+        
+        #status {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #34495e;
+            border-radius: 5px;
+            min-width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Mall Map - RPG Maker MZ Collision Demo</h1>
+    
+    <!-- Canvas: 11 tiles wide x 24 tiles tall, 48x48 per tile = 528x1152 pixels -->
+    <canvas id="gameCanvas" width="528" height="1152"></canvas>
+    
+    <div class="controls">
+        <h3>Controls</h3>
+        <p>Arrow Keys or WASD to move</p>
+        <p>Navigate the mall and test collision detection</p>
+        
+        <div id="status">
+            <p>Loading game assets...</p>
+        </div>
+    </div>
+    
+    <!-- Load game scripts -->
+    <script src="collision.js"></script>
+    <script src="player.js"></script>
+    <script src="mall.js"></script>
+</body>
+</html>

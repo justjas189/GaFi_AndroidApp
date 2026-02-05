@@ -14,12 +14,27 @@ export class BudgetNLPProcessor {
       'movies', 'games', 'clothes', 'gadgets', 'bills', 'health', 'education'
     ];
     
-    // Enhanced currency patterns for multiple formats
+    // Enhanced currency patterns for multiple formats including shorthand
     this.currencyPatterns = [
       /₱\s*(\d+(?:,\d{3})*(?:\.\d{2})?)/g, // ₱1,000.00
       /(\d+(?:,\d{3})*(?:\.\d{2})?)\s*(?:pesos?|php|₱)/gi, // 1000 pesos, 1000 php
       /(\d+(?:,\d{3})*(?:\.\d{2})?)\s*(?:piso|peso)/gi, // Filipino variants
+      /(\d+(?:\.\d+)?)\s*k(?:ilo)?(?:\s|$)/gi, // Handle "1k", "2.5k", etc.
+      /(\d+)\s*thousand/gi, // Handle "1 thousand"
+      /(\d+(?:\.\d+)?)\s*m(?:illion)?(?:\s|$)/gi, // Handle "1m", "1.5m"
       /(\d+(?:,\d{3})*(?:\.\d{2})?)/g // plain numbers (last resort)
+    ];
+    
+    // Enhanced gaming/entertainment terms for better category detection
+    this.gamingTerms = [
+      'games', 'gaming', 'game', 'steam', 'valorant', 'ml', 'mobile legends',
+      'codm', 'call of duty', 'genshin', 'roblox', 'minecraft', 'pubg',
+      'free fire', 'lol', 'league of legends', 'dota', 'fortnite',
+      'apex', 'among us', 'clash', 'royale', 'brawl stars', 'pokemon',
+      'nintendo', 'ps4', 'ps5', 'xbox', 'switch', 'console', 'pc gaming',
+      'skin', 'skins', 'battle pass', 'gems', 'diamonds', 'coins',
+      'top up', 'recharge', 'in-app purchase', 'dlc', 'expansion',
+      'game credits', 'v-bucks', 'robux', 'cp', 'uc', 'load for games'
     ];
     
     // Enhanced intent patterns with more natural variations
@@ -63,7 +78,9 @@ export class BudgetNLPProcessor {
         /(?:how much|magkano|what'?s)\s+(?:did i spend|spent|gastos ko)\s+(?:on|sa)/i,
         /(?:spending|expenses|gastos)\s+(?:for|on|in|sa)\s+(\w+)/i,
         /(\w+)\s+(?:expenses|spending|budget|gastos)/i,
-        /(?:gastos|spending)\s+(?:sa|for|on)\s+(\w+)/i
+        /(?:gastos|spending)\s+(?:sa|for|on)\s+(\w+)/i,
+        /(?:show|ipakita)\s+(?:my|ko|ang)\s+(\w+)\s+(?:spending|expenses|gastos)/i,
+        /(?:show|check|tingnan)\s+(?:my\s+)?(\w+)\s+(?:category|spending|budget)/i
       ],
       
       financial_advice: [
@@ -787,19 +804,53 @@ export class BudgetNLPProcessor {
   extractAmountEnhanced(input) {
     // Try different currency patterns in order of specificity
     const patterns = [
-      /₱\s*(\d+(?:,\d{3})*(?:\.\d{2})?)/g,
-      /(\d+(?:,\d{3})*(?:\.\d{2})?)\s*(?:pesos?|php|piso)/gi,
-      /(\d+(?:,\d{3})*(?:\.\d{2})?)\s*(?:₱|php)/gi,
-      /(?:worth|value|halaga)\s*(?:of\s*)?₱?\s*(\d+(?:,\d{3})*(?:\.\d{2})?)/gi,
-      /(\d+(?:,\d{3})*(?:\.\d{2})?)/g
+      // Handle "k" notation first (1k, 2.5k, etc.)
+      {
+        pattern: /(\d+(?:\.\d+)?)\s*k(?:ilo)?(?:\s|$|[^\w])/gi,
+        multiplier: 1000
+      },
+      // Handle "m" notation (1m, 1.5m, etc.)
+      {
+        pattern: /(\d+(?:\.\d+)?)\s*m(?:illion)?(?:\s|$|[^\w])/gi,
+        multiplier: 1000000
+      },
+      // Handle "thousand" word
+      {
+        pattern: /(\d+)\s*thousand/gi,
+        multiplier: 1000
+      },
+      // Standard currency patterns
+      {
+        pattern: /₱\s*(\d+(?:,\d{3})*(?:\.\d{2})?)/g,
+        multiplier: 1
+      },
+      {
+        pattern: /(\d+(?:,\d{3})*(?:\.\d{2})?)\s*(?:pesos?|php|piso)/gi,
+        multiplier: 1
+      },
+      {
+        pattern: /(\d+(?:,\d{3})*(?:\.\d{2})?)\s*(?:₱|php)/gi,
+        multiplier: 1
+      },
+      {
+        pattern: /(?:worth|value|halaga)\s*(?:of\s*)?₱?\s*(\d+(?:,\d{3})*(?:\.\d{2})?)/gi,
+        multiplier: 1
+      },
+      // Plain numbers (last resort)
+      {
+        pattern: /(\d+(?:,\d{3})*(?:\.\d{2})?)/g,
+        multiplier: 1
+      }
     ];
     
-    for (const pattern of patterns) {
+    for (const { pattern, multiplier } of patterns) {
       const match = pattern.exec(input);
       if (match) {
-        const amount = parseFloat(match[1].replace(/,/g, ''));
-        if (!isNaN(amount) && amount > 0) {
-          return amount;
+        const baseAmount = parseFloat(match[1].replace(/,/g, ''));
+        if (!isNaN(baseAmount) && baseAmount > 0) {
+          const finalAmount = baseAmount * multiplier;
+          console.log(`Extracted amount: ${baseAmount} * ${multiplier} = ${finalAmount} from "${match[0]}"`);
+          return finalAmount;
         }
       }
     }
@@ -833,72 +884,99 @@ export class BudgetNLPProcessor {
    * @returns {string|null} Extracted category
    */
   extractCategoryEnhanced(input) {
-    console.log('[NLP DEBUG] Enhanced category extraction from:', input);
+    // Convert to lowercase for easier matching
+    const lowerInput = input.toLowerCase();
     
-    // First check direct category mentions
-    for (const category of this.categories) {
-      if (input.includes(category)) {
-        console.log('[NLP DEBUG] Direct category match:', category);
-        return this.normalizeCategory(category);
-      }
+    // Check for gaming terms first (more specific)
+    const foundGamingTerm = this.gamingTerms.find(term => 
+      lowerInput.includes(term.toLowerCase())
+    );
+    
+    if (foundGamingTerm) {
+      return 'entertainment';
     }
     
-    // Check category mappings (brands, Filipino terms, etc.)
-    for (const [keyword, category] of Object.entries(this.categoryMappings)) {
-      if (input.includes(keyword)) {
-        console.log('[NLP DEBUG] Mapped category match:', keyword, '->', category);
-        return this.normalizeCategory(category);
-      }
-    }
-    
-    // Context-based inference
-    if (this.conversationContext.lastCategory) {
-      // Check if this might be referring to the same category
-      const contextIndicators = ['same', 'pareho', 'din', 'another', 'isa pa', 'more'];
-      if (contextIndicators.some(indicator => input.includes(indicator))) {
-        console.log('[NLP DEBUG] Context-based category:', this.conversationContext.lastCategory);
-        return this.conversationContext.lastCategory;
-      }
-    }
-    
-    // Pattern-based inference
+    // Enhanced category patterns with context awareness
     const categoryPatterns = {
       food: [
-        /(?:ate|kumain|food|pagkain|lunch|dinner|breakfast|merienda)/i,
-        /(?:hungry|gutom|busog|sarap)/i,
-        /(?:restaurant|carinderia|turo-turo)/i
+        /(?:food|meal|lunch|dinner|breakfast|snack|eat|ate|restaurant|fast food|jollibee|mcdonalds|kfc|burger|pizza|rice|ulam|kanin|pagkain|kain)/i,
+        /(?:coffee|starbucks|cafe|milk tea|drinks|beverage|inom)/i,
+        /(?:groceries|grocery|market|supermarket|palengke|tindahan)/i,
+        /(?:delivery|grab food|food panda|takeout|order)/i
       ],
+      
       transportation: [
-        /(?:travel|byahe|commute|pupunta|galing)/i,
-        /(?:fare|pamasahe|gas|gasoline)/i,
-        /(?:driving|nagmaneho|nakamotor)/i
+        /(?:transport|travel|commute|jeepney|bus|taxi|grab|angkas|tricycle|motorcycle|habal|lrt|mrt|pnr)/i,
+        /(?:fuel|gas|gasoline|diesel|load|pamasahe|fare|ticket)/i,
+        /(?:parking|toll|bayad)/i,
+        /(?:uber|grab car|booking)/i
       ],
+      
       entertainment: [
-        /(?:fun|enjoy|relax|happy|masaya)/i,
-        /(?:weekend|gala|lakad|outing)/i,
-        /(?:watch|movie|film|game)/i
+        /(?:movie|cinema|netflix|spotify|entertainment|concert|show|event)/i,
+        /(?:games?|gaming|steam|mobile legends|ml|valorant|genshin|pubg|codm|free fire)/i,
+        /(?:skin|battle pass|gems|diamonds|top up|recharge|in-app)/i,
+        /(?:console|ps4|ps5|xbox|nintendo|switch|pc)/i,
+        /(?:party|club|bar|drinking|alcohol|birthday|celebration)/i
       ],
+      
       shopping: [
-        /(?:buy|bumili|shopping|mall|store)/i,
-        /(?:need|kailangan|gusto|want)/i,
-        /(?:online|delivery|lazada|shopee)/i
+        /(?:shopping|shop|bought|buy|purchase|bili|mall|sm|ayala|robinsons)/i,
+        /(?:clothes|shirt|pants|shoes|bag|accessories|damit|sapatos)/i,
+        /(?:gadget|phone|laptop|computer|headset|mouse|keyboard|tech)/i,
+        /(?:supplies|school|books|notebook|pen|ballpen|papel)/i,
+        /(?:personal|toiletries|shampoo|soap|toothbrush|hygiene)/i
       ],
+      
       utilities: [
-        /(?:bill|bayarin|monthly|subscription)/i,
-        /(?:home|bahay|apartment)/i,
-        /(?:service|connection|monthly fee)/i
+        /(?:bill|bills|electricity|water|internet|wifi|phone|cellphone|load|prepaid|postpaid)/i,
+        /(?:rent|apartment|dorm|boarding|house|kuryente|tubig)/i,
+        /(?:cable|netflix|subscription|monthly|bayarin)/i
       ]
     };
     
+    // Check each category's patterns
     for (const [category, patterns] of Object.entries(categoryPatterns)) {
-      if (patterns.some(pattern => pattern.test(input))) {
-        console.log('[NLP DEBUG] Pattern-based category:', category);
-        return this.normalizeCategory(category);
+      for (const pattern of patterns) {
+        if (pattern.test(input)) {
+          return category;
+        }
       }
     }
     
-    console.log('[NLP DEBUG] No category found, defaulting to "others"');
-    return 'others';
+    // Brand/merchant based categorization
+    const merchantPatterns = {
+      food: ['jollibee', 'mcdonalds', 'kfc', 'pizza hut', 'dominos', 'starbucks', 'dunkin', 'chowking', 'mang inasal', 'kenny rogers', 'greenwich', 'yellow cab'],
+      shopping: ['sm', 'ayala', 'robinsons', 'lazada', 'shopee', 'zalora', 'uniqlo', 'h&m', 'zara', 'nike', 'adidas'],
+      transportation: ['grab', 'angkas', 'joyride', 'uber', 'wunder', 'petron', 'shell', 'caltex'],
+      entertainment: ['sm cinema', 'ayala cinema', 'netflix', 'spotify', 'steam', 'playstation', 'xbox']
+    };
+    
+    for (const [category, merchants] of Object.entries(merchantPatterns)) {
+      const foundMerchant = merchants.find(merchant => 
+        lowerInput.includes(merchant.toLowerCase())
+      );
+      if (foundMerchant) {
+        return category;
+      }
+    }
+    
+    // Check for prepositions that might indicate category
+    const prepositionPatterns = [
+      { pattern: /(?:for|on|sa)\s+(food|pagkain|kain)/i, category: 'food' },
+      { pattern: /(?:for|on|sa)\s+(games?|gaming|laro)/i, category: 'entertainment' },
+      { pattern: /(?:for|on|sa)\s+(transport|commute|pamasahe)/i, category: 'transportation' },
+      { pattern: /(?:for|on|sa)\s+(shopping|bili|pamili)/i, category: 'shopping' },
+      { pattern: /(?:for|on|sa)\s+(bills?|bayarin)/i, category: 'utilities' }
+    ];
+    
+    for (const { pattern, category } of prepositionPatterns) {
+      if (pattern.test(input)) {
+        return category;
+      }
+    }
+    
+    return null;
   }
 
   /**
@@ -1411,7 +1489,6 @@ export class BudgetNLPProcessor {
       unknown: [
         "I'm not sure I understood that. Here's what I can help you with:",
         "• Record expenses: 'I spent ₱200 on food'",
-        "• Update budget: 'Set my budget to ₱10,000'",
         "• Check spending: 'How much did I spend on food?'",
         "• View budget: 'Show me my budget status'"
       ]

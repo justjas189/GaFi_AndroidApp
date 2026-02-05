@@ -16,6 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
 import { AuthContext } from '../../context/AuthContext';
+import { useMascot } from '../../MonT/context/MascotContext';
+import { MonTMascot } from '../../MonT/components/MascotSystem';
 import SavingsGoalsDatabaseService from '../../services/SavingsGoalsDatabaseService';
 
 const { width, height } = Dimensions.get('window');
@@ -68,6 +70,7 @@ const SavingsGoalsScreen = () => {
   const { budget, expenses } = useContext(DataContext);
   const { theme } = useContext(ThemeContext);
   const { userInfo } = useContext(AuthContext);
+  const mascot = useMascot();
   const [achievements, setAchievements] = useState([]);
   const [progressAnimation] = useState(new Animated.Value(0));
   const [goals, setGoals] = useState([]);
@@ -901,6 +904,36 @@ const SavingsGoalsScreen = () => {
           )}
         </SafeAreaView>
       </Modal>
+
+      {/* MonT Floating Mascot */}
+      {mascot.isVisible && (
+        <MonTMascot
+          currentState={mascot.currentState}
+          onTap={() => {
+            if (goals.length === 0) {
+              mascot.triggerMascotReaction('ENCOURAGEMENT_NEEDED', {
+                customMessage: "Let's set your first savings goal! I'm here to help! 🎯"
+              });
+            } else {
+              const completedGoals = goals.filter(goal => goal.savedAmount >= goal.targetAmount).length;
+              if (completedGoals > 0) {
+                mascot.triggerMascotReaction('GOAL_ACHIEVED', {
+                  customMessage: `Amazing! You've completed ${completedGoals} goal${completedGoals > 1 ? 's' : ''}! 🏆`
+                });
+              } else {
+                mascot.triggerMascotReaction('SAVINGS_ADDED', {
+                  customMessage: "Keep working towards your goals! You're doing great! 💪"
+                });
+              }
+            }
+          }}
+          showBubble={mascot.showBubble}
+          bubbleText={mascot.bubbleText}
+          position="floating"
+          size="medium"
+          notificationCount={mascot.notificationCount}
+        />
+      )}
     </SafeAreaView>
   );
 };

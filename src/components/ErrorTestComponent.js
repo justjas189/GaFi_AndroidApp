@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { useTheme } from '@react-navigation/native';
+import { useTheme } from '../context/ThemeContext';
 import DebugUtils from '../utils/DebugUtils';
 
 const ErrorTestComponent = () => {

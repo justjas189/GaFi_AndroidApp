@@ -1,49 +1,54 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
 
+const { width } = Dimensions.get('window');
+
+const BUDGET_PRESETS = [
+  { label: '₱5,000', value: 5000 },
+  { label: '₱10,000', value: 10000 },
+  { label: '₱15,000', value: 15000 },
+  { label: '₱20,000', value: 20000 },
+  { label: '₱30,000', value: 30000 },
+  { label: '₱50,000', value: 50000 },
+];
+
 const BudgetGoalsScreen = ({ navigation }) => {
   const { updateBudget } = useContext(DataContext);
   const { theme } = useContext(ThemeContext);
   const [monthlyBudget, setMonthlyBudget] = useState('');
-  const [savingsGoal, setSavingsGoal] = useState('');
-  const [errors, setErrors] = useState({});
+  const [error, setError] = useState('');
 
-  const validateInputs = () => {
-    const newErrors = {};
+  const handlePresetSelect = (value) => {
+    setMonthlyBudget(value.toString());
+    setError('');
+  };
+
+  const validateInput = () => {
     if (!monthlyBudget.trim()) {
-      newErrors.monthlyBudget = 'Monthly budget is required';
-    } else {
-      const monthly = parseFloat(monthlyBudget);
-      if (isNaN(monthly) || monthly <= 0) {
-        newErrors.monthlyBudget = 'Please enter a valid amount';
-      }
+      setError('Please enter your monthly budget');
+      return false;
     }
-
-    if (!savingsGoal.trim()) {
-      newErrors.savingsGoal = 'Savings goal is required';
-    } else {
-      const savings = parseFloat(savingsGoal);
-      if (isNaN(savings) || savings <= 0) {
-        newErrors.savingsGoal = 'Please enter a valid amount';
-      } else if (savings >= parseFloat(monthlyBudget)) {
-        newErrors.savingsGoal = 'Savings goal should be less than monthly budget';
-      }
+    const monthly = parseFloat(monthlyBudget);
+    if (isNaN(monthly) || monthly <= 0) {
+      setError('Please enter a valid amount');
+      return false;
     }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    if (monthly < 1000) {
+      setError('Budget should be at least ₱1,000');
+      return false;
+    }
+    return true;
   };
 
   const handleComplete = async () => {
-    if (!validateInputs()) return;
+    if (!validateInput()) return;
 
     try {
-      // Get user info to ensure we have the user ID
       const userInfo = await AsyncStorage.getItem('userInfo');
       if (!userInfo) {
         Alert.alert('Error', 'User information not found. Please log in again.');
@@ -59,14 +64,11 @@ const BudgetGoalsScreen = ({ navigation }) => {
       }
 
       const monthly = parseFloat(monthlyBudget);
-      const savings = parseFloat(savingsGoal);
-      const budgetableAmount = monthly - savings;
-      const categoryBudget = Math.round((budgetableAmount / 6) * 100) / 100;
+      const categoryBudget = Math.round((monthly / 6) * 100) / 100;
 
-      // Set budget data
       const budgetData = {
         monthly,
-        savingsGoal: savings,
+        savingsGoal: 0,
         userId: parsedUserInfo.id,
         categories: {
           food: { limit: categoryBudget, spent: 0 },
@@ -78,10 +80,8 @@ const BudgetGoalsScreen = ({ navigation }) => {
         }
       };
 
-      // Save budget to backend (scoped to user)
       await updateBudget(budgetData);
 
-      // Mark onboarding as complete in Supabase
       const { data: { session } } = await import('../../config/supabase').then(m => m.supabase.auth.getSession());
       if (session && session.user) {
         await import('../../config/supabase').then(m => m.supabase
@@ -91,145 +91,228 @@ const BudgetGoalsScreen = ({ navigation }) => {
         );
       }
 
-      // Mark onboarding as complete locally
       await AsyncStorage.setItem('onboardingComplete', 'true');
       if (global.setHasOnboarded) global.setHasOnboarded(true);
 
-      // Navigate to main app
       navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } catch (error) {
-      Alert.alert('Error', 'Failed to save budget and complete onboarding. Please try again.');
+      Alert.alert('Error', 'Failed to save budget. Please try again.');
       console.error('Error in BudgetGoalsScreen:', error);
     }
   };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <ScrollView style={styles.content}>
-        <View style={styles.header}>
-          <Ionicons name="wallet" size={60} color={theme.colors.primary} />
-          <Text style={[styles.title, { color: theme.colors.text }]}>Set Your Budget Goals</Text>
-          <Text style={[styles.subtitle, { color: theme.colors.text }]}>
-            Let's set up your monthly budget and savings goals to help you manage your finances better
-          </Text>
-        </View>
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <View style={styles.content}>
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={[styles.iconContainer, { backgroundColor: theme.colors.primary + '20' }]}>
+              <Ionicons name="wallet" size={48} color={theme.colors.primary} />
+            </View>
+            <Text style={[styles.title, { color: theme.colors.text }]}>Set Your Budget</Text>
+            <Text style={[styles.subtitle, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>
+              How much do you plan to spend monthly?
+            </Text>
+          </View>
 
-        <View style={styles.form}>
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: theme.colors.text }]}>Monthly Budget</Text>
-            <View style={[styles.inputContainer, errors.monthlyBudget && styles.inputError]}>
-              <Text style={[styles.currency, { color: theme.colors.text }]}>₱</Text>
+          {/* Budget Input */}
+          <View style={styles.inputSection}>
+            <View style={[
+              styles.inputContainer, 
+              { backgroundColor: theme.colors.card, borderColor: error ? '#FF3B30' : theme.colors.border || '#3C3C3C' }
+            ]}>
+              <Text style={[styles.currency, { color: theme.colors.primary }]}>₱</Text>
               <TextInput
                 style={[styles.input, { color: theme.colors.text }]}
-                placeholder="Enter your monthly budget"
-                placeholderTextColor={theme.colors.text + '80'}
+                placeholder="0"
+                placeholderTextColor={theme.colors.text + '40'}
                 value={monthlyBudget}
                 onChangeText={(text) => {
-                  setMonthlyBudget(text);
-                  setErrors({ ...errors, monthlyBudget: null });
+                  setMonthlyBudget(text.replace(/[^0-9]/g, ''));
+                  setError('');
                 }}
                 keyboardType="numeric"
               />
             </View>
-            {errors.monthlyBudget && <Text style={styles.errorText}>{errors.monthlyBudget}</Text>}
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: theme.colors.text }]}>Monthly Savings Goal</Text>
-            <View style={[styles.inputContainer, errors.savingsGoal && styles.inputError]}>
-              <Text style={[styles.currency, { color: theme.colors.text }]}>₱</Text>
-              <TextInput
-                style={[styles.input, { color: theme.colors.text }]}
-                placeholder="Enter your savings goal"
-                placeholderTextColor={theme.colors.text + '80'}
-                value={savingsGoal}
-                onChangeText={(text) => {
-                  setSavingsGoal(text);
-                  setErrors({ ...errors, savingsGoal: null });
-                }}
-                keyboardType="numeric"
-              />
+          {/* Quick Select Presets */}
+          <View style={styles.presetsSection}>
+            <Text style={[styles.presetsLabel, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>
+              Quick select
+            </Text>
+            <View style={styles.presetsGrid}>
+              {BUDGET_PRESETS.map((preset, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.presetButton,
+                    { backgroundColor: theme.colors.card },
+                    monthlyBudget === preset.value.toString() && { 
+                      backgroundColor: theme.colors.primary + '20',
+                      borderColor: theme.colors.primary,
+                      borderWidth: 2,
+                    }
+                  ]}
+                  onPress={() => handlePresetSelect(preset.value)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[
+                    styles.presetText, 
+                    { color: monthlyBudget === preset.value.toString() ? theme.colors.primary : theme.colors.text }
+                  ]}>
+                    {preset.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
-            {errors.savingsGoal && <Text style={styles.errorText}>{errors.savingsGoal}</Text>}
+          </View>
+
+          {/* Info Card */}
+          <View style={[styles.infoCard, { backgroundColor: theme.colors.card }]}>
+            <Ionicons name="information-circle" size={24} color="#00D4FF" />
+            <Text style={[styles.infoText, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>
+              You can set savings goals later through the gamification feature. Your budget will be evenly distributed across 6 categories.
+            </Text>
           </View>
         </View>
+      </ScrollView>
 
+      {/* Fixed Bottom Button */}
+      <View style={[styles.bottomContainer, { backgroundColor: theme.colors.background }]}>
         <TouchableOpacity 
           style={[styles.button, { backgroundColor: theme.colors.primary }]}
           onPress={handleComplete}
+          activeOpacity={0.8}
         >
           <Text style={styles.buttonText}>Complete Setup</Text>
+          <Ionicons name="checkmark-circle" size={22} color="#FFF" />
         </TouchableOpacity>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 };
+
+const presetWidth = (width - 60) / 3;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  content: {
+  scrollView: {
     flex: 1,
+  },
+  content: {
     padding: 20,
+    paddingBottom: 100,
   },
   header: {
     alignItems: 'center',
-    marginVertical: 40,
+    marginTop: 20,
+    marginBottom: 32,
+  },
+  iconContainer: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
-    marginTop: 20,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
     textAlign: 'center',
-    marginBottom: 20,
-    opacity: 0.8,
   },
-  form: {
-    marginBottom: 40,
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 16,
-    marginBottom: 8,
-    fontWeight: '600',
+  inputSection: {
+    marginBottom: 24,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#3C3C3C',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    height: 50,
+    borderWidth: 2,
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    height: 72,
   },
   currency: {
-    fontSize: 18,
+    fontSize: 32,
+    fontWeight: '600',
     marginRight: 8,
   },
   input: {
     flex: 1,
-    fontSize: 16,
-  },
-  inputError: {
-    borderColor: '#FF3B30',
+    fontSize: 32,
+    fontWeight: '600',
   },
   errorText: {
     color: '#FF3B30',
-    fontSize: 12,
-    marginTop: 4,
+    fontSize: 13,
+    marginTop: 8,
     marginLeft: 4,
   },
-  button: {
-    padding: 16,
+  presetsSection: {
+    marginBottom: 24,
+  },
+  presetsLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 12,
+  },
+  presetsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  presetButton: {
+    width: presetWidth,
+    paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
+    marginBottom: 10,
+  },
+  presetText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  infoCard: {
+    flexDirection: 'row',
+    padding: 16,
+    borderRadius: 12,
+    gap: 12,
+    alignItems: 'flex-start',
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  bottomContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 20,
+    paddingBottom: 32,
+  },
+  button: {
+    flexDirection: 'row',
+    padding: 18,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    shadowColor: '#FF6B00',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   buttonText: {
     color: '#FFFFFF',

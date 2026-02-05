@@ -1,7 +1,14 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { useTheme } from '@react-navigation/native';
 import DebugUtils from '../utils/DebugUtils';
+
+// Fallback colors for ErrorBoundary (renders outside NavigationContainer)
+const FALLBACK_COLORS = {
+  background: '#1C1C1C',
+  text: '#FFFFFF',
+  textSecondary: '#B0B0B0',
+  primary: '#FF6B00',
+};
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -37,7 +44,8 @@ class ErrorBoundary extends React.Component {
 }
 
 const ErrorFallback = ({ onRetry }) => {
-  const { colors } = useTheme();
+  // Use fallback colors since ErrorBoundary is outside NavigationContainer
+  const colors = FALLBACK_COLORS;
   
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>

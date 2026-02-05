@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../../context/AuthContext';
 import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
+import { reset } from '../../navigation/navigationRef';
 
 const SettingsScreen = ({ navigation }) => {
   const { logout, userInfo, updateProfile } = useContext(AuthContext);
@@ -27,13 +28,17 @@ const SettingsScreen = ({ navigation }) => {
   const [showEditBudget, setShowEditBudget] = useState(false);
   const [name, setName] = useState(userInfo?.name || '');
   const [email, setEmail] = useState(userInfo?.email || '');
+  const [username, setUsername] = useState(userInfo?.username || '');
   const [monthlyBudget, setMonthlyBudget] = useState(budget.monthly.toString());
   const [savingsGoal, setSavingsGoal] = useState(budget.savingsGoal.toString());
 
-  // Update name state when userInfo changes
+  // Update name and username state when userInfo changes
   useEffect(() => {
     if (userInfo?.name) {
       setName(userInfo.name);
+    }
+    if (userInfo?.username) {
+      setUsername(userInfo.username);
     }
   }, [userInfo]);
 
@@ -44,7 +49,22 @@ const SettingsScreen = ({ navigation }) => {
         return;
       }
 
-      const result = await updateProfile({ name: name.trim() });
+      if (username.trim() && username.trim().length < 3) {
+        Alert.alert('Error', 'Username must be at least 3 characters long');
+        return;
+      }
+
+      if (username.trim() && !/^[a-zA-Z0-9_]+$/.test(username.trim())) {
+        Alert.alert('Error', 'Username can only contain letters, numbers, and underscores');
+        return;
+      }
+
+      const profileData = { 
+        name: name.trim(),
+        ...(username.trim() && { username: username.trim() })
+      };
+
+      const result = await updateProfile(profileData);
       
       if (result.success) {
         Alert.alert('Success', 'Profile updated successfully');
@@ -77,13 +97,10 @@ const SettingsScreen = ({ navigation }) => {
           text: 'Logout', 
           style: 'destructive',
           onPress: async () => {
-            const success = await logout();
-            if (success) {
-              // Reset navigation stack to Auth
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Auth' }]
-              });
+            const result = await logout();
+            if (result.success) {
+              // Use global navigation to reset to Auth screen
+              reset('Auth');
             } else {
               Alert.alert('Error', 'Failed to logout. Please try again.');
             }
@@ -124,6 +141,9 @@ const SettingsScreen = ({ navigation }) => {
                 <View style={styles.settingInfo}>
                   <Text style={[styles.settingText, { color: theme.colors.text }]}>Profile</Text>
                   <Text style={[styles.settingValue, { color: theme.colors.text }]}>{userInfo?.name || 'Set your name'}</Text>
+                  {userInfo?.username && (
+                    <Text style={[styles.usernameText, { color: theme.colors.primary }]}>@{userInfo.username}</Text>
+                  )}
                   <Text style={[styles.emailText, { color: theme.colors.text }]}>{userInfo?.email}</Text>
                 </View>
               </View>
@@ -179,7 +199,11 @@ const SettingsScreen = ({ navigation }) => {
             />
           </View>
 
-        {/*  <View style={[styles.settingItem, { backgroundColor: theme.colors.card }]}>
+          <TouchableOpacity 
+            style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
+            onPress={() => navigation.navigate('NotificationSettings')}
+            activeOpacity={0.7}
+          >
             <View style={styles.settingItemLeft}>
               <View style={[styles.settingIconContainer, { backgroundColor: `${theme.colors.primary}20` }]}>
                 <Ionicons name="notifications-outline" size={20} color={theme.colors.primary} />
@@ -187,18 +211,104 @@ const SettingsScreen = ({ navigation }) => {
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingText, { color: theme.colors.text }]}>Notifications</Text>
                 <Text style={[styles.settingValue, { color: theme.colors.text }]}>
-                  {notificationsEnabled ? 'Enabled' : 'Disabled'}
+                  Customize reminders & alerts
                 </Text>
               </View>
             </View>
-            <Switch
-              value={notificationsEnabled}
-              onValueChange={handleNotificationsChange}
-              trackColor={{ false: '#767577', true: `${theme.colors.primary}80` }}
-              thumbColor={notificationsEnabled ? theme.colors.primary : '#f4f3f4'}
-              ios_backgroundColor="#3e3e3e"
-            />
-          </View> */}
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
+            onPress={() => navigation.navigate('NotificationTest')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.settingItemLeft}>
+              <View style={[styles.settingIconContainer, { backgroundColor: `${theme.colors.secondary}20` }]}>
+                <Ionicons name="flask-outline" size={20} color={theme.colors.secondary} />
+              </View>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>Test Notifications</Text>
+                <Text style={[styles.settingValue, { color: theme.colors.text }]}>
+                  Test notification functionality
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Features Section */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Features</Text>
+          
+          <TouchableOpacity 
+            style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
+            onPress={() => navigation.navigate('Achievements')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.settingItemLeft}>
+              <View style={[styles.settingIconContainer, { backgroundColor: '#FFD70020' }]}>
+                <Ionicons name="trophy-outline" size={20} color="#FFD700" />
+              </View>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>Achievements</Text>
+                <Text style={[styles.settingValue, { color: theme.colors.text }]}>View your progress</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
+            onPress={() => navigation.navigate('FriendsList')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.settingItemLeft}>
+              <View style={[styles.settingIconContainer, { backgroundColor: `${theme.colors.primary}20` }]}>
+                <Ionicons name="people-outline" size={20} color={theme.colors.primary} />
+              </View>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>Friends List</Text>
+                <Text style={[styles.settingValue, { color: theme.colors.text }]}>Manage friends</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
+            onPress={() => navigation.navigate('Calendar')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.settingItemLeft}>
+              <View style={[styles.settingIconContainer, { backgroundColor: '#4CAF5020' }]}>
+                <Ionicons name="calendar-outline" size={20} color="#4CAF50" />
+              </View>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>Calendar View</Text>
+                <Text style={[styles.settingValue, { color: theme.colors.text }]}>Monthly expenses</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
+            onPress={() => navigation.navigate('OldLearn')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.settingItemLeft}>
+              <View style={[styles.settingIconContainer, { backgroundColor: '#FF980020' }]}>
+                <Ionicons name="book-outline" size={20} color="#FF9800" />
+              </View>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>Financial Tips</Text>
+                <Text style={[styles.settingValue, { color: theme.colors.text }]}>Learn & improve</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
+          </TouchableOpacity>
         </View>
         
         {/* About Section */}
@@ -211,8 +321,8 @@ const SettingsScreen = ({ navigation }) => {
                 <Ionicons name="information-circle-outline" size={20} color={theme.colors.primary} />
               </View>
               <View style={styles.settingInfo}>
-                <Text style={[styles.settingText, { color: theme.colors.text }]}>App Version</Text>
-                <Text style={[styles.settingValue, { color: theme.colors.text }]}>MoneyTrack v1.0.0</Text>
+                <Text style={[styles.settingLabel, { color: theme.colors.textSecondary }]}>App Version</Text>
+                <Text style={[styles.settingValue, { color: theme.colors.text }]}>GaFI v1.0.0</Text>
               </View>
             </View>
           </TouchableOpacity>
@@ -254,6 +364,27 @@ const SettingsScreen = ({ navigation }) => {
                 returnKeyType="done"
                 onSubmitEditing={handleUpdateProfile}
               />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: theme.colors.text }]}>Username</Text>
+              <TextInput
+                style={[styles.input, { 
+                  color: theme.colors.text,
+                  borderColor: theme.colors.border,
+                  backgroundColor: theme.colors.card
+                }]}
+                value={username}
+                onChangeText={setUsername}
+                placeholderTextColor={theme.colors.secondaryText}
+                placeholder="Enter a unique username (optional)"
+                returnKeyType="next"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <Text style={[styles.helpText, { color: theme.colors.text }]}>
+                Username will be used for the Friends feature. Only letters, numbers, and underscores allowed.
+              </Text>
             </View>
 
             <View style={styles.inputGroup}>
@@ -467,6 +598,11 @@ const styles = StyleSheet.create({
   emailText: {
     fontSize: 13,
     opacity: 0.6,
+    marginTop: 2,
+  },
+  usernameText: {
+    fontSize: 13,
+    fontWeight: '500',
     marginTop: 2,
   },
   versionText: {
