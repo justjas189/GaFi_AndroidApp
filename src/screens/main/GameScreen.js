@@ -297,6 +297,43 @@ export default function BuildScreen() {
   // Level completion results
   const [levelResults, setLevelResults] = useState(null);
   
+  // Pre-Level Introduction state (Pokémon-style dialogue)
+  const [showLevelIntro, setShowLevelIntro] = useState(false);
+  const [introLevel, setIntroLevel] = useState(null);
+  const [introPage, setIntroPage] = useState(0);
+  const [introDisplayedText, setIntroDisplayedText] = useState('');
+  const [introTypingDone, setIntroTypingDone] = useState(false);
+  const introTimerRef = useRef(null);
+  
+  // Level intro dialogue scripts — each level gets multiple pages
+  const LEVEL_INTRO_SCRIPTS = {
+    1: [
+      { text: "Hey there, adventurer! I'm Koin, your financial buddy!" },
+      { text: "Welcome to Level 1: Budget Basics! This is where your journey begins." },
+      { text: "You'll learn the 50/30/20 rule — the golden rule of budgeting!" },
+      { text: "50% of your budget goes to Needs — food, transport, school supplies..." },
+      { text: "30% goes to Wants — shopping, entertainment, electronics..." },
+      { text: "And 20% should be saved! That's the secret to building wealth." },
+      { text: "You have 7 days. Stay within the budget limits, and you'll pass this level. Good luck!" },
+    ],
+    2: [
+      { text: "You made it to Level 2! I knew you had it in you!" },
+      { text: "This time, we're learning about Goal Setting!" },
+      { text: "I'll give you three savings goals: Emergency Fund, Fun Money, and Future Savings." },
+      { text: "Your mission? Allocate money towards these goals throughout the week." },
+      { text: "You need to reach at least 80% of your target to pass!" },
+      { text: "Remember, every peso saved is a step toward your dreams. Let's go!" },
+    ],
+    3: [
+      { text: "Welcome to the final challenge... Level 3: Super Saver!" },
+      { text: "You've learned budgeting. You've learned goal setting. Now it's time for the ultimate test." },
+      { text: "Your mission: Save at least 30% of your weekly budget!" },
+      { text: "This means spending wisely and resisting unnecessary purchases." },
+      { text: "Think before every spend — do you NEED it, or just WANT it?" },
+      { text: "Complete this, and you'll truly be a financial master. I believe in you!" },
+    ],
+  };
+  
   // Custom Mode state
   const [showCustomSetup, setShowCustomSetup] = useState(false);
   const [customModeType, setCustomModeType] = useState(null); // 'budgeting', 'goals', 'saving'
@@ -2872,6 +2909,95 @@ export default function BuildScreen() {
     setShowStoryIntro(true); // Show level selection instead of going directly to game
   };
 
+  // Open the Pokémon-style pre-level intro for a given level
+  const openLevelIntro = (level) => {
+    setIntroLevel(level);
+    setIntroPage(0);
+    setIntroDisplayedText('');
+    setIntroTypingDone(false);
+    setShowLevelIntro(true);
+  };
+
+  // Typewriter effect — run whenever introPage or showLevelIntro changes
+  useEffect(() => {
+    if (!showLevelIntro || introLevel === null) return;
+    const scripts = LEVEL_INTRO_SCRIPTS[introLevel];
+    if (!scripts || introPage >= scripts.length) return;
+
+    const fullText = scripts[introPage].text;
+    let charIndex = 0;
+    setIntroDisplayedText('');
+    setIntroTypingDone(false);
+
+    introTimerRef.current = setInterval(() => {
+      charIndex++;
+      setIntroDisplayedText(fullText.slice(0, charIndex));
+      if (charIndex >= fullText.length) {
+        clearInterval(introTimerRef.current);
+        introTimerRef.current = null;
+        setIntroTypingDone(true);
+      }
+    }, 35); // 35ms per character — snappy but readable
+
+    return () => {
+      if (introTimerRef.current) {
+        clearInterval(introTimerRef.current);
+        introTimerRef.current = null;
+      }
+    };
+  }, [showLevelIntro, introLevel, introPage]);
+
+  // Handle tap on the intro dialogue
+  const handleIntroTap = () => {
+    const scripts = LEVEL_INTRO_SCRIPTS[introLevel];
+    if (!scripts) return;
+
+    // If still typing, skip to full text
+    if (!introTypingDone) {
+      if (introTimerRef.current) {
+        clearInterval(introTimerRef.current);
+        introTimerRef.current = null;
+      }
+      setIntroDisplayedText(scripts[introPage].text);
+      setIntroTypingDone(true);
+      return;
+    }
+
+    // If on last page, do nothing (user must press Start Level)
+    if (introPage >= scripts.length - 1) return;
+
+    // Advance to next page
+    setIntroPage(introPage + 1);
+  };
+
+  // Go back one dialogue page
+  const handleIntroBack = () => {
+    if (introPage <= 0) return;
+    setIntroPage(introPage - 1);
+  };
+
+  // Close intro and start the actual level
+  const handleIntroStartLevel = () => {
+    const level = introLevel;
+    setShowLevelIntro(false);
+    setIntroLevel(null);
+    setIntroPage(0);
+    setIntroDisplayedText('');
+    startStoryLevel(level);
+  };
+
+  // Close intro and go back to level select
+  const handleIntroClose = () => {
+    if (introTimerRef.current) {
+      clearInterval(introTimerRef.current);
+      introTimerRef.current = null;
+    }
+    setShowLevelIntro(false);
+    setIntroLevel(null);
+    setIntroPage(0);
+    setIntroDisplayedText('');
+  };
+
   const handleCustomMode = () => {
     // If there's already an active custom session, resume it directly
     if (gameMode === 'custom' && activeSessionId) {
@@ -3495,7 +3621,7 @@ export default function BuildScreen() {
                   storyStyles.levelButton,
                   isUnlocked ? storyStyles.levelUnlocked : storyStyles.levelLocked,
                 ]}
-                onPress={() => isUnlocked && startStoryLevel(level)}
+                onPress={() => isUnlocked && openLevelIntro(level)}
                 activeOpacity={isUnlocked ? 0.7 : 1}
                 disabled={!isUnlocked}
               >
@@ -4584,6 +4710,280 @@ export default function BuildScreen() {
     },
   });
 
+  // ==================== POKÉMON-STYLE PRE-LEVEL INTRO ====================
+  const renderLevelIntro = () => {
+    const scripts = LEVEL_INTRO_SCRIPTS[introLevel];
+    const isLastPage = introPage >= (scripts?.length || 1) - 1;
+    const levelConfig = STORY_LEVELS[introLevel];
+
+    return (
+      <ImageBackground
+        source={require('../../../assets/Game_Graphics/menu/main_menu_bg.jpg')}
+        style={introStyles.background}
+        resizeMode="cover"
+      >
+        <TouchableWithoutFeedback onPress={handleIntroTap}>
+          <View style={introStyles.overlay}>
+            {/* Back to level select */}
+            <TouchableOpacity
+              style={introStyles.closeButton}
+              onPress={handleIntroClose}
+            >
+              <Ionicons name="arrow-back" size={22} color="#F5DEB3" />
+            </TouchableOpacity>
+
+            {/* Level badge */}
+            <View style={introStyles.levelBadge}>
+              <Text style={introStyles.levelBadgeText}>
+                {levelConfig?.icon} Level {introLevel}: {levelConfig?.name}
+              </Text>
+            </View>
+
+            {/* Koin character — centered above dialogue */}
+            <View style={introStyles.characterContainer}>
+              <Image
+                source={require('../../../assets/mascot/koin_tutorial.png')}
+                style={introStyles.characterImage}
+                resizeMode="contain"
+              />
+            </View>
+
+            {/* Dialogue box — Pokémon style */}
+            <View style={introStyles.dialogueContainer}>
+              <View style={introStyles.dialogueBox}>
+                {/* Dialogue text with typewriter effect */}
+                <Text style={introStyles.dialogueText}>
+                  {introDisplayedText}
+                  {!introTypingDone && (
+                    <Text style={introStyles.cursor}>▌</Text>
+                  )}
+                </Text>
+
+                {/* Bottom row: back arrow, page dots, advance indicator */}
+                <View style={introStyles.dialogueFooter}>
+                  {/* Back button */}
+                  <TouchableOpacity
+                    onPress={handleIntroBack}
+                    disabled={introPage <= 0}
+                    style={[introStyles.navButton, introPage <= 0 && introStyles.navButtonDisabled]}
+                    hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                  >
+                    <Ionicons
+                      name="chevron-back"
+                      size={20}
+                      color={introPage > 0 ? '#F5DEB3' : '#555'}
+                    />
+                  </TouchableOpacity>
+
+                  {/* Page dots */}
+                  <View style={introStyles.dotsContainer}>
+                    {scripts?.map((_, i) => (
+                      <View
+                        key={i}
+                        style={[
+                          introStyles.dot,
+                          i === introPage && introStyles.dotActive,
+                          i < introPage && introStyles.dotCompleted,
+                        ]}
+                      />
+                    ))}
+                  </View>
+
+                  {/* Advance indicator or empty space */}
+                  {introTypingDone && !isLastPage ? (
+                    <View style={introStyles.advanceIndicator}>
+                      <Ionicons name="chevron-forward" size={16} color="#F5DEB3" />
+                      <Animated.View
+                        style={{
+                          opacity: walkingPulse, // reuse existing pulse animation
+                        }}
+                      >
+                        <Text style={introStyles.tapHint}>Tap</Text>
+                      </Animated.View>
+                    </View>
+                  ) : (
+                    <View style={introStyles.navButton} />
+                  )}
+                </View>
+              </View>
+
+              {/* Start Level button — only appears on the last page after typing is done */}
+              {isLastPage && introTypingDone && (
+                <TouchableOpacity
+                  style={introStyles.startButton}
+                  onPress={handleIntroStartLevel}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="play" size={20} color="#1a1a2e" />
+                  <Text style={introStyles.startButtonText}>Start Level</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+      </ImageBackground>
+    );
+  };
+
+  const introStyles = StyleSheet.create({
+    background: {
+      flex: 1,
+      width: '100%',
+      height: '100%',
+    },
+    overlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.65)',
+      justifyContent: 'flex-end',
+      paddingBottom: 40,
+    },
+    closeButton: {
+      position: 'absolute',
+      top: 16,
+      left: 16,
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: 'rgba(45, 45, 68, 0.9)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 2,
+      borderColor: '#5A5A7A',
+      zIndex: 10,
+    },
+    levelBadge: {
+      position: 'absolute',
+      top: 22,
+      alignSelf: 'center',
+      backgroundColor: 'rgba(45, 45, 68, 0.95)',
+      paddingHorizontal: 20,
+      paddingVertical: 8,
+      borderRadius: 20,
+      borderWidth: 2,
+      borderColor: '#5A5A7A',
+    },
+    levelBadgeText: {
+      fontSize: 14,
+      fontWeight: 'bold',
+      color: '#F5DEB3',
+      textShadowColor: '#000',
+      textShadowOffset: { width: 1, height: 1 },
+      textShadowRadius: 0,
+    },
+    characterContainer: {
+      alignItems: 'center',
+      marginBottom: -10,
+    },
+    characterImage: {
+      width: 200,
+      height: 200,
+    },
+    dialogueContainer: {
+      paddingHorizontal: 16,
+      alignItems: 'center',
+    },
+    dialogueBox: {
+      width: '100%',
+      backgroundColor: '#2D2D44',
+      borderWidth: 4,
+      borderTopColor: '#5A5A7A',
+      borderLeftColor: '#5A5A7A',
+      borderBottomColor: '#1A1A2E',
+      borderRightColor: '#1A1A2E',
+      paddingHorizontal: 20,
+      paddingTop: 20,
+      paddingBottom: 12,
+      minHeight: 130,
+    },
+    dialogueText: {
+      fontSize: 17,
+      color: '#F5DEB3',
+      lineHeight: 26,
+      fontWeight: '500',
+      textShadowColor: '#000',
+      textShadowOffset: { width: 1, height: 1 },
+      textShadowRadius: 0,
+      minHeight: 60,
+    },
+    cursor: {
+      color: '#F5DEB3',
+      fontSize: 17,
+    },
+    dialogueFooter: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginTop: 12,
+    },
+    navButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    navButtonDisabled: {
+      opacity: 0.3,
+    },
+    dotsContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    dot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: '#555',
+    },
+    dotActive: {
+      backgroundColor: '#F5DEB3',
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+    },
+    dotCompleted: {
+      backgroundColor: '#8B7355',
+    },
+    advanceIndicator: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    tapHint: {
+      fontSize: 12,
+      color: '#F5DEB3',
+      fontWeight: '600',
+    },
+    startButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#F5DEB3',
+      paddingVertical: 14,
+      paddingHorizontal: 32,
+      borderRadius: 8,
+      marginTop: 16,
+      gap: 8,
+      borderWidth: 3,
+      borderTopColor: '#FFF8DC',
+      borderLeftColor: '#FFF8DC',
+      borderBottomColor: '#C4A86B',
+      borderRightColor: '#C4A86B',
+      shadowColor: '#000',
+      shadowOffset: { width: 2, height: 2 },
+      shadowOpacity: 0.4,
+      shadowRadius: 0,
+      elevation: 4,
+    },
+    startButtonText: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: '#1a1a2e',
+    },
+  });
+  // ==================== END PRE-LEVEL INTRO ====================
+
   // Render Main Menu
   const renderMainMenu = () => (
     <ImageBackground
@@ -5078,6 +5478,15 @@ export default function BuildScreen() {
       textDecorationLine: 'underline',
     },
   });
+
+  // Show Pokémon-style Pre-Level Intro
+  if (showLevelIntro && introLevel !== null) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        {renderLevelIntro()}
+      </SafeAreaView>
+    );
+  }
 
   // Show Story Intro / Level Selection
   if (showStoryIntro) {

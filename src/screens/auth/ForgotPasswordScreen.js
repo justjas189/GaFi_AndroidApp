@@ -7,14 +7,12 @@ import { ThemeContext } from '../../context/ThemeContext';
 
 const ForgotPasswordScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
-  const { sendPasswordResetEmail, isLoading, error } = useContext(AuthContext);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { sendPasswordResetEmail } = useContext(AuthContext);
   const { theme } = useContext(ThemeContext);
 
   const handleResetPassword = async () => {
     try {
-      // Reset any previous errors
-      if (error) return;
-
       if (!email) {
         Alert.alert('Error', 'Please enter your email address');
         return;
@@ -27,24 +25,18 @@ const ForgotPasswordScreen = ({ navigation }) => {
         return;
       }
 
-      const success = await sendPasswordResetEmail(email.trim());
-      if (success) {
-        Alert.alert(
-          'Success',
-          'A verification code has been sent to your email',
-          [
-            {
-              text: 'OK',
-              onPress: () => navigation.navigate('VerifyResetCode', { email: email.trim() })
-            }
-          ]
-        );
+      setIsSubmitting(true);
+      const result = await sendPasswordResetEmail(email.trim());
+      if (result.success) {
+        navigation.navigate('VerifyResetCode', { email: email.trim() });
       } else {
-        Alert.alert('Error', error || 'Failed to send verification code. Please try again.');
+        Alert.alert('Error', result.error || 'Failed to send verification code. Please try again.');
       }
     } catch (err) {
       console.error('Reset password error:', err);
       Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -80,9 +72,9 @@ const ForgotPasswordScreen = ({ navigation }) => {
         <TouchableOpacity 
           style={[styles.button, { backgroundColor: theme.colors.primary }]}
           onPress={handleResetPassword}
-          disabled={isLoading}
+          disabled={isSubmitting}
         >
-          {isLoading ? (
+          {isSubmitting ? (
             <ActivityIndicator color="#FFF" />
           ) : (
             <Text style={styles.buttonText}>Send Verification Code</Text>
