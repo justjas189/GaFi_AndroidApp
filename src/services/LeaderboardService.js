@@ -63,15 +63,16 @@ const LeaderboardService = {
       // Get user level data directly
       const { data: userLevel, error: levelError } = await supabase
         .from('user_levels')
-        .select('user_id, current_level, total_saved, goals_completed, streak_days, last_save_date')
+        .select('user_id, current_level, total_xp, total_saved, goals_completed, streak_days, last_save_date, total_goals_achieved, achievements_earned')
         .eq('user_id', userId)
         .single();
 
       if (levelError) {
-        console.log('Error fetching user levels, returning defaults:', levelError);
+        console.error('getUserLevelInfo error:', levelError.message, levelError.details);
         return {
           user_id: userId,
           current_level: 1,
+          total_xp: 0,
           total_saved: 0,
           goals_completed: 0,
           streak_days: 0,
@@ -113,7 +114,10 @@ const LeaderboardService = {
         .eq('user_id', userId)
         .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        console.error('getUserLevels SELECT error:', error.message, error.details);
+        throw error;
+      }
 
       if (!data) {
         // Create initial user level record
@@ -122,6 +126,7 @@ const LeaderboardService = {
           .insert([{
             user_id: userId,
             current_level: 1,
+            total_xp: 0,
             total_saved: 0,
             goals_completed: 0,
             streak_days: 0
@@ -129,16 +134,21 @@ const LeaderboardService = {
           .select()
           .single();
 
-        if (insertError) throw insertError;
+        if (insertError) {
+          console.error('getUserLevels INSERT error:', insertError.message, insertError.details);
+          throw insertError;
+        }
+        console.log('Created initial user_levels record for', userId);
         return newRecord;
       }
 
       return data;
 
     } catch (error) {
-      console.error('Error getting user levels:', error);
+      console.error('Error getting user levels:', error.message || error);
       return {
         current_level: 1,
+        total_xp: 0,
         total_saved: 0,
         goals_completed: 0,
         streak_days: 0,
@@ -157,42 +167,13 @@ const LeaderboardService = {
       // Get user_levels data without foreign key relationship to avoid errors
       const { data: levelsData, error: levelsError } = await supabase
         .from('user_levels')
-        .select('user_id, current_level, total_saved, goals_completed, streak_days')
-        .order('total_saved', { ascending: false })
+        .select('user_id, current_level, total_xp, total_saved, goals_completed, streak_days, total_goals_achieved')
+        .order('total_xp', { ascending: false })
         .limit(limit);
 
       if (levelsError) {
-        console.error('Error fetching user levels:', levelsError);
-        // Return sample data if user_levels table doesn't exist or has issues
-        return [
-          {
-            rank: 1,
-            userId: 'sample-1',
-            name: 'Top Saver',
-            level: 5,
-            totalSaved: 25000,
-            goalsCompleted: 15,
-            streakDays: 30
-          },
-          {
-            rank: 2,
-            userId: 'sample-2',
-            name: 'Money Master',
-            level: 4,
-            totalSaved: 18000,
-            goalsCompleted: 12,
-            streakDays: 22
-          },
-          {
-            rank: 3,
-            userId: 'sample-3',
-            name: 'Smart Spender',
-            level: 3,
-            totalSaved: 12000,
-            goalsCompleted: 8,
-            streakDays: 15
-          }
-        ];
+        console.error('Error fetching user levels for leaderboard:', levelsError.message, levelsError.details);
+        return [];
       }
 
       if (!levelsData || levelsData.length === 0) {
@@ -236,6 +217,7 @@ const LeaderboardService = {
         userId: entry.user_id,
         name: entry.profiles.full_name,
         level: entry.current_level,
+        totalXp: entry.total_xp || 0,
         totalSaved: parseFloat(entry.total_saved || 0),
         goalsCompleted: entry.goals_completed || 0,
         streakDays: entry.streak_days || 0
@@ -245,37 +227,8 @@ const LeaderboardService = {
       return leaderboard;
 
     } catch (error) {
-      console.error('Error in getLeaderboard:', error);
-      // Return sample data as fallback
-      return [
-        {
-          rank: 1,
-          userId: 'sample-1',
-          name: 'Top Saver',
-          level: 5,
-          totalSaved: 25000,
-          goalsCompleted: 15,
-          streakDays: 30
-        },
-        {
-          rank: 2,
-          userId: 'sample-2',
-          name: 'Money Master',
-          level: 4,
-          totalSaved: 18000,
-          goalsCompleted: 12,
-          streakDays: 22
-        },
-        {
-          rank: 3,
-          userId: 'sample-3',
-          name: 'Smart Spender',
-          level: 3,
-          totalSaved: 12000,
-          goalsCompleted: 8,
-          streakDays: 15
-        }
-      ];
+      console.error('Error in getLeaderboard:', error.message || error);
+      return [];
     }
   },
 
@@ -424,6 +377,7 @@ const LeaderboardService = {
 
       return {
         currentLevel: userLevels.current_level || 1,
+        totalXp: userLevels.total_xp || 0,
         totalSaved: parseFloat(userLevels.total_saved || 0),
         goalsCompleted: userLevels.goals_completed || 0,
         streakDays: userLevels.streak_days || 0,
@@ -433,9 +387,10 @@ const LeaderboardService = {
       };
 
     } catch (error) {
-      console.error('Error getting savings stats:', error);
+      console.error('Error getting savings stats:', error.message || error);
       return {
         currentLevel: 1,
+        totalXp: 0,
         totalSaved: 0,
         goalsCompleted: 0,
         streakDays: 0,

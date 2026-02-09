@@ -9,6 +9,7 @@ import { supabase } from '../../config/supabase';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { collisionSystem } from '../../utils/CollisionSystem';
 import { AchievementService } from '../../services/AchievementService';
+import gameDatabaseService from '../../services/GameDatabaseService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
@@ -57,7 +58,7 @@ const MAPS = {
     id: 'dorm',
     name: 'Home',
     icon: '🏠',
-    image: require('../../../Test/Test/Map002.png'),
+    image: require('../../../assets/Game_Graphics/maps/Home/Map002.png'),
     spawnPoint: { x: width / 2, y: height * 0.5 },
     locations: [
       {
@@ -242,6 +243,9 @@ export default function BuildScreen() {
     setTutorialActive(true);
     setTutorialStep(0);
     setCurrentMapId('dorm'); // Always start tutorial at home
+    // Persist tutorial start to Supabase
+    gameDatabaseService.saveTutorialProgress({ currentStep: 0, stepsCompleted: [], tutorialCompleted: false });
+    gameDatabaseService.logActivity({ activityType: 'tutorial_step', details: { step: 0, action: 'started' } });
   };
   
   // End tutorial
@@ -250,6 +254,9 @@ export default function BuildScreen() {
     setTutorialStep(0);
     setShowMainMenu(true);
     setGameMode(null);
+    // Persist tutorial completion to Supabase
+    gameDatabaseService.saveTutorialProgress({ currentStep: 0, stepsCompleted: [], tutorialCompleted: true });
+    gameDatabaseService.logActivity({ activityType: 'tutorial_step', details: { step: 'done', action: 'completed' } });
   };
   
   // Story Mode state
@@ -262,6 +269,7 @@ export default function BuildScreen() {
   const [storyEndDate, setStoryEndDate] = useState(null);
   const [showLevelComplete, setShowLevelComplete] = useState(false);
   const [levelPassed, setLevelPassed] = useState(false);
+  const [activeSessionId, setActiveSessionId] = useState(null); // Supabase session id for story/custom
   
   // Level 1 (Budgeting) - 50/30/20 Rule tracking
   const [budgetCategories, setBudgetCategories] = useState({
@@ -465,6 +473,89 @@ export default function BuildScreen() {
     const timer = setTimeout(() => setShowInstructions(false), 5000);
     return () => clearTimeout(timer);
   }, []);
+
+  // ─── Hydrate saved game progress from Supabase on mount ────
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const hydrate = async () => {
+      try {
+        const progress = await gameDatabaseService.loadGameProgress();
+        if (!progress) return;
+
+        const { userLevels, character, tutorial, activeStory, activeCustom, unlockedLevels: unlocked } = progress;
+
+        // 1. Unlocked story levels
+        if (unlocked && unlocked.length > 0) {
+          setUnlockedLevels(unlocked);
+        }
+
+        // 2. Character selection
+        if (character?.selected_character) {
+          setSelectedCharacter(character.selected_character);
+        }
+        if (character?.unlocked_characters && Array.isArray(character.unlocked_characters)) {
+          // Merge DB unlocked characters with local AsyncStorage skins
+          setUnlockedSkins(prev => {
+            const merged = new Set([...prev, ...character.unlocked_characters]);
+            return Array.from(merged);
+          });
+        }
+
+        // 3. Resume active story session (if any)
+        if (activeStory) {
+          const levelConfig = STORY_LEVELS[activeStory.level];
+          if (levelConfig) {
+            setGameMode('story');
+            setActiveSessionId(activeStory.id);
+            setStoryLevel(activeStory.level);
+            setWeeklyBudget(activeStory.weekly_budget || 0);
+            setStoryStartDate(new Date(activeStory.start_date));
+            setStoryEndDate(new Date(activeStory.end_date));
+            setWeeklySpending(activeStory.weekly_spending || 0);
+            if (activeStory.category_spending) setCategorySpending(activeStory.category_spending);
+            if (activeStory.needs_spent != null || activeStory.wants_spent != null) {
+              setBudgetCategories({
+                needs:   { budget: activeStory.needs_budget || 0, spent: activeStory.needs_spent || 0 },
+                wants:   { budget: activeStory.wants_budget || 0, spent: activeStory.wants_spent || 0 },
+                savings: { budget: activeStory.savings_budget || 0, spent: 0 },
+              });
+            }
+            if (activeStory.goals_data) {
+              setSavingsGoals(activeStory.goals_data);
+              // Rebuild allocations from goals_data if they have allocations
+              const allocs = {};
+              activeStory.goals_data.forEach(g => { allocs[g.id] = g.allocated || 0; });
+              setGoalAllocations(allocs);
+            }
+            setShowMainMenu(false);
+            setCurrentMapId('dorm');
+            console.log(`🔄 Resumed active story session ${activeStory.id} (Level ${activeStory.level})`);
+          }
+        }
+        // 4. Resume active custom session (if any and no active story)
+        else if (activeCustom) {
+          setGameMode('custom');
+          setActiveSessionId(activeCustom.id);
+          setWeeklyBudget(activeCustom.weekly_budget || 0);
+          setStoryStartDate(new Date(activeCustom.start_date));
+          setStoryEndDate(new Date(activeCustom.end_date));
+          setWeeklySpending(activeCustom.weekly_spending || 0);
+          if (activeCustom.category_spending) setCategorySpending(activeCustom.category_spending);
+          if (activeCustom.custom_rules) setCustomBudgetRules(activeCustom.custom_rules);
+          setShowMainMenu(false);
+          setCurrentMapId('dorm');
+          console.log(`🔄 Resumed active custom session ${activeCustom.id}`);
+        }
+
+        console.log('✅ Game progress hydrated from Supabase');
+      } catch (err) {
+        console.error('❌ Failed to hydrate game progress:', err.message);
+      }
+    };
+
+    hydrate();
+  }, [user?.id]);
 
   // Load unlocked skins from store purchases - runs when screen is focused
   const loadUnlockedSkins = useCallback(async () => {
@@ -702,6 +793,32 @@ export default function BuildScreen() {
     
     setShowLevelComplete(true);
 
+    // ── Persist level completion to Supabase ──
+    const xpEarned = passed ? (storyLevel === 1 ? 100 : storyLevel === 2 ? 150 : 200) : 0;
+    const starsEarned = passed ? (results.type === 'budgeting'
+      ? (results.needsOk && results.wantsOk && results.savingsOk ? 3 : 2)
+      : results.type === 'goals'
+        ? (parseFloat(results.goalProgress) >= 100 ? 3 : parseFloat(results.goalProgress) >= 90 ? 2 : 1)
+        : (parseFloat(results.savingsPercent) >= results.savingsGoal * 1.5 ? 3 : parseFloat(results.savingsPercent) >= results.savingsGoal * 1.2 ? 2 : 1)
+    ) : 0;
+
+    if (activeSessionId) {
+      if (gameMode === 'story') {
+        gameDatabaseService.completeStorySession(activeSessionId, { passed, starsEarned, xpEarned, resultsData: results, weeklySpending: totalSpent });
+      } else if (gameMode === 'custom') {
+        gameDatabaseService.completeCustomSession(activeSessionId, { passed, xpEarned, resultsData: results, weeklySpending: totalSpent });
+      }
+      gameDatabaseService.logActivity({ activityType: 'level_complete', sessionId: activeSessionId, details: { level: storyLevel, passed, stars: starsEarned, mode: gameMode }, xpEarned });
+    }
+    // Increment XP and goals achieved on user_levels
+    if (passed) {
+      gameDatabaseService.incrementUserLevelStats({ xpToAdd: xpEarned, goalsAchieved: 1 });
+      // Directly mark story level completed on user_levels (safety net for DB trigger)
+      if (gameMode === 'story') {
+        gameDatabaseService.markStoryLevelCompleted(storyLevel, starsEarned);
+      }
+    }
+
     // 🏆 Check for story mode achievements when level is completed
     if (passed) {
       const savingsPercent = results.savingsPercent || ((weeklyBudget - totalSpent) / weeklyBudget * 100);
@@ -718,25 +835,22 @@ export default function BuildScreen() {
     try {
       const { data: budgetData, error } = await supabase
         .from('budgets')
-        .select('monthly_limit')
+        .select('total_budget')
         .eq('user_id', user?.id)
         .single();
       
       let monthlyBudget = 5000; // Default fallback
-      if (budgetData?.monthly_limit) {
-        monthlyBudget = budgetData.monthly_limit;
+      if (budgetData?.total_budget) {
+        monthlyBudget = budgetData.total_budget;
       }
       
       // Calculate weekly budget (monthly / 4)
       const calculatedWeeklyBudget = monthlyBudget / 4;
       setWeeklyBudget(calculatedWeeklyBudget);
       
-      // Set start and end dates (7-day week: starts today, ends 6 days later)
-      const startDate = new Date();
-      startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date(startDate);
-      endDate.setDate(endDate.getDate() + 6); // 7 days total (day 0 to day 6)
-      endDate.setHours(23, 59, 59, 999);
+      // Set start and end dates — real-time 168-hour window from NOW
+      const startDate = new Date(); // exact moment user pressed Start
+      const endDate = new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000); // exactly 7 days later
       
       setStoryStartDate(startDate);
       setStoryEndDate(endDate);
@@ -782,6 +896,27 @@ export default function BuildScreen() {
       console.log(`📖 Story Mode Level ${level} (${levelConfig.type}) started!`);
       console.log(`   Weekly Budget: ₱${calculatedWeeklyBudget}`);
       console.log(`   Week: ${startDate.toDateString()} - ${endDate.toDateString()}`);
+
+      // ── Persist story session to Supabase ──
+      const session = await gameDatabaseService.createStorySession({
+        level,
+        levelType: levelConfig.type,
+        levelName: levelConfig.name,
+        weeklyBudget: calculatedWeeklyBudget,
+        startDate,
+        endDate,
+        needsBudget: levelConfig.type === 'budgeting' ? calculatedWeeklyBudget * 0.50 : null,
+        wantsBudget: levelConfig.type === 'budgeting' ? calculatedWeeklyBudget * 0.30 : null,
+        savingsBudget: levelConfig.type === 'budgeting' ? calculatedWeeklyBudget * 0.20 : null,
+        goalsData: levelConfig.type === 'goals' ? [
+          { id: 'emergency', name: 'Emergency Fund', target: calculatedWeeklyBudget * 0.10 },
+          { id: 'wants', name: 'Fun Money', target: calculatedWeeklyBudget * 0.05 },
+          { id: 'future', name: 'Future Savings', target: calculatedWeeklyBudget * 0.05 },
+        ] : null,
+        savingsGoalPercent: levelConfig.type === 'saving' ? 30 : null,
+      });
+      if (session) setActiveSessionId(session.id);
+      gameDatabaseService.logActivity({ activityType: 'level_start', details: { level, type: levelConfig.type, mode: 'story' }, sessionId: session?.id });
       
     } catch (error) {
       console.error('Error starting story level:', error);
@@ -1041,6 +1176,20 @@ export default function BuildScreen() {
     
     // Now travel to the destination
     await travelToMap(selectedDestination);
+
+    // ── Persist transport expense to Supabase ──
+    const fareVal = transportMode === 'commute' ? parseFloat(fareAmount) || 0 : null;
+    const fuelVal = (transportMode === 'car' && didBuyFuel) ? parseFloat(fuelAmount) || 0 : null;
+    if (transportMode && transportMode !== 'walk') {
+      gameDatabaseService.recordTransportExpense({
+        transportMode: transportMode || 'walk',
+        originMap: currentMapId,
+        destinationMap: selectedDestination,
+        fareAmount: fareVal,
+        fuelAmount: fuelVal,
+        sessionId: activeSessionId,
+      });
+    }
   };
 
   // Record transport expense
@@ -1124,6 +1273,15 @@ export default function BuildScreen() {
       locationId: mapId, 
       visitedLocations: newVisitedLocations 
     });
+
+    // ── Log map travel to Supabase ──
+    gameDatabaseService.logActivity({
+      activityType: 'map_travel',
+      mapId,
+      details: { from: currentMapId, to: mapId, transport: transportMode || 'walk' },
+      sessionId: activeSessionId,
+    });
+    gameDatabaseService.incrementUserLevelStats({ mapsTraveled: 1 });
     
     // Show arrival message with transport info
     const transportInfo = transportMode === 'commute' 
@@ -1620,6 +1778,33 @@ export default function BuildScreen() {
           category: savedCategory,
           categoryCount: categoryCount,
         });
+
+        // ── Log expense to Supabase game_activity_log + update user_levels ──
+        gameDatabaseService.logActivity({
+          activityType: 'expense_recorded',
+          mapId: currentMapId,
+          locationId: currentLocation,
+          amount: expenseAmountNum,
+          details: { category: savedCategory, note: savedNote },
+          sessionId: activeSessionId,
+        });
+        gameDatabaseService.incrementUserLevelStats({ expensesRecorded: 1 });
+
+        // Update session spending if in story/custom mode
+        if (activeSessionId && (gameMode === 'story' || gameMode === 'custom')) {
+          const updatedSpending = weeklySpending + expenseAmountNum;
+          if (gameMode === 'story') {
+            gameDatabaseService.updateStorySessionSpending(activeSessionId, {
+              weeklySpending: updatedSpending,
+              categorySpending: { ...categorySpending, [savedCategory]: (categorySpending[savedCategory] || 0) + expenseAmountNum },
+            });
+          } else {
+            gameDatabaseService.updateCustomSessionSpending(activeSessionId, {
+              weeklySpending: updatedSpending,
+              categorySpending: { ...categorySpending, [savedCategory]: (categorySpending[savedCategory] || 0) + expenseAmountNum },
+            });
+          }
+        }
       }
 
       fetchTodaySpending(); // Refresh spending total
@@ -2701,12 +2886,9 @@ export default function BuildScreen() {
       const calculatedWeeklyBudget = monthlyBudget / 4;
       setWeeklyBudget(calculatedWeeklyBudget);
       
-      // Set start and end dates (7-day week: starts today, ends 6 days later)
-      const startDate = new Date();
-      startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date(startDate);
-      endDate.setDate(endDate.getDate() + 6); // 7 days total (day 0 to day 6)
-      endDate.setHours(23, 59, 59, 999);
+      // Set start and end dates — real-time 168-hour window from NOW
+      const startDate = new Date(); // exact moment user pressed Start
+      const endDate = new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000); // exactly 7 days later
       
       setStoryStartDate(startDate);
       setStoryEndDate(endDate);
@@ -2769,6 +2951,22 @@ export default function BuildScreen() {
       
       console.log(`🎮 Custom Mode (${customModeType}) started!`);
       console.log(`   Weekly Budget: ₱${calculatedWeeklyBudget}`);
+
+      // ── Persist custom session to Supabase ──
+      const customGoalsForDB = customModeType === 'goals'
+        ? customGoals.filter(g => g.name.trim() && g.target).map(g => ({ name: g.name.trim(), target: parseFloat(g.target) || 0 }))
+        : null;
+      const session = await gameDatabaseService.createCustomSession({
+        modeType: customModeType,
+        customRules: customBudgetRules,
+        weeklyBudget: calculatedWeeklyBudget,
+        startDate,
+        endDate,
+        customGoals: customGoalsForDB,
+        customSavingsTarget: customModeType === 'saving' ? parseFloat(customSavingsTarget) : null,
+      });
+      if (session) setActiveSessionId(session.id);
+      gameDatabaseService.logActivity({ activityType: 'level_start', details: { type: customModeType, mode: 'custom', rules: customBudgetRules }, sessionId: session?.id });
       
     } catch (error) {
       console.error('Error starting custom mode:', error);
@@ -4697,7 +4895,10 @@ export default function BuildScreen() {
                       style={tutorialStyles.nextButtonInline}
                       onPress={() => {
                         if (tutorialStep < TUTORIAL_STEPS.length - 1) {
+                          const nextStep = tutorialStep + 1;
                           setTutorialStep(prev => prev + 1);
+                          // Persist step progress to Supabase
+                          gameDatabaseService.saveTutorialProgress({ currentStep: nextStep, stepsCompleted: Array.from({ length: nextStep }, (_, i) => String(i)), tutorialCompleted: false });
                         } else {
                           endTutorial();
                         }
@@ -4756,6 +4957,12 @@ export default function BuildScreen() {
                       onPress={() => {
                         if (isUnlocked) {
                           setSelectedCharacter(key);
+                          // ── Persist character selection to Supabase ──
+                          gameDatabaseService.saveCharacterCustomization({
+                            selectedCharacter: key,
+                            unlockedCharacters: unlockedSkins,
+                          });
+                          gameDatabaseService.logActivity({ activityType: 'closet_visit', details: { selected: key } });
                         } else {
                           Alert.alert(
                             '🔒 Skin Locked',
@@ -5116,7 +5323,7 @@ export default function BuildScreen() {
                   disabled={isSubmitting}
                 >
                   <Text style={[styles.buttonText, styles.submitButtonText]}>
-                    {isSubmitting ? 'Saving...' : `Save ₱${expenseAmount || '0'}`}
+                    {isSubmitting ? 'Saving...' : `Save Expense ₱${expenseAmount || '0'}`}
                   </Text>
                 </TouchableOpacity>
               </View>

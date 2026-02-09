@@ -35,6 +35,12 @@ CREATE TABLE IF NOT EXISTS user_levels (
   total_goals_achieved INTEGER DEFAULT 0,
   achievements_earned INTEGER DEFAULT 0,
   
+  -- Savings Stats (used by GamifiedSavingsService & LeaderboardService)
+  total_saved DECIMAL(12, 2) DEFAULT 0,
+  goals_completed INTEGER DEFAULT 0,
+  streak_days INTEGER DEFAULT 0,
+  last_save_date DATE,
+  
   -- Timestamps
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -201,7 +207,7 @@ CREATE TABLE IF NOT EXISTS character_customizations (
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   
   -- Selected character
-  selected_character VARCHAR(20) DEFAULT 'girl' CHECK (selected_character IN ('girl', 'jasper')),
+  selected_character VARCHAR(20) DEFAULT 'girl' CHECK (selected_character IN ('girl', 'jasper', 'businessman', 'businesswoman')),
   
   -- Unlocked items
   unlocked_characters TEXT[] DEFAULT ARRAY['girl', 'jasper'],
