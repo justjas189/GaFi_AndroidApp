@@ -303,6 +303,8 @@ export default function BuildScreen() {
   const [customBudgetRules, setCustomBudgetRules] = useState({ needs: 50, wants: 30, savings: 20 });
   const [customGoals, setCustomGoals] = useState([{ name: '', target: '' }]);
   const [customSavingsTarget, setCustomSavingsTarget] = useState('20');
+  const [showCustomSettingsModal, setShowCustomSettingsModal] = useState(false);
+  const [settingsModeType, setSettingsModeType] = useState(null); // tracks which type is selected inside the settings modal
   
   // Character Animation State
   const [selectedCharacter, setSelectedCharacter] = useState('girl'); // 'girl', 'jasper', 'businessman', 'businesswoman'
@@ -1867,6 +1869,14 @@ export default function BuildScreen() {
       fontWeight: 'bold',
       color: '#FF9800',
     },
+    settingsGearButton: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: 'rgba(90, 90, 122, 0.8)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
     locationBadge: {
       position: 'absolute',
       top: 70,
@@ -2863,6 +2873,11 @@ export default function BuildScreen() {
   };
 
   const handleCustomMode = () => {
+    // If there's already an active custom session, resume it directly
+    if (gameMode === 'custom' && activeSessionId) {
+      setShowMainMenu(false);
+      return;
+    }
     setShowCustomSetup(true);
     setShowMainMenu(false);
   };
@@ -2974,7 +2989,475 @@ export default function BuildScreen() {
     }
   };
 
-  // Render Story Mode Intro / Level Selection
+  // Apply settings changes from the Custom Settings modal (mid-game edits)
+  const applyCustomSettings = (newModeType) => {
+    // If user is changing the challenge type entirely, reconfigure state
+    if (newModeType !== customModeType) {
+      setCustomModeType(newModeType);
+
+      if (newModeType === 'budgeting') {
+        const needsPercent = customBudgetRules.needs / 100;
+        const wantsPercent = customBudgetRules.wants / 100;
+        const savingsPercent = customBudgetRules.savings / 100;
+        setBudgetCategories({
+          needs: { budget: weeklyBudget * needsPercent, spent: budgetCategories.needs?.spent || 0 },
+          wants: { budget: weeklyBudget * wantsPercent, spent: budgetCategories.wants?.spent || 0 },
+          savings: { budget: weeklyBudget * savingsPercent, spent: 0 },
+        });
+        setStoryLevel(1);
+      } else if (newModeType === 'goals') {
+        const goals = customGoals
+          .filter(g => g.name.trim() && parseFloat(g.target) > 0)
+          .map((g, index) => ({
+            id: `custom_${index}`,
+            name: g.name.trim(),
+            icon: ['🎯', '💎', '🌟', '🎁', '✨'][index % 5],
+            target: parseFloat(g.target) || 0,
+          }));
+        if (goals.length > 0) {
+          setSavingsGoals(goals);
+          const allocations = {};
+          goals.forEach(g => { allocations[g.id] = 0; });
+          setGoalAllocations(allocations);
+        }
+        setStoryLevel(2);
+      } else if (newModeType === 'saving') {
+        setStoryLevel(3);
+      }
+    } else {
+      // Same mode type — user only edited values (percentages, goals, savings target)
+      if (newModeType === 'budgeting') {
+        const needsPercent = customBudgetRules.needs / 100;
+        const wantsPercent = customBudgetRules.wants / 100;
+        const savingsPercent = customBudgetRules.savings / 100;
+        setBudgetCategories(prev => ({
+          needs: { budget: weeklyBudget * needsPercent, spent: prev.needs?.spent || 0 },
+          wants: { budget: weeklyBudget * wantsPercent, spent: prev.wants?.spent || 0 },
+          savings: { budget: weeklyBudget * savingsPercent, spent: 0 },
+        }));
+      } else if (newModeType === 'goals') {
+        const goals = customGoals
+          .filter(g => g.name.trim() && parseFloat(g.target) > 0)
+          .map((g, index) => ({
+            id: `custom_${index}`,
+            name: g.name.trim(),
+            icon: ['🎯', '💎', '🌟', '🎁', '✨'][index % 5],
+            target: parseFloat(g.target) || 0,
+          }));
+        if (goals.length > 0) {
+          setSavingsGoals(goals);
+          // Preserve existing allocations where possible
+          const allocations = {};
+          goals.forEach(g => { allocations[g.id] = goalAllocations[g.id] || 0; });
+          setGoalAllocations(allocations);
+        }
+      }
+      // For 'saving', customSavingsTarget is already updated via state
+    }
+
+    setShowCustomSettingsModal(false);
+    console.log(`⚙️ Custom settings applied: mode=${newModeType}`);
+  };
+
+  // Render Custom Settings Modal (in-game settings for Custom Mode)
+  const renderCustomSettingsModal = () => {
+    const budgetTotal = customBudgetRules.needs + customBudgetRules.wants + customBudgetRules.savings;
+    const budgetValid = budgetTotal === 100;
+    const goalsValid = customGoals.some(g => g.name.trim() && parseFloat(g.target) > 0);
+    const savingsValid = parseFloat(customSavingsTarget) > 0 && parseFloat(customSavingsTarget) <= 100;
+
+    return (
+      <Modal
+        visible={showCustomSettingsModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowCustomSettingsModal(false)}
+      >
+        <View style={settingsStyles.backdrop}>
+          <View style={settingsStyles.container}>
+            {/* Header */}
+            <View style={settingsStyles.header}>
+              <Text style={settingsStyles.title}>⚙️ Custom Settings</Text>
+              <TouchableOpacity onPress={() => setShowCustomSettingsModal(false)}>
+                <Ionicons name="close" size={24} color="#F5DEB3" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={settingsStyles.body} showsVerticalScrollIndicator={false}>
+              {/* Mode Selector */}
+              <Text style={settingsStyles.sectionLabel}>Challenge Type</Text>
+              <View style={settingsStyles.modeRow}>
+                {[
+                  { key: 'budgeting', icon: '📊', label: 'Budgeting' },
+                  { key: 'goals', icon: '🎯', label: 'Goals' },
+                  { key: 'saving', icon: '💰', label: 'Saving' },
+                ].map(m => (
+                  <TouchableOpacity
+                    key={m.key}
+                    style={[
+                      settingsStyles.modeChip,
+                      settingsModeType === m.key && settingsStyles.modeChipActive,
+                    ]}
+                    onPress={() => setSettingsModeType(m.key)}
+                  >
+                    <Text style={settingsStyles.modeChipIcon}>{m.icon}</Text>
+                    <Text style={[
+                      settingsStyles.modeChipLabel,
+                      settingsModeType === m.key && settingsStyles.modeChipLabelActive,
+                    ]}>{m.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Budgeting Settings */}
+              {settingsModeType === 'budgeting' && (
+                <View style={settingsStyles.section}>
+                  <Text style={settingsStyles.sectionLabel}>Budget Split</Text>
+                  {[
+                    { key: 'needs', label: '🏠 Needs', color: '#4CAF50' },
+                    { key: 'wants', label: '🎮 Wants', color: '#FF9800' },
+                    { key: 'savings', label: '💰 Savings', color: '#3498DB' },
+                  ].map(cat => (
+                    <View key={cat.key} style={settingsStyles.sliderRow}>
+                      <Text style={settingsStyles.sliderLabel}>{cat.label}</Text>
+                      <View style={settingsStyles.sliderControls}>
+                        <TouchableOpacity
+                          style={settingsStyles.adjBtn}
+                          onPress={() => setCustomBudgetRules(prev => ({ ...prev, [cat.key]: Math.max(0, prev[cat.key] - 5) }))}
+                        >
+                          <Ionicons name="remove" size={16} color="#FFF" />
+                        </TouchableOpacity>
+                        <Text style={[settingsStyles.sliderValue, { color: cat.color }]}>{customBudgetRules[cat.key]}%</Text>
+                        <TouchableOpacity
+                          style={settingsStyles.adjBtn}
+                          onPress={() => setCustomBudgetRules(prev => ({ ...prev, [cat.key]: Math.min(100, prev[cat.key] + 5) }))}
+                        >
+                          <Ionicons name="add" size={16} color="#FFF" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                  <Text style={[settingsStyles.totalText, !budgetValid && { color: '#FF4444' }]}>
+                    Total: {budgetTotal}% {budgetValid ? '✅' : `(${budgetTotal < 100 ? 'need ' + (100 - budgetTotal) + '% more' : (budgetTotal - 100) + '% over'})`}
+                  </Text>
+                </View>
+              )}
+
+              {/* Goals Settings */}
+              {settingsModeType === 'goals' && (
+                <View style={settingsStyles.section}>
+                  <Text style={settingsStyles.sectionLabel}>Savings Goals</Text>
+                  {customGoals.map((goal, index) => (
+                    <View key={index} style={settingsStyles.goalRow}>
+                      <TextInput
+                        style={settingsStyles.goalNameInput}
+                        placeholder="Goal name"
+                        placeholderTextColor="#666"
+                        value={goal.name}
+                        onChangeText={(text) => {
+                          const g = [...customGoals];
+                          g[index].name = text;
+                          setCustomGoals(g);
+                        }}
+                      />
+                      <TextInput
+                        style={settingsStyles.goalAmtInput}
+                        placeholder="₱"
+                        placeholderTextColor="#666"
+                        keyboardType="numeric"
+                        value={goal.target}
+                        onChangeText={(text) => {
+                          const g = [...customGoals];
+                          g[index].target = text.replace(/[^0-9.]/g, '');
+                          setCustomGoals(g);
+                        }}
+                      />
+                      {customGoals.length > 1 && (
+                        <TouchableOpacity onPress={() => setCustomGoals(customGoals.filter((_, i) => i !== index))}>
+                          <Ionicons name="close-circle" size={22} color="#E74C3C" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ))}
+                  {customGoals.length < 5 && (
+                    <TouchableOpacity
+                      style={settingsStyles.addGoalBtn}
+                      onPress={() => setCustomGoals([...customGoals, { name: '', target: '' }])}
+                    >
+                      <Ionicons name="add-circle" size={18} color="#4CAF50" />
+                      <Text style={settingsStyles.addGoalText}>Add Goal</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
+              {/* Saving Settings */}
+              {settingsModeType === 'saving' && (
+                <View style={settingsStyles.section}>
+                  <Text style={settingsStyles.sectionLabel}>Savings Target</Text>
+                  <View style={settingsStyles.savingsRow}>
+                    <TouchableOpacity
+                      style={settingsStyles.adjBtn}
+                      onPress={() => setCustomSavingsTarget(prev => Math.max(5, parseInt(prev) - 5).toString())}
+                    >
+                      <Ionicons name="remove" size={20} color="#FFF" />
+                    </TouchableOpacity>
+                    <Text style={settingsStyles.savingsBigValue}>{customSavingsTarget}%</Text>
+                    <TouchableOpacity
+                      style={settingsStyles.adjBtn}
+                      onPress={() => setCustomSavingsTarget(prev => Math.min(80, parseInt(prev) + 5).toString())}
+                    >
+                      <Ionicons name="add" size={20} color="#FFF" />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={settingsStyles.quickRow}>
+                    {[10, 20, 30, 40, 50].map(p => (
+                      <TouchableOpacity
+                        key={p}
+                        style={[settingsStyles.quickBtn, customSavingsTarget === p.toString() && settingsStyles.quickBtnActive]}
+                        onPress={() => setCustomSavingsTarget(p.toString())}
+                      >
+                        <Text style={[settingsStyles.quickBtnText, customSavingsTarget === p.toString() && { color: '#FFF' }]}>{p}%</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Apply Button */}
+            <TouchableOpacity
+              style={[
+                settingsStyles.applyBtn,
+                (settingsModeType === 'budgeting' && !budgetValid) && settingsStyles.applyBtnDisabled,
+                (settingsModeType === 'goals' && !goalsValid) && settingsStyles.applyBtnDisabled,
+                (settingsModeType === 'saving' && !savingsValid) && settingsStyles.applyBtnDisabled,
+              ]}
+              onPress={() => applyCustomSettings(settingsModeType)}
+              disabled={
+                (settingsModeType === 'budgeting' && !budgetValid) ||
+                (settingsModeType === 'goals' && !goalsValid) ||
+                (settingsModeType === 'saving' && !savingsValid)
+              }
+            >
+              <Text style={settingsStyles.applyBtnText}>Apply Changes</Text>
+              <Ionicons name="checkmark-circle" size={20} color="#FFF" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  // Custom Settings Modal Styles
+  const settingsStyles = StyleSheet.create({
+    backdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    container: {
+      width: '90%',
+      maxHeight: '85%',
+      backgroundColor: '#1a1a2e',
+      borderRadius: 16,
+      borderWidth: 2,
+      borderColor: '#5A5A7A',
+      overflow: 'hidden',
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingVertical: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: 'rgba(255,255,255,0.1)',
+    },
+    title: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: '#F5DEB3',
+    },
+    body: {
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+    },
+    sectionLabel: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#D4C4A8',
+      marginBottom: 10,
+      marginTop: 8,
+    },
+    section: {
+      marginTop: 4,
+    },
+    modeRow: {
+      flexDirection: 'row',
+      gap: 8,
+      marginBottom: 12,
+    },
+    modeChip: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+      paddingVertical: 10,
+      borderRadius: 10,
+      backgroundColor: 'rgba(45, 45, 68, 0.9)',
+      borderWidth: 2,
+      borderColor: '#5A5A7A',
+    },
+    modeChipActive: {
+      borderColor: '#F5DEB3',
+      backgroundColor: 'rgba(245, 222, 179, 0.15)',
+    },
+    modeChipIcon: {
+      fontSize: 16,
+    },
+    modeChipLabel: {
+      fontSize: 12,
+      color: '#888',
+      fontWeight: '600',
+    },
+    modeChipLabelActive: {
+      color: '#F5DEB3',
+    },
+    sliderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 10,
+    },
+    sliderLabel: {
+      fontSize: 14,
+      color: '#F5DEB3',
+    },
+    sliderControls: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    adjBtn: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      backgroundColor: 'rgba(90, 90, 122, 0.8)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    sliderValue: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      width: 42,
+      textAlign: 'center',
+    },
+    totalText: {
+      textAlign: 'center',
+      fontSize: 14,
+      color: '#4CAF50',
+      fontWeight: '600',
+      marginTop: 4,
+    },
+    goalRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 10,
+    },
+    goalNameInput: {
+      flex: 1,
+      backgroundColor: 'rgba(45, 45, 68, 0.9)',
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      color: '#FFF',
+      fontSize: 14,
+      borderWidth: 1,
+      borderColor: '#5A5A7A',
+    },
+    goalAmtInput: {
+      width: 80,
+      backgroundColor: 'rgba(45, 45, 68, 0.9)',
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      color: '#FFF',
+      fontSize: 14,
+      borderWidth: 1,
+      borderColor: '#5A5A7A',
+      textAlign: 'center',
+    },
+    addGoalBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      alignSelf: 'center',
+      paddingVertical: 6,
+    },
+    addGoalText: {
+      color: '#4CAF50',
+      fontSize: 13,
+    },
+    savingsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 20,
+      marginVertical: 10,
+    },
+    savingsBigValue: {
+      fontSize: 32,
+      fontWeight: 'bold',
+      color: '#F5DEB3',
+    },
+    quickRow: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 8,
+      marginTop: 8,
+    },
+    quickBtn: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 8,
+      backgroundColor: 'rgba(45, 45, 68, 0.9)',
+      borderWidth: 1,
+      borderColor: '#5A5A7A',
+    },
+    quickBtnActive: {
+      borderColor: '#F5DEB3',
+      backgroundColor: 'rgba(245, 222, 179, 0.2)',
+    },
+    quickBtnText: {
+      fontSize: 13,
+      color: '#888',
+      fontWeight: '600',
+    },
+    applyBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      marginHorizontal: 20,
+      marginVertical: 16,
+      paddingVertical: 14,
+      borderRadius: 12,
+      backgroundColor: '#4CAF50',
+    },
+    applyBtnDisabled: {
+      backgroundColor: '#555',
+      opacity: 0.5,
+    },
+    applyBtnText: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: '#FFF',
+    },
+  });
   const renderStoryIntro = () => (
     <ImageBackground
       source={require('../../../assets/Game_Graphics/menu/main_menu_bg.jpg')}
@@ -4643,15 +5126,25 @@ export default function BuildScreen() {
         <View style={styles.headerRight}>
           <Text style={styles.spendingLabel}>Today's Spending</Text>
           <Text style={styles.spendingAmount}>₱{todaySpending.toFixed(2)}</Text>
-          {/* Weekly Budget - Only show in Story Mode */}
-          {gameMode === 'story' && (
+          {/* Weekly Budget - Show in Story Mode and Custom Mode */}
+          {(gameMode === 'story' || gameMode === 'custom') && (
             <>
               <Text style={[styles.spendingLabel, { marginTop: 6 }]}>Weekly Budget</Text>
-              <Text style={[styles.spendingAmount, { 
-                color: getRemainingWeeklyBudget() < weeklyBudget * 0.2 ? '#FF4444' : '#4CAF50' 
-              }]}>
-                ₱{getRemainingWeeklyBudget().toFixed(2)}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={[styles.spendingAmount, { 
+                  color: getRemainingWeeklyBudget() < weeklyBudget * 0.2 ? '#FF4444' : '#4CAF50' 
+                }]}>
+                  ₱{getRemainingWeeklyBudget().toFixed(2)}
+                </Text>
+                {gameMode === 'custom' && (
+                  <TouchableOpacity
+                    onPress={() => { setSettingsModeType(customModeType); setShowCustomSettingsModal(true); }}
+                    style={styles.settingsGearButton}
+                  >
+                    <Ionicons name="settings-sharp" size={18} color="#F5DEB3" />
+                  </TouchableOpacity>
+                )}
+              </View>
             </>
           )}
         </View>
@@ -5418,6 +5911,9 @@ export default function BuildScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Custom Mode Settings Modal */}
+      {gameMode === 'custom' && renderCustomSettingsModal()}
 
       {/* Level Complete Modal */}
       <Modal
