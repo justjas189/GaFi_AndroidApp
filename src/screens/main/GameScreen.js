@@ -2873,8 +2873,10 @@ export default function BuildScreen() {
         if (tileX < 0 || tileX >= collisionSystem.mapWidth ||
             tileY < 0 || tileY >= collisionSystem.mapHeight) continue;
 
-        // Only render overlay for non-passable (wall) tiles
+        // Only render overlay for actual wall tiles (A3/A4 autotiles)
+        // Skip passable tiles and non-wall collision objects (furniture, desks, etc.)
         if (collisionSystem.isPassable(tileX, tileY)) continue;
+        if (!collisionSystem.isWallTile(tileX, tileY)) continue;
 
         // Calculate screen position for this tile
         const screenX = Math.round(dims.offsetX + tileX * dims.tileDisplaySize);
