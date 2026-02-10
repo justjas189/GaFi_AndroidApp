@@ -2804,6 +2804,8 @@ export default function BuildScreen() {
             borderStyle: 'dashed',
             justifyContent: 'center',
             alignItems: 'center',
+            zIndex: 1100,
+            elevation: 110,
           }}
         >
           <View style={{
@@ -2822,6 +2824,95 @@ export default function BuildScreen() {
         </View>
       );
     });
+  };
+
+  // Calculate map display dimensions to match resizeMode="contain" layout
+  const getMapDisplayDimensions = useCallback(() => {
+    if (!collisionSystem.initialized) return null;
+
+    const mapPixelWidth = collisionSystem.mapWidth * collisionSystem.tileSize;
+    const mapPixelHeight = collisionSystem.mapHeight * collisionSystem.tileSize;
+
+    const scaleX = contentSize.width / mapPixelWidth;
+    const scaleY = contentSize.height / mapPixelHeight;
+    const scale = Math.min(scaleX, scaleY);
+
+    const displayedWidth = mapPixelWidth * scale;
+    const displayedHeight = mapPixelHeight * scale;
+
+    const offsetX = (contentSize.width - displayedWidth) / 2;
+    const offsetY = (contentSize.height - displayedHeight) / 2;
+
+    const tileDisplaySize = collisionSystem.tileSize * scale;
+
+    return { scale, displayedWidth, displayedHeight, offsetX, offsetY, tileDisplaySize };
+  }, [contentSize.width, contentSize.height]);
+
+  // Render wall tile overlays above the character to prevent sprite overlapping walls
+  const renderWallOverlays = () => {
+    if (!collisionSystem.initialized || !currentMap.image) return null;
+
+    const dims = getMapDisplayDimensions();
+    if (!dims || dims.tileDisplaySize <= 0) return null;
+
+    // Get character's current tile position
+    const charTile = collisionSystem.pixelsToTiles(
+      characterPosition.x, characterPosition.y,
+      contentSize.width, contentSize.height
+    );
+
+    const overlays = [];
+    const OVERLAY_RANGE = 2; // Check tiles within 2 tiles of character
+
+    for (let dy = -OVERLAY_RANGE; dy <= OVERLAY_RANGE; dy++) {
+      for (let dx = -OVERLAY_RANGE; dx <= OVERLAY_RANGE; dx++) {
+        const tileX = charTile.x + dx;
+        const tileY = charTile.y + dy;
+
+        // Skip out-of-bounds tiles
+        if (tileX < 0 || tileX >= collisionSystem.mapWidth ||
+            tileY < 0 || tileY >= collisionSystem.mapHeight) continue;
+
+        // Only render overlay for non-passable (wall) tiles
+        if (collisionSystem.isPassable(tileX, tileY)) continue;
+
+        // Calculate screen position for this tile
+        const screenX = Math.round(dims.offsetX + tileX * dims.tileDisplaySize);
+        const screenY = Math.round(dims.offsetY + tileY * dims.tileDisplaySize);
+        const tileSize = Math.ceil(dims.tileDisplaySize) + 1; // +1 to cover subpixel rounding gaps
+
+        overlays.push(
+          <View
+            key={`wall-${tileX}-${tileY}`}
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: screenX,
+              top: screenY,
+              width: tileSize,
+              height: tileSize,
+              overflow: 'hidden',
+              zIndex: 1000,
+              elevation: 101,
+            }}
+          >
+            <Image
+              source={currentMap.image}
+              style={{
+                position: 'absolute',
+                left: -(tileX * dims.tileDisplaySize),
+                top: -(tileY * dims.tileDisplaySize),
+                width: dims.displayedWidth,
+                height: dims.displayedHeight,
+              }}
+              resizeMode="stretch"
+            />
+          </View>
+        );
+      }
+    }
+
+    return overlays;
   };
 
   // Render map content based on current map
@@ -2874,6 +2965,9 @@ export default function BuildScreen() {
 
               {/* Character with Sprite Animation */}
               {renderCharacter()}
+
+              {/* Wall tile overlays - rendered above character to prevent wall overlap */}
+              {renderWallOverlays()}
             </View>
           </TouchableWithoutFeedback>
         </ImageBackground>
