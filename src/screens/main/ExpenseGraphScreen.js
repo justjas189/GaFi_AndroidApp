@@ -1,5 +1,5 @@
 import React, { useContext, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Dimensions, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
@@ -15,15 +15,45 @@ const ExpenseGraphScreen = () => {
   const [aiInsights, setAiInsights] = useState([]);
   const [isLoadingInsights, setIsLoadingInsights] = useState(false);
 
-  const calculateStats = () => {
-    // Get current date info
+  // Month/Year navigation
+  const [viewMonth, setViewMonth] = useState(new Date().getMonth());
+  const [viewYear, setViewYear] = useState(new Date().getFullYear());
+
+  const navigateMonth = (direction) => {
+    const delta = direction === 'prev' ? -1 : 1;
+    let newMonth = viewMonth + delta;
+    let newYear = viewYear;
+    if (newMonth > 11) { newMonth = 0; newYear++; }
+    if (newMonth < 0) { newMonth = 11; newYear--; }
+    setViewMonth(newMonth);
+    setViewYear(newYear);
+  };
+
+  const canGoForward = () => {
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return viewYear < now.getFullYear() || 
+      (viewYear === now.getFullYear() && viewMonth < now.getMonth());
+  };
+
+  const getMonthLabel = () => {
+    return new Date(viewYear, viewMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  };
+
+  const resetToCurrentMonth = () => {
+    const now = new Date();
+    setViewMonth(now.getMonth());
+    setViewYear(now.getFullYear());
+  };
+
+  const calculateStats = () => {
+    // Use navigable month
+    const startOfMonth = new Date(viewYear, viewMonth, 1);
+    const endOfMonth = new Date(viewYear, viewMonth + 1, 0);
     startOfMonth.setHours(0, 0, 0, 0);
     endOfMonth.setHours(23, 59, 59, 999);
     
-    // Calculate start and end of week
+    // Calculate start and end of current week (always current for weekly)
+    const now = new Date();
     const startOfWeek = new Date(now);
     startOfWeek.setDate(now.getDate() - now.getDay());
     startOfWeek.setHours(0, 0, 0, 0);
@@ -67,17 +97,17 @@ const ExpenseGraphScreen = () => {
   };
 
   const getCurrentTrend = () => {
-    const now = new Date();
-    const lastMonth = new Date(now);
-    lastMonth.setMonth(now.getMonth() - 1);
+    // Compare selected month with the month before it
+    const prevMonth = viewMonth === 0 ? 11 : viewMonth - 1;
+    const prevYear = viewMonth === 0 ? viewYear - 1 : viewYear;
 
     const thisMonthExpenses = getExpensesByDateRange(
-      new Date(now.getFullYear(), now.getMonth(), 1),
-      now
+      new Date(viewYear, viewMonth, 1),
+      new Date(viewYear, viewMonth + 1, 0)
     );
     const lastMonthExpenses = getExpensesByDateRange(
-      new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1),
-      new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0)
+      new Date(prevYear, prevMonth, 1),
+      new Date(prevYear, prevMonth + 1, 0)
     );
 
     const thisMonthTotal = thisMonthExpenses.reduce((sum, exp) => sum + parseFloat(exp.amount), 0);
@@ -204,7 +234,7 @@ const ExpenseGraphScreen = () => {
       calculateStats();
       generateAIInsights();
     }
-  }, [expenses, budget, getExpensesByDateRange]);
+  }, [expenses, budget, getExpensesByDateRange, viewMonth, viewYear]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -214,6 +244,26 @@ const ExpenseGraphScreen = () => {
           <Text style={[styles.analyticsIndicatorText, { color: theme.colors.primary }]}>📊 AI Powered</Text>
         </View>
       </View>
+
+      {/* Month Navigation */}
+      <View style={[styles.monthNavRow, { backgroundColor: theme.colors.card }]}>
+        <TouchableOpacity
+          style={styles.monthNavButton}
+          onPress={() => navigateMonth('prev')}
+        >
+          <Ionicons name="chevron-back" size={22} color={theme.colors.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={resetToCurrentMonth}>
+          <Text style={[styles.monthNavLabel, { color: theme.colors.text }]}>{getMonthLabel()}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.monthNavButton, !canGoForward() && { opacity: 0.3 }]}
+          onPress={() => canGoForward() && navigateMonth('next')}
+          disabled={!canGoForward()}
+        >
+          <Ionicons name="chevron-forward" size={22} color={theme.colors.primary} />
+        </TouchableOpacity>
+      </View>
       
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
@@ -221,7 +271,7 @@ const ExpenseGraphScreen = () => {
             <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Monthly Overview</Text>
             <View style={[styles.monthBadge, { backgroundColor: theme.colors.primary + '15' }]}>
               <Text style={[styles.monthBadgeText, { color: theme.colors.primary }]}>
-                {new Date().toLocaleDateString('en-US', { month: 'short' })}
+                {new Date(viewYear, viewMonth).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })}
               </Text>
             </View>
           </View>
@@ -721,6 +771,27 @@ const styles = StyleSheet.create({
   },
   negativeValue: {
     color: '#FF4444',
+  },
+
+  // Month Navigation
+  monthNavRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginBottom: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    gap: 16,
+  },
+  monthNavButton: {
+    padding: 4,
+  },
+  monthNavLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
 
