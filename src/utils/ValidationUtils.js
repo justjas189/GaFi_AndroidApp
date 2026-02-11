@@ -15,7 +15,12 @@ const VALIDATION_RULES = {
     maxLength: 500
   },
   category: {
-    allowed: ['food', 'transportation', 'entertainment', 'shopping', 'utilities', 'others']
+    allowed: [
+      'food & dining', 'transport', 'shopping', 'groceries',
+      'entertainment', 'electronics', 'school supplies', 'utilities',
+      'health', 'education', 'other', 'no spend day',
+      'food', 'transportation', 'others' // legacy
+    ]
   },
   email: {
     pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -80,8 +85,8 @@ export const validateCategory = (category) => {
   const normalizedCategory = category.toLowerCase().trim();
   
   if (!VALIDATION_RULES.category.allowed.includes(normalizedCategory)) {
-    result.sanitized = 'others'; // Default fallback
-    result.errors.push(`Category '${category}' not recognized, defaulting to 'others'`);
+    result.sanitized = 'other'; // Default fallback
+    result.errors.push(`Category '${category}' not recognized, defaulting to 'other'`);
   } else {
     result.sanitized = normalizedCategory;
   }

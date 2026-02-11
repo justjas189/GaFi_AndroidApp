@@ -10,6 +10,7 @@ import {
   ScrollView,
   Platform,
   SectionList,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -39,10 +40,29 @@ const ExpenseScreen = ({ navigation, route }) => {
   const [showTimePicker, setShowTimePicker] = useState(false);
   
   // Statistics view states
-  const [selectedPeriod, setSelectedPeriod] = useState('week'); // 'week' or 'month'
+  const [selectedPeriod, setSelectedPeriod] = useState('month'); // 'all', 'week', 'month', 'year', 'custom'
   
+  // Date navigation states
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedWeekStart, setSelectedWeekStart] = useState(() => {
+    const now = new Date();
+    const day = now.getDay();
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(now);
+    monday.setDate(diff);
+    monday.setHours(0, 0, 0, 0);
+    return monday;
+  });
+  const [customStartDate, setCustomStartDate] = useState(null);
+  const [customEndDate, setCustomEndDate] = useState(null);
+  const [showCustomRangeModal, setShowCustomRangeModal] = useState(false);
+  const [showRangeStartPicker, setShowRangeStartPicker] = useState(false);
+  const [showRangeEndPicker, setShowRangeEndPicker] = useState(false);
+  const [tempStartDate, setTempStartDate] = useState(new Date());
+  const [tempEndDate, setTempEndDate] = useState(new Date());
+
   // Detailed view states
-  const [detailFilter, setDetailFilter] = useState('all'); // 'all', 'week', 'month'
   const [categoryFilter, setCategoryFilter] = useState('all'); // 'all' or specific category
 
   const categories = [
@@ -84,21 +104,40 @@ const ExpenseScreen = ({ navigation, route }) => {
       categoryTotals[cat.toLowerCase()] = 0;
     });
 
-    const now = new Date();
     let filteredExpenses = [];
+    let periodStart, periodEnd;
 
     if (selectedPeriod === 'week') {
-      const weekAgo = new Date(now);
-      weekAgo.setDate(now.getDate() - 6);
-      weekAgo.setHours(0, 0, 0, 0);
-      filteredExpenses = expenses.filter(exp => new Date(exp.date) >= weekAgo);
+      periodStart = new Date(selectedWeekStart);
+      periodStart.setHours(0, 0, 0, 0);
+      periodEnd = new Date(periodStart);
+      periodEnd.setDate(periodEnd.getDate() + 6);
+      periodEnd.setHours(23, 59, 59, 999);
+    } else if (selectedPeriod === 'month') {
+      periodStart = new Date(selectedYear, selectedMonth, 1);
+      periodStart.setHours(0, 0, 0, 0);
+      periodEnd = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59, 999);
+    } else if (selectedPeriod === 'year') {
+      periodStart = new Date(selectedYear, 0, 1);
+      periodStart.setHours(0, 0, 0, 0);
+      periodEnd = new Date(selectedYear, 11, 31, 23, 59, 59, 999);
+    } else if (selectedPeriod === 'custom' && customStartDate && customEndDate) {
+      periodStart = new Date(customStartDate);
+      periodStart.setHours(0, 0, 0, 0);
+      periodEnd = new Date(customEndDate);
+      periodEnd.setHours(23, 59, 59, 999);
     } else {
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      periodStart = null;
+      periodEnd = null;
+    }
+
+    if (periodStart && periodEnd) {
       filteredExpenses = expenses.filter(exp => {
         const expDate = new Date(exp.date);
-        return expDate >= monthStart && expDate <= monthEnd;
+        return expDate >= periodStart && expDate <= periodEnd;
       });
+    } else {
+      filteredExpenses = [...expenses];
     }
 
     filteredExpenses.forEach(expense => {
@@ -122,21 +161,20 @@ const ExpenseScreen = ({ navigation, route }) => {
         legendFontSize: 12,
       }));
 
-    const today = new Date();
     const dates = [];
     const amounts = [];
     
     if (selectedPeriod === 'week') {
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date(today);
-        date.setDate(date.getDate() - i);
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(selectedWeekStart);
+        date.setDate(date.getDate() + i);
         const dateStr = date.toISOString().split('T')[0];
         dates.push(date.toLocaleDateString('en-US', { weekday: 'short' }));
         amounts.push(dailyTotals[dateStr] || 0);
       }
-    } else {
-      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-      const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    } else if (selectedPeriod === 'month') {
+      const monthStart = new Date(selectedYear, selectedMonth, 1);
+      const monthEnd = new Date(selectedYear, selectedMonth + 1, 0);
       const totalDaysInMonth = monthEnd.getDate();
       const weeksInMonth = Math.ceil(totalDaysInMonth / 7);
       
@@ -158,6 +196,81 @@ const ExpenseScreen = ({ navigation, route }) => {
         dates.push(`${weekStart.getDate()}-${weekEnd.getDate()}`);
         amounts.push(weeklyTotal);
       }
+    } else if (selectedPeriod === 'year') {
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      for (let m = 0; m < 12; m++) {
+        const mStart = new Date(selectedYear, m, 1);
+        const mEnd = new Date(selectedYear, m + 1, 0);
+        let monthTotal = 0;
+        const currentDate = new Date(mStart);
+        while (currentDate <= mEnd) {
+          const dateStr = currentDate.toISOString().split('T')[0];
+          monthTotal += dailyTotals[dateStr] || 0;
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+        dates.push(monthNames[m]);
+        amounts.push(monthTotal);
+      }
+    } else if (selectedPeriod === 'custom' && periodStart && periodEnd) {
+      const diffDays = Math.ceil((periodEnd - periodStart) / (1000 * 60 * 60 * 24)) + 1;
+      if (diffDays <= 14) {
+        const currentDate = new Date(periodStart);
+        while (currentDate <= periodEnd) {
+          const dateStr = currentDate.toISOString().split('T')[0];
+          dates.push(currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+          amounts.push(dailyTotals[dateStr] || 0);
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+      } else if (diffDays <= 90) {
+        const currentDate = new Date(periodStart);
+        while (currentDate <= periodEnd) {
+          const weekEndDate = new Date(currentDate);
+          weekEndDate.setDate(weekEndDate.getDate() + 6);
+          if (weekEndDate > periodEnd) weekEndDate.setTime(periodEnd.getTime());
+          let weekTotal = 0;
+          const d = new Date(currentDate);
+          while (d <= weekEndDate) {
+            const dateStr = d.toISOString().split('T')[0];
+            weekTotal += dailyTotals[dateStr] || 0;
+            d.setDate(d.getDate() + 1);
+          }
+          dates.push(`${currentDate.getDate()}/${currentDate.getMonth()+1}`);
+          amounts.push(weekTotal);
+          currentDate.setDate(currentDate.getDate() + 7);
+        }
+      } else {
+        const currentDate = new Date(periodStart.getFullYear(), periodStart.getMonth(), 1);
+        while (currentDate <= periodEnd) {
+          const mEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+          let monthTotal = 0;
+          const d = new Date(Math.max(currentDate.getTime(), periodStart.getTime()));
+          const endLimit = new Date(Math.min(mEnd.getTime(), periodEnd.getTime()));
+          while (d <= endLimit) {
+            const dateStr = d.toISOString().split('T')[0];
+            monthTotal += dailyTotals[dateStr] || 0;
+            d.setDate(d.getDate() + 1);
+          }
+          dates.push(currentDate.toLocaleDateString('en-US', { month: 'short' }));
+          amounts.push(monthTotal);
+          currentDate.setMonth(currentDate.getMonth() + 1);
+        }
+      }
+    } else {
+      // 'all' - show monthly buckets for last 6 months
+      const now = new Date();
+      for (let i = 5; i >= 0; i--) {
+        const mStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const mEnd = new Date(mStart.getFullYear(), mStart.getMonth() + 1, 0);
+        let monthTotal = 0;
+        const currentDate = new Date(mStart);
+        while (currentDate <= mEnd) {
+          const dateStr = currentDate.toISOString().split('T')[0];
+          monthTotal += dailyTotals[dateStr] || 0;
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+        dates.push(mStart.toLocaleDateString('en-US', { month: 'short' }));
+        amounts.push(monthTotal);
+      }
     }
 
     return {
@@ -169,23 +282,48 @@ const ExpenseScreen = ({ navigation, route }) => {
       totalExpenses,
       filteredCount: filteredExpenses.length
     };
-  }, [expenses, selectedPeriod, theme.colors.text]);
+  }, [expenses, selectedPeriod, selectedWeekStart, selectedMonth, selectedYear, customStartDate, customEndDate, theme.colors.text]);
 
   // Group expenses by date for detailed view
   const groupedExpenses = useMemo(() => {
     let filtered = [...expenses];
-    const now = new Date();
 
-    // Apply time filter
-    if (detailFilter === 'week') {
-      const weekAgo = new Date(now);
-      weekAgo.setDate(now.getDate() - 6);
-      weekAgo.setHours(0, 0, 0, 0);
-      filtered = filtered.filter(exp => new Date(exp.date) >= weekAgo);
-    } else if (detailFilter === 'month') {
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      filtered = filtered.filter(exp => new Date(exp.date) >= monthStart);
+    // Apply time filter based on selectedPeriod and navigation states
+    if (selectedPeriod === 'week') {
+      const weekStart = new Date(selectedWeekStart);
+      weekStart.setHours(0, 0, 0, 0);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      weekEnd.setHours(23, 59, 59, 999);
+      filtered = filtered.filter(exp => {
+        const d = new Date(exp.date);
+        return d >= weekStart && d <= weekEnd;
+      });
+    } else if (selectedPeriod === 'month') {
+      const monthStart = new Date(selectedYear, selectedMonth, 1);
+      const monthEnd = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59, 999);
+      filtered = filtered.filter(exp => {
+        const d = new Date(exp.date);
+        return d >= monthStart && d <= monthEnd;
+      });
+    } else if (selectedPeriod === 'year') {
+      const yearStart = new Date(selectedYear, 0, 1);
+      const yearEnd = new Date(selectedYear, 11, 31, 23, 59, 59, 999);
+      filtered = filtered.filter(exp => {
+        const d = new Date(exp.date);
+        return d >= yearStart && d <= yearEnd;
+      });
+    } else if (selectedPeriod === 'custom' && customStartDate && customEndDate) {
+      const start = new Date(customStartDate);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(customEndDate);
+      end.setHours(23, 59, 59, 999);
+      filtered = filtered.filter(exp => {
+        const d = new Date(exp.date);
+        return d >= start && d <= end;
+      });
     }
+    // 'all' - no date filter
 
     // Apply category filter
     if (categoryFilter !== 'all') {
@@ -212,7 +350,7 @@ const ExpenseScreen = ({ navigation, route }) => {
     });
 
     return Object.values(groups);
-  }, [expenses, detailFilter, categoryFilter]);
+  }, [expenses, selectedPeriod, categoryFilter, selectedWeekStart, selectedMonth, selectedYear, customStartDate, customEndDate]);
 
   const chartConfig = {
     backgroundColor: theme.colors.background,
@@ -252,6 +390,97 @@ const ExpenseScreen = ({ navigation, route }) => {
       others: 'apps-outline'
     };
     return categoryMap[category.toLowerCase()] || 'apps-outline';
+  };
+
+  // ========== PERIOD NAVIGATION ==========
+  const navigatePeriod = (direction) => {
+    const delta = direction === 'prev' ? -1 : 1;
+    if (selectedPeriod === 'week') {
+      const newStart = new Date(selectedWeekStart);
+      newStart.setDate(newStart.getDate() + (delta * 7));
+      setSelectedWeekStart(newStart);
+    } else if (selectedPeriod === 'month') {
+      let newMonth = selectedMonth + delta;
+      let newYear = selectedYear;
+      if (newMonth > 11) { newMonth = 0; newYear++; }
+      if (newMonth < 0) { newMonth = 11; newYear--; }
+      setSelectedMonth(newMonth);
+      setSelectedYear(newYear);
+    } else if (selectedPeriod === 'year') {
+      setSelectedYear(prev => prev + delta);
+    }
+  };
+
+  const canNavigateForward = () => {
+    const now = new Date();
+    if (selectedPeriod === 'week') {
+      const weekEnd = new Date(selectedWeekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      return weekEnd < now;
+    } else if (selectedPeriod === 'month') {
+      return selectedYear < now.getFullYear() || 
+        (selectedYear === now.getFullYear() && selectedMonth < now.getMonth());
+    } else if (selectedPeriod === 'year') {
+      return selectedYear < now.getFullYear();
+    }
+    return false;
+  };
+
+  const getPeriodLabel = () => {
+    if (selectedPeriod === 'week') {
+      const start = new Date(selectedWeekStart);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 6);
+      const startStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const endStr = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      return `${startStr} - ${endStr}`;
+    } else if (selectedPeriod === 'month') {
+      return new Date(selectedYear, selectedMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    } else if (selectedPeriod === 'year') {
+      return `${selectedYear}`;
+    } else if (selectedPeriod === 'custom' && customStartDate && customEndDate) {
+      const startStr = customStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const endStr = customEndDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      return `${startStr} - ${endStr}`;
+    }
+    return 'All Time';
+  };
+
+  const resetToCurrentPeriod = () => {
+    const now = new Date();
+    setSelectedMonth(now.getMonth());
+    setSelectedYear(now.getFullYear());
+    const day = now.getDay();
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(now);
+    monday.setDate(diff);
+    monday.setHours(0, 0, 0, 0);
+    setSelectedWeekStart(monday);
+  };
+
+  const openCustomRange = () => {
+    setTempStartDate(customStartDate || new Date());
+    setTempEndDate(customEndDate || new Date());
+    setShowCustomRangeModal(true);
+  };
+
+  const applyCustomRange = () => {
+    if (tempStartDate > tempEndDate) {
+      Alert.alert('Invalid Range', 'Start date must be before end date');
+      return;
+    }
+    setCustomStartDate(new Date(tempStartDate));
+    setCustomEndDate(new Date(tempEndDate));
+    setSelectedPeriod('custom');
+    setShowCustomRangeModal(false);
+  };
+
+  const getBarChartTitle = () => {
+    if (selectedPeriod === 'week') return 'Daily Spending';
+    if (selectedPeriod === 'month') return 'Weekly Spending';
+    if (selectedPeriod === 'year') return 'Monthly Spending';
+    if (selectedPeriod === 'custom') return 'Spending Breakdown';
+    return 'Monthly Spending (Last 6 Months)';
   };
 
   const handleSave = async () => {
@@ -365,6 +594,89 @@ const ExpenseScreen = ({ navigation, route }) => {
         {formatCurrency(section.total)}
       </Text>
     </View>
+  );
+
+  // ========== CUSTOM DATE RANGE MODAL ==========
+  const renderCustomRangeModal = () => (
+    <Modal
+      visible={showCustomRangeModal}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => setShowCustomRangeModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
+          <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Custom Date Range</Text>
+          
+          <View style={styles.rangeDateRow}>
+            <Text style={[styles.rangeDateLabel, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>From</Text>
+            <TouchableOpacity
+              style={[styles.rangeDateButton, { backgroundColor: theme.colors.background }]}
+              onPress={() => setShowRangeStartPicker(true)}
+            >
+              <Ionicons name="calendar-outline" size={18} color={theme.colors.primary} />
+              <Text style={[styles.rangeDateText, { color: theme.colors.text }]}>
+                {tempStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {showRangeStartPicker && (
+            <DateTimePicker
+              value={tempStartDate}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              maximumDate={new Date()}
+              onChange={(e, date) => {
+                setShowRangeStartPicker(Platform.OS === 'ios');
+                if (date) setTempStartDate(date);
+              }}
+            />
+          )}
+
+          <View style={styles.rangeDateRow}>
+            <Text style={[styles.rangeDateLabel, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>To</Text>
+            <TouchableOpacity
+              style={[styles.rangeDateButton, { backgroundColor: theme.colors.background }]}
+              onPress={() => setShowRangeEndPicker(true)}
+            >
+              <Ionicons name="calendar-outline" size={18} color={theme.colors.primary} />
+              <Text style={[styles.rangeDateText, { color: theme.colors.text }]}>
+                {tempEndDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {showRangeEndPicker && (
+            <DateTimePicker
+              value={tempEndDate}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              maximumDate={new Date()}
+              onChange={(e, date) => {
+                setShowRangeEndPicker(Platform.OS === 'ios');
+                if (date) setTempEndDate(date);
+              }}
+            />
+          )}
+
+          <View style={styles.rangeButtonRow}>
+            <TouchableOpacity
+              style={[styles.rangeApplyButton, { backgroundColor: theme.colors.primary }]}
+              onPress={applyCustomRange}
+            >
+              <Text style={styles.rangeApplyText}>Apply Range</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.rangeCancelButton, { backgroundColor: theme.colors.background }]}
+              onPress={() => setShowCustomRangeModal(false)}
+            >
+              <Text style={[styles.rangeCancelText, { color: theme.colors.text }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 
   // ========== ADD EXPENSE FORM ==========
@@ -520,7 +832,7 @@ const ExpenseScreen = ({ navigation, route }) => {
             <View>
               <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Expenses</Text>
               <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>
-                {selectedPeriod === 'week' ? 'This Week' : 'This Month'} Overview
+                {getPeriodLabel()} Overview
               </Text>
             </View>
             <TouchableOpacity 
@@ -550,24 +862,63 @@ const ExpenseScreen = ({ navigation, route }) => {
             </View>
 
             {/* Period Selector */}
-            <View style={[styles.periodContainer, { backgroundColor: theme.colors.card }]}>
-              <TouchableOpacity
-                style={[styles.periodTab, selectedPeriod === 'week' && { backgroundColor: theme.colors.primary }]}
-                onPress={() => setSelectedPeriod('week')}
-              >
-                <Text style={[styles.periodTabText, { color: selectedPeriod === 'week' ? '#FFF' : theme.colors.text }]}>
-                  Week
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.periodTab, selectedPeriod === 'month' && { backgroundColor: theme.colors.primary }]}
-                onPress={() => setSelectedPeriod('month')}
-              >
-                <Text style={[styles.periodTabText, { color: selectedPeriod === 'month' ? '#FFF' : theme.colors.text }]}>
-                  Month
-                </Text>
-              </TouchableOpacity>
-            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.periodScrollContainer}>
+              {[
+                { key: 'all', label: 'All' },
+                { key: 'week', label: 'Week' },
+                { key: 'month', label: 'Month' },
+                { key: 'year', label: 'Year' },
+                { key: 'custom', label: 'Custom' },
+              ].map(({ key, label }) => (
+                <TouchableOpacity
+                  key={key}
+                  style={[styles.periodChip, { backgroundColor: theme.colors.card }, selectedPeriod === key && { backgroundColor: theme.colors.primary }]}
+                  onPress={() => {
+                    if (key === 'custom') {
+                      openCustomRange();
+                    } else {
+                      setSelectedPeriod(key);
+                      if (key !== 'all') resetToCurrentPeriod();
+                    }
+                  }}
+                >
+                  <Text style={[styles.periodChipText, { color: selectedPeriod === key ? '#FFF' : theme.colors.text }]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {/* Period Navigation */}
+            {(selectedPeriod === 'week' || selectedPeriod === 'month' || selectedPeriod === 'year') && (
+              <View style={[styles.periodNavRow, { backgroundColor: theme.colors.card }]}>
+                <TouchableOpacity
+                  style={styles.periodNavButton}
+                  onPress={() => navigatePeriod('prev')}
+                >
+                  <Ionicons name="chevron-back" size={22} color={theme.colors.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={resetToCurrentPeriod}>
+                  <Text style={[styles.periodNavLabel, { color: theme.colors.text }]}>{getPeriodLabel()}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.periodNavButton, !canNavigateForward() && { opacity: 0.3 }]}
+                  onPress={() => canNavigateForward() && navigatePeriod('next')}
+                  disabled={!canNavigateForward()}
+                >
+                  <Ionicons name="chevron-forward" size={22} color={theme.colors.primary} />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {selectedPeriod === 'custom' && customStartDate && customEndDate && (
+              <View style={[styles.periodNavRow, { backgroundColor: theme.colors.card }]}>
+                <Text style={[styles.periodNavLabel, { color: theme.colors.text }]}>{getPeriodLabel()}</Text>
+                <TouchableOpacity onPress={openCustomRange}>
+                  <Ionicons name="create-outline" size={18} color={theme.colors.primary} />
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* Spending by Category - Pie Chart */}
             <View style={[styles.chartCard, { backgroundColor: theme.colors.card }]}>
@@ -625,7 +976,7 @@ const ExpenseScreen = ({ navigation, route }) => {
             {/* Spending Trends - Bar Chart */}
             <View style={[styles.chartCard, { backgroundColor: theme.colors.card }]}>
               <Text style={[styles.chartTitle, { color: theme.colors.text }]}>
-                {selectedPeriod === 'week' ? 'Daily Spending' : 'Weekly Spending'}
+                {getBarChartTitle()}
               </Text>
               
               <BarChart
@@ -672,6 +1023,7 @@ const ExpenseScreen = ({ navigation, route }) => {
             <Ionicons name="add" size={28} color="#FFF" />
           </TouchableOpacity>*/}
         </View>
+        {renderCustomRangeModal()}
       </SafeAreaView>
     );
   }
@@ -703,18 +1055,59 @@ const ExpenseScreen = ({ navigation, route }) => {
           {/* Time Filter */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
             <Text style={[styles.filterLabel, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>Period:</Text>
-            {['all', 'week', 'month'].map(filter => (
+            {[
+              { key: 'all', label: 'All Time' },
+              { key: 'week', label: 'Week' },
+              { key: 'month', label: 'Month' },
+              { key: 'year', label: 'Year' },
+              { key: 'custom', label: 'Custom' },
+            ].map(({ key, label }) => (
               <TouchableOpacity
-                key={filter}
-                style={[styles.filterChip, detailFilter === filter && { backgroundColor: theme.colors.primary }]}
-                onPress={() => setDetailFilter(filter)}
+                key={key}
+                style={[styles.filterChip, selectedPeriod === key && { backgroundColor: theme.colors.primary }]}
+                onPress={() => {
+                  if (key === 'custom') {
+                    openCustomRange();
+                  } else {
+                    setSelectedPeriod(key);
+                    if (key !== 'all') resetToCurrentPeriod();
+                  }
+                }}
               >
-                <Text style={[styles.filterChipText, { color: detailFilter === filter ? '#FFF' : theme.colors.text }]}>
-                  {filter === 'all' ? 'All Time' : filter === 'week' ? 'This Week' : 'This Month'}
+                <Text style={[styles.filterChipText, { color: selectedPeriod === key ? '#FFF' : theme.colors.text }]}>
+                  {label}
                 </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
+
+          {/* Navigation for navigable periods */}
+          {(selectedPeriod === 'week' || selectedPeriod === 'month' || selectedPeriod === 'year') && (
+            <View style={styles.detailNavRow}>
+              <TouchableOpacity onPress={() => navigatePeriod('prev')}>
+                <Ionicons name="chevron-back" size={20} color={theme.colors.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={resetToCurrentPeriod}>
+                <Text style={[styles.detailNavLabel, { color: theme.colors.text }]}>{getPeriodLabel()}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[!canNavigateForward() && { opacity: 0.3 }]}
+                onPress={() => canNavigateForward() && navigatePeriod('next')}
+                disabled={!canNavigateForward()}
+              >
+                <Ionicons name="chevron-forward" size={20} color={theme.colors.primary} />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {selectedPeriod === 'custom' && customStartDate && customEndDate && (
+            <View style={styles.detailNavRow}>
+              <Text style={[styles.detailNavLabel, { color: theme.colors.text }]}>{getPeriodLabel()}</Text>
+              <TouchableOpacity onPress={openCustomRange}>
+                <Ionicons name="create-outline" size={16} color={theme.colors.primary} />
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Category Filter */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
@@ -776,6 +1169,7 @@ const ExpenseScreen = ({ navigation, route }) => {
           <Ionicons name="add" size={28} color="#FFF" />
         </TouchableOpacity>*/}
       </View>
+      {renderCustomRangeModal()}
     </SafeAreaView>
   );
 };
@@ -1219,6 +1613,125 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     fontSize: 16,
+  },
+
+  // Period Chips (scrollable)
+  periodScrollContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    gap: 8,
+  },
+  periodChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  periodChipText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Period Navigation Row
+  periodNavRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    gap: 16,
+  },
+  periodNavButton: {
+    padding: 4,
+  },
+  periodNavLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+
+  // Detail View Navigation
+  detailNavRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 8,
+    gap: 16,
+  },
+  detailNavLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+
+  // Custom Range Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '85%',
+    borderRadius: 16,
+    padding: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  rangeDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  rangeDateLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    width: 50,
+  },
+  rangeDateButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 10,
+    gap: 8,
+  },
+  rangeDateText: {
+    fontSize: 15,
+  },
+  rangeButtonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  rangeApplyButton: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  rangeApplyText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  rangeCancelButton: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  rangeCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

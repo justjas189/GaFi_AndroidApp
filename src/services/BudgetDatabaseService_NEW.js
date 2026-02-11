@@ -61,43 +61,55 @@ export class BudgetDatabaseService {
    * @returns {string} Normalized category (lowercase)
    */
   normalizeCategory(category) {
-    if (!category) return 'others';
+    if (!category) return 'other';
     
     // First normalize to lowercase
     const normalized = category.toLowerCase().trim();
     
-    // Map alternative category names to standard categories
+    // All allowed categories (matches Notebook EXPENSE_CATEGORIES + legacy names)
+    const allowedCategories = [
+      'food & dining', 'transport', 'shopping', 'groceries',
+      'entertainment', 'electronics', 'school supplies', 'utilities',
+      'health', 'education', 'other', 'no spend day',
+      // Legacy categories (for backward compatibility)
+      'food', 'transportation', 'others'
+    ];
+
+    // If already a valid category, return as-is
+    if (allowedCategories.includes(normalized)) {
+      return normalized;
+    }
+    
+    // Map alternative/shorthand names to our standard categories
     const categoryMap = {
-      // Food-related terms
-      'groceries': 'food',
-      'dining': 'food',
-      'restaurant': 'food',
-      'meals': 'food',
-      'takeout': 'food',
-      'delivery': 'food',
-      'snacks': 'food',
-      'coffee': 'food',
-      'cafe': 'food',
-      'lunch': 'food',
-      'dinner': 'food',
-      'breakfast': 'food',
-      'food': 'food',
+      // Food & Dining related
+      'dining': 'food & dining',
+      'restaurant': 'food & dining',
+      'meals': 'food & dining',
+      'takeout': 'food & dining',
+      'delivery': 'food & dining',
+      'snacks': 'food & dining',
+      'coffee': 'food & dining',
+      'cafe': 'food & dining',
+      'lunch': 'food & dining',
+      'dinner': 'food & dining',
+      'breakfast': 'food & dining',
 
-      // Transportation-related terms
-      'fuel': 'transportation',
-      'gas': 'transportation',
-      'commute': 'transportation',
-      'transport': 'transportation',
-      'bus': 'transportation',
-      'train': 'transportation',
-      'subway': 'transportation',
-      'uber': 'transportation',
-      'lyft': 'transportation',
-      'parking': 'transportation',
-      'bike': 'transportation',
-      'transit': 'transportation',
+      // Transport related
+      'fuel': 'transport',
+      'gas': 'transport',
+      'commute': 'transport',
+      'transportation': 'transport',
+      'bus': 'transport',
+      'train': 'transport',
+      'subway': 'transport',
+      'uber': 'transport',
+      'lyft': 'transport',
+      'parking': 'transport',
+      'bike': 'transport',
+      'transit': 'transport',
 
-      // Entertainment-related terms
+      // Entertainment related
       'movies': 'entertainment',
       'cinema': 'entertainment',
       'games': 'entertainment',
@@ -112,26 +124,29 @@ export class BudgetDatabaseService {
       'sports': 'entertainment',
       'gym': 'entertainment',
 
-      // Shopping-related terms
+      // Shopping related
       'clothes': 'shopping',
       'clothing': 'shopping',
-      'gadgets': 'shopping',
-      'electronics': 'shopping',
-      'books': 'shopping',
-      'textbooks': 'shopping',
-      'supplies': 'shopping',
-      'stationery': 'shopping',
       'shoes': 'shopping',
       'accessories': 'shopping',
-      'laptop': 'shopping',
-      'phone': 'shopping',
 
-      // Utilities-related terms
+      // Electronics related
+      'gadgets': 'electronics',
+      'laptop': 'electronics',
+      'phone': 'electronics',
+      'tech': 'electronics',
+
+      // School Supplies related
+      'textbooks': 'school supplies',
+      'supplies': 'school supplies',
+      'stationery': 'school supplies',
+      'books': 'school supplies',
+
+      // Utilities related
       'bills': 'utilities',
       'electricity': 'utilities',
       'water': 'utilities',
       'internet': 'utilities',
-      'phone': 'utilities',
       'rent': 'utilities',
       'housing': 'utilities',
       'gas bill': 'utilities',
@@ -140,28 +155,35 @@ export class BudgetDatabaseService {
       'cable': 'utilities',
       'heating': 'utilities',
 
-      // Others (miscellaneous) terms
-      'miscellaneous': 'others',
-      'misc': 'others',
-      'other': 'others',
-      'savings': 'others',
-      'emergency': 'others',
-      'health': 'others',
-      'medical': 'others',
-      'insurance': 'others',
-      'donation': 'others',
-      'gift': 'others',
-      'personal': 'others',
-      'miscellaneous expenses': 'others'
+      // Health related
+      'medical': 'health',
+      'medicine': 'health',
+      'pharmacy': 'health',
+      'doctor': 'health',
+      'hospital': 'health',
+      'insurance': 'health',
+
+      // Education related
+      'tuition': 'education',
+      'course': 'education',
+      'training': 'education',
+      'workshop': 'education',
+      'seminar': 'education',
+
+      // Other/miscellaneous terms
+      'miscellaneous': 'other',
+      'misc': 'other',
+      'others': 'other',
+      'savings': 'other',
+      'emergency': 'other',
+      'donation': 'other',
+      'gift': 'other',
+      'personal': 'other',
+      'miscellaneous expenses': 'other'
     };
     
-    // Return mapped category or the normalized input if no mapping exists
-    const mappedCategory = categoryMap[normalized] || normalized;
-    
-    // Validate that the category is one of our allowed categories
-    const allowedCategories = ['food', 'transportation', 'entertainment', 'shopping', 'utilities', 'others'];
-    
-    return allowedCategories.includes(mappedCategory) ? mappedCategory : 'others';
+    // Return mapped category or default to 'other'
+    return categoryMap[normalized] || 'other';
   }
 
   /**
@@ -891,7 +913,12 @@ export class BudgetDatabaseService {
 
       // Create category summary with proper allocations
       const categorySummary = [];
-      const allCategories = ['food', 'transportation', 'entertainment', 'shopping', 'utilities', 'others'];
+      const allCategories = [
+        'food & dining', 'transport', 'shopping', 'groceries',
+        'entertainment', 'electronics', 'school supplies', 'utilities',
+        'health', 'education', 'other', 'no spend day',
+        'food', 'transportation', 'others' // legacy
+      ];
       
       allCategories.forEach(categoryName => {
         const spent = categorySpending[categoryName] || 0;

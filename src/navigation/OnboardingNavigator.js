@@ -16,7 +16,7 @@ const OnboardingNavigator = () => {
       }}
     >
       <Stack.Screen name="GetStarted" component={GetStartedScreen} />
-      <Stack.Screen name="UserType" component={UserTypeScreen} />
+      {/* <Stack.Screen name="UserType" component={UserTypeScreen} /> */}
       <Stack.Screen name="BudgetGoals" component={BudgetGoalsScreen} />
     </Stack.Navigator>
   );

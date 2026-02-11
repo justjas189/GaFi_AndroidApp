@@ -9,9 +9,12 @@ export class BudgetNLPProcessor {
   constructor() {
     // Enhanced expense categories with synonyms
     this.categories = [
-      'food', 'transportation', 'entertainment', 'shopping', 
-      'utilities', 'others', 'groceries', 'dining', 'fuel',
-      'movies', 'games', 'clothes', 'gadgets', 'bills', 'health', 'education'
+      'food & dining', 'transport', 'shopping', 'groceries',
+      'entertainment', 'electronics', 'school supplies', 'utilities',
+      'health', 'education', 'other', 'no spend day',
+      // Legacy/synonym terms for NLP matching
+      'food', 'transportation', 'others', 'dining', 'fuel',
+      'movies', 'games', 'clothes', 'gadgets', 'bills'
     ];
     
     // Enhanced currency patterns for multiple formats including shorthand
@@ -753,21 +756,34 @@ export class BudgetNLPProcessor {
    * @returns {string} Normalized category (lowercase)
    */
   normalizeCategory(category) {
-    if (!category) return 'others';
+    if (!category) return 'other';
     
-    // First normalize to lowercase
     const normalized = category.toLowerCase().trim();
     
-    // Map alternative category names to standard categories
+    // All allowed categories (matches Notebook EXPENSE_CATEGORIES + legacy)
+    const allowedCategories = [
+      'food & dining', 'transport', 'shopping', 'groceries',
+      'entertainment', 'electronics', 'school supplies', 'utilities',
+      'health', 'education', 'other', 'no spend day',
+      'food', 'transportation', 'others'
+    ];
+
+    if (allowedCategories.includes(normalized)) {
+      return normalized;
+    }
+    
     const categoryMap = {
-      'groceries': 'food',
-      'dining': 'food',
-      'restaurant': 'food',
-      'meals': 'food',
-      'fuel': 'transportation',
-      'gas': 'transportation',
-      'commute': 'transportation',
-      'transport': 'transportation',
+      'dining': 'food & dining',
+      'restaurant': 'food & dining',
+      'meals': 'food & dining',
+      'takeout': 'food & dining',
+      'snacks': 'food & dining',
+      'coffee': 'food & dining',
+      'fuel': 'transport',
+      'gas': 'transport',
+      'commute': 'transport',
+      'bus': 'transport',
+      'uber': 'transport',
       'movies': 'entertainment',
       'cinema': 'entertainment',
       'games': 'entertainment',
@@ -775,25 +791,27 @@ export class BudgetNLPProcessor {
       'hobby': 'entertainment',
       'clothes': 'shopping',
       'clothing': 'shopping',
-      'gadgets': 'shopping',
-      'electronics': 'shopping',
+      'gadgets': 'electronics',
+      'laptop': 'electronics',
+      'phone': 'electronics',
+      'textbooks': 'school supplies',
+      'supplies': 'school supplies',
+      'stationery': 'school supplies',
+      'books': 'school supplies',
       'bills': 'utilities',
       'electricity': 'utilities',
       'water': 'utilities',
       'internet': 'utilities',
-      'phone': 'utilities',
-      'miscellaneous': 'others',
-      'misc': 'others',
-      'other': 'others'
+      'medical': 'health',
+      'medicine': 'health',
+      'tuition': 'education',
+      'course': 'education',
+      'miscellaneous': 'other',
+      'misc': 'other',
+      'others': 'other'
     };
     
-    // Return mapped category or the normalized input if no mapping exists
-    const mappedCategory = categoryMap[normalized] || normalized;
-    
-    // Validate that the category is one of our allowed categories
-    const allowedCategories = ['food', 'transportation', 'entertainment', 'shopping', 'utilities', 'others'];
-    
-    return allowedCategories.includes(mappedCategory) ? mappedCategory : 'others';
+    return categoryMap[normalized] || 'other';
   }
 
   /**

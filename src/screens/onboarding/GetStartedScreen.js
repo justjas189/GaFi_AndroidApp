@@ -17,7 +17,7 @@ const GetStartedScreen = ({ navigation }) => {
       if (global.setHasOnboarded) {
         global.setHasOnboarded(false);
       }
-      navigation.navigate('UserType');
+      navigation.navigate('BudgetGoals');
     } catch (error) {
       console.error('Error in GetStartedScreen:', error);
     }

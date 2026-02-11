@@ -297,6 +297,25 @@ export default function BuildScreen() {
   // Level completion results
   const [levelResults, setLevelResults] = useState(null);
   
+  // Custom Mode unlock state (locked until Level 3 completed)
+  const [customModeUnlocked, setCustomModeUnlocked] = useState(false);
+  
+  // Story completion dialogue (after Level 3 victory)
+  const [showCompletionDialogue, setShowCompletionDialogue] = useState(false);
+  const [completionPage, setCompletionPage] = useState(0);
+  const [completionDisplayedText, setCompletionDisplayedText] = useState('');
+  const [completionTypingDone, setCompletionTypingDone] = useState(false);
+  const completionTimerRef = useRef(null);
+  
+  // Completion dialogue script — concise and rewarding
+  const COMPLETION_SCRIPTS = [
+    { text: "You did it! All three levels — complete! I'm so proud of you!" },
+    { text: "You've mastered budgeting, goal setting, and saving. That's no small feat!" },
+    { text: "As a reward, I've unlocked Custom Mode for you — now you can create your own challenges!" },
+    { text: "Set your own budget rules, design savings goals, and push yourself further." },
+    { text: "This isn't the end — it's just the beginning. Keep going, financial master!" },
+  ];
+  
   // Pre-Level Introduction state (Pokémon-style dialogue)
   const [showLevelIntro, setShowLevelIntro] = useState(false);
   const [introLevel, setIntroLevel] = useState(null);
@@ -455,7 +474,7 @@ export default function BuildScreen() {
       description: 'The ultimate challenge! Save at least 30% of your weekly budget.',
       type: 'saving',
       icon: '👑',
-      savingsGoal: 0.30, // 30% savings required
+      savingsGoal: 0.40, // 30% savings required
       goalText: 'Save 30% of your budget',
     },
   };
@@ -505,13 +524,13 @@ export default function BuildScreen() {
     }
   }, [currentMapId]);
 
-  // Fetch today's spending
+  // Fetch today's spending — re-runs whenever DataContext expenses change
   useEffect(() => {
     fetchTodaySpending();
     // Hide instructions after 5 seconds
     const timer = setTimeout(() => setShowInstructions(false), 5000);
     return () => clearTimeout(timer);
-  }, []);
+  }, [expenses]);
 
   // ─── Hydrate saved game progress from Supabase on mount ────
   useEffect(() => {
@@ -527,6 +546,12 @@ export default function BuildScreen() {
         // 1. Unlocked story levels
         if (unlocked && unlocked.length > 0) {
           setUnlockedLevels(unlocked);
+        }
+
+        // 1b. Check if Custom Mode was previously unlocked
+        const cmUnlocked = await AsyncStorage.getItem(`customModeUnlocked_${user.id}`);
+        if (cmUnlocked === 'true') {
+          setCustomModeUnlocked(true);
         }
 
         // 2. Character selection
@@ -661,15 +686,20 @@ export default function BuildScreen() {
 
   const fetchTodaySpending = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      // Build start/end of today as ISO strings for range query
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
+
       const { data, error } = await supabase
         .from('expenses')
         .select('amount')
         .eq('user_id', user?.id)
-        .eq('date', today);
+        .gte('date', startOfDay)
+        .lt('date', endOfDay);
       
       if (data) {
-        const total = data.reduce((sum, expense) => sum + expense.amount, 0);
+        const total = data.reduce((sum, expense) => sum + parseFloat(expense.amount), 0);
         setTodaySpending(total);
       }
     } catch (error) {
@@ -830,6 +860,12 @@ export default function BuildScreen() {
       setUnlockedLevels([...unlockedLevels, storyLevel + 1]);
     }
     
+    // Unlock Custom Mode when Level 3 is completed successfully
+    if (gameMode === 'story' && passed && storyLevel === 3 && !customModeUnlocked) {
+      setCustomModeUnlocked(true);
+      AsyncStorage.setItem(`customModeUnlocked_${user?.id}`, 'true').catch(() => {});
+    }
+    
     setShowLevelComplete(true);
 
     // ── Persist level completion to Supabase ──
@@ -874,13 +910,13 @@ export default function BuildScreen() {
     try {
       const { data: budgetData, error } = await supabase
         .from('budgets')
-        .select('total_budget')
+        .select('monthly')
         .eq('user_id', user?.id)
         .single();
       
       let monthlyBudget = 5000; // Default fallback
-      if (budgetData?.total_budget) {
-        monthlyBudget = budgetData.total_budget;
+      if (budgetData?.monthly) {
+        monthlyBudget = budgetData.monthly;
       }
       
       // Calculate weekly budget (monthly / 4)
@@ -1241,8 +1277,7 @@ export default function BuildScreen() {
         created_at: new Date().toISOString(),
       });
       
-      // Update today's spending
-      setTodaySpending(prev => prev + amount);
+      // todaySpending is auto-refreshed via useEffect on [expenses]
       
       // Update category spending for story mode
       if (gameMode === 'story' || gameMode === 'custom') {
@@ -3001,6 +3036,11 @@ export default function BuildScreen() {
 
   // Handle menu button press
   const handleStoryMode = () => {
+    // Clear any leftover tutorial state
+    if (tutorialActive) {
+      setTutorialActive(false);
+      setTutorialStep(0);
+    }
     setGameMode('story');
     setShowStoryIntro(true); // Show level selection instead of going directly to game
   };
@@ -3095,6 +3135,11 @@ export default function BuildScreen() {
   };
 
   const handleCustomMode = () => {
+    // Clear any leftover tutorial state
+    if (tutorialActive) {
+      setTutorialActive(false);
+      setTutorialStep(0);
+    }
     // If there's already an active custom session, resume it directly
     if (gameMode === 'custom' && activeSessionId) {
       setShowMainMenu(false);
@@ -3110,13 +3155,13 @@ export default function BuildScreen() {
       // Get user's monthly budget from DataContext/Supabase
       const { data: budgetData, error } = await supabase
         .from('budgets')
-        .select('monthly_limit')
+        .select('monthly')
         .eq('user_id', user?.id)
         .single();
       
       let monthlyBudget = 5000; // Default fallback
-      if (budgetData?.monthly_limit) {
-        monthlyBudget = budgetData.monthly_limit;
+      if (budgetData?.monthly) {
+        monthlyBudget = budgetData.monthly;
       }
       
       // Calculate weekly budget (monthly / 4)
@@ -5080,6 +5125,305 @@ export default function BuildScreen() {
   });
   // ==================== END PRE-LEVEL INTRO ====================
 
+  // ==================== STORY COMPLETION DIALOGUE ====================
+  // Typewriter effect for completion dialogue
+  useEffect(() => {
+    if (!showCompletionDialogue) return;
+    if (completionPage >= COMPLETION_SCRIPTS.length) return;
+
+    const fullText = COMPLETION_SCRIPTS[completionPage].text;
+    let charIndex = 0;
+    setCompletionDisplayedText('');
+    setCompletionTypingDone(false);
+
+    completionTimerRef.current = setInterval(() => {
+      charIndex++;
+      setCompletionDisplayedText(fullText.slice(0, charIndex));
+      if (charIndex >= fullText.length) {
+        clearInterval(completionTimerRef.current);
+        completionTimerRef.current = null;
+        setCompletionTypingDone(true);
+      }
+    }, 35);
+
+    return () => {
+      if (completionTimerRef.current) {
+        clearInterval(completionTimerRef.current);
+        completionTimerRef.current = null;
+      }
+    };
+  }, [showCompletionDialogue, completionPage]);
+
+  const handleCompletionTap = () => {
+    if (!completionTypingDone) {
+      if (completionTimerRef.current) {
+        clearInterval(completionTimerRef.current);
+        completionTimerRef.current = null;
+      }
+      setCompletionDisplayedText(COMPLETION_SCRIPTS[completionPage].text);
+      setCompletionTypingDone(true);
+      return;
+    }
+    if (completionPage >= COMPLETION_SCRIPTS.length - 1) return;
+    setCompletionPage(completionPage + 1);
+  };
+
+  const handleCompletionBack = () => {
+    if (completionPage <= 0) return;
+    setCompletionPage(completionPage - 1);
+  };
+
+  const handleCompletionFinish = () => {
+    if (completionTimerRef.current) {
+      clearInterval(completionTimerRef.current);
+      completionTimerRef.current = null;
+    }
+    setShowCompletionDialogue(false);
+    setCompletionPage(0);
+    setCompletionDisplayedText('');
+    setGameMode(null);
+    setShowMainMenu(true);
+  };
+
+  const renderCompletionDialogue = () => {
+    const isLastPage = completionPage >= COMPLETION_SCRIPTS.length - 1;
+
+    return (
+      <ImageBackground
+        source={require('../../../assets/Game_Graphics/menu/main_menu_bg.jpg')}
+        style={completionStyles.background}
+        resizeMode="cover"
+      >
+        <TouchableWithoutFeedback onPress={handleCompletionTap}>
+          <View style={completionStyles.overlay}>
+            {/* Celebration badge */}
+            <View style={completionStyles.celebrationBadge}>
+              <Text style={completionStyles.celebrationEmoji}>🏆</Text>
+              <Text style={completionStyles.celebrationText}>Story Mode Complete!</Text>
+            </View>
+
+            {/* Koin character */}
+            <View style={completionStyles.characterContainer}>
+              <Image
+                source={require('../../../assets/mascot/koin_tutorial.png')}
+                style={completionStyles.characterImage}
+                resizeMode="contain"
+              />
+            </View>
+
+            {/* Dialogue box */}
+            <View style={completionStyles.dialogueContainer}>
+              <View style={completionStyles.dialogueBox}>
+                <Text style={completionStyles.dialogueText}>
+                  {completionDisplayedText}
+                  {!completionTypingDone && (
+                    <Text style={completionStyles.cursor}>▌</Text>
+                  )}
+                </Text>
+
+                <View style={completionStyles.dialogueFooter}>
+                  <TouchableOpacity
+                    onPress={handleCompletionBack}
+                    disabled={completionPage <= 0}
+                    style={[completionStyles.navButton, completionPage <= 0 && completionStyles.navButtonDisabled]}
+                    hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                  >
+                    <Ionicons name="chevron-back" size={20} color={completionPage > 0 ? '#FFD700' : '#555'} />
+                  </TouchableOpacity>
+
+                  <View style={completionStyles.dotsContainer}>
+                    {COMPLETION_SCRIPTS.map((_, i) => (
+                      <View
+                        key={i}
+                        style={[
+                          completionStyles.dot,
+                          i === completionPage && completionStyles.dotActive,
+                          i < completionPage && completionStyles.dotCompleted,
+                        ]}
+                      />
+                    ))}
+                  </View>
+
+                  {completionTypingDone && !isLastPage ? (
+                    <View style={completionStyles.advanceIndicator}>
+                      <Ionicons name="chevron-forward" size={16} color="#FFD700" />
+                      <Text style={completionStyles.tapHint}>Tap</Text>
+                    </View>
+                  ) : (
+                    <View style={completionStyles.navButton} />
+                  )}
+                </View>
+              </View>
+
+              {/* Finish button — only on last page */}
+              {isLastPage && completionTypingDone && (
+                <TouchableOpacity
+                  style={completionStyles.finishButton}
+                  onPress={handleCompletionFinish}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="trophy" size={20} color="#1a1a2e" />
+                  <Text style={completionStyles.finishButtonText}>Back to Menu</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+      </ImageBackground>
+    );
+  };
+
+  const completionStyles = StyleSheet.create({
+    background: {
+      flex: 1,
+      width: '100%',
+      height: '100%',
+    },
+    overlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      justifyContent: 'flex-end',
+      paddingBottom: 40,
+    },
+    celebrationBadge: {
+      position: 'absolute',
+      top: 30,
+      alignSelf: 'center',
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: 'rgba(45, 45, 68, 0.95)',
+      paddingHorizontal: 24,
+      paddingVertical: 10,
+      borderRadius: 24,
+      borderWidth: 2,
+      borderColor: '#FFD700',
+      gap: 10,
+    },
+    celebrationEmoji: {
+      fontSize: 22,
+    },
+    celebrationText: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: '#FFD700',
+      textShadowColor: '#000',
+      textShadowOffset: { width: 1, height: 1 },
+      textShadowRadius: 0,
+    },
+    characterContainer: {
+      alignItems: 'center',
+      marginBottom: -10,
+    },
+    characterImage: {
+      width: 220,
+      height: 220,
+    },
+    dialogueContainer: {
+      paddingHorizontal: 16,
+      alignItems: 'center',
+    },
+    dialogueBox: {
+      width: '100%',
+      backgroundColor: '#2D2D44',
+      borderWidth: 4,
+      borderTopColor: '#FFD700',
+      borderLeftColor: '#FFD700',
+      borderBottomColor: '#B8860B',
+      borderRightColor: '#B8860B',
+      paddingHorizontal: 20,
+      paddingTop: 20,
+      paddingBottom: 12,
+      minHeight: 130,
+    },
+    dialogueText: {
+      fontSize: 17,
+      color: '#FFD700',
+      lineHeight: 26,
+      fontWeight: '500',
+      textShadowColor: '#000',
+      textShadowOffset: { width: 1, height: 1 },
+      textShadowRadius: 0,
+      minHeight: 60,
+    },
+    cursor: {
+      color: '#FFD700',
+      fontSize: 17,
+    },
+    dialogueFooter: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginTop: 12,
+    },
+    navButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    navButtonDisabled: {
+      opacity: 0.3,
+    },
+    dotsContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    dot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: '#555',
+    },
+    dotActive: {
+      backgroundColor: '#FFD700',
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+    },
+    dotCompleted: {
+      backgroundColor: '#B8860B',
+    },
+    advanceIndicator: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    tapHint: {
+      fontSize: 12,
+      color: '#FFD700',
+      fontWeight: '600',
+    },
+    finishButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#FFD700',
+      paddingVertical: 14,
+      paddingHorizontal: 32,
+      borderRadius: 8,
+      marginTop: 16,
+      gap: 8,
+      borderWidth: 3,
+      borderTopColor: '#FFF8DC',
+      borderLeftColor: '#FFF8DC',
+      borderBottomColor: '#B8860B',
+      borderRightColor: '#B8860B',
+      shadowColor: '#000',
+      shadowOffset: { width: 2, height: 2 },
+      shadowOpacity: 0.4,
+      shadowRadius: 0,
+      elevation: 4,
+    },
+    finishButtonText: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: '#1a1a2e',
+    },
+  });
+  // ==================== END STORY COMPLETION DIALOGUE ====================
+
   // Render Main Menu
   const renderMainMenu = () => (
     <ImageBackground
@@ -5107,16 +5451,34 @@ export default function BuildScreen() {
 
           {/* Custom Mode Button */}
           <TouchableOpacity
-            style={[menuStyles.menuButton, menuStyles.customModeButton]}
-            onPress={handleCustomMode}
-            activeOpacity={0.7}
+            style={[
+              menuStyles.menuButton,
+              menuStyles.customModeButton,
+              !customModeUnlocked && menuStyles.lockedModeButton,
+            ]}
+            onPress={() => {
+              if (customModeUnlocked) {
+                handleCustomMode();
+              } else {
+                Alert.alert(
+                  '🔒 Locked',
+                  'Complete all 3 Story Mode levels to unlock Custom Mode!',
+                  [{ text: 'OK' }]
+                );
+              }
+            }}
+            activeOpacity={customModeUnlocked ? 0.7 : 1}
           >
             <View style={menuStyles.menuButtonIcon}>
-              <Ionicons name="compass" size={24} color="#F5DEB3" />
+              <Ionicons name={customModeUnlocked ? 'compass' : 'lock-closed'} size={24} color={customModeUnlocked ? '#F5DEB3' : '#888'} />
             </View>
             <View style={menuStyles.menuButtonContent}>
-              <Text style={menuStyles.menuButtonText}>Custom Mode</Text>
-              {/* <Text style={menuStyles.menuButtonSubtext}>Explore freely</Text> */}
+              <Text style={[menuStyles.menuButtonText, !customModeUnlocked && { color: '#888' }]}>
+                Custom Mode
+              </Text>
+              {/* {!customModeUnlocked && (
+                <Text style={{ fontSize: 11, color: '#666', marginTop: 2 }}>Complete Story Mode to unlock</Text>
+              )} */}
             </View>
           </TouchableOpacity>
 
@@ -5192,6 +5554,14 @@ export default function BuildScreen() {
       borderLeftColor: '#4A8B5C',
       borderBottomColor: '#1A3828',
       borderRightColor: '#1A3828',
+    },
+    lockedModeButton: {
+      backgroundColor: '#2A2A3A',
+      borderTopColor: '#3A3A4A',
+      borderLeftColor: '#3A3A4A',
+      borderBottomColor: '#1A1A2A',
+      borderRightColor: '#1A1A2A',
+      opacity: 0.7,
     },
     howToPlayButton: {
       backgroundColor: '#3A5A8C', // Medieval blue - RPG style
@@ -5575,6 +5945,15 @@ export default function BuildScreen() {
     },
   });
 
+  // Show Story Completion Dialogue (after Level 3 victory)
+  if (showCompletionDialogue) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        {renderCompletionDialogue()}
+      </SafeAreaView>
+    );
+  }
+
   // Show Pokémon-style Pre-Level Intro
   if (showLevelIntro && introLevel !== null) {
     return (
@@ -5618,7 +5997,15 @@ export default function BuildScreen() {
         {/* Back to Menu Button */}
         <TouchableOpacity
           style={styles.backToMenuButton}
-          onPress={() => setShowMainMenu(true)}
+          onPress={() => {
+            // Clear tutorial state if active
+            if (tutorialActive) {
+              setTutorialActive(false);
+              setTutorialStep(0);
+            }
+            setGameMode(null);
+            setShowMainMenu(true);
+          }}
         >
           <Ionicons name="home" size={20} color="#FFF" />
         </TouchableOpacity>
@@ -5814,7 +6201,7 @@ export default function BuildScreen() {
       )}
 
       {/* In-Game Koin Tutorial Overlay */}
-      {tutorialActive && (
+      {tutorialActive && gameMode === 'tutorial' && (
         <>
           {/* Semi-transparent overlay for non-highlighted areas */}
           <View style={tutorialStyles.gameOverlay} pointerEvents="box-none">
@@ -6268,8 +6655,7 @@ export default function BuildScreen() {
                         created_at: new Date().toISOString(),
                       });
 
-                      // Update today's spending
-                      setTodaySpending(prev => prev + amount);
+                      // todaySpending is auto-refreshed via useEffect on [expenses]
 
                       // Update category spending for story/custom mode
                       if (gameMode === 'story' || gameMode === 'custom') {
@@ -6496,7 +6882,7 @@ export default function BuildScreen() {
             )}
             
             <View style={{ width: '100%', gap: 12 }}>
-              {/* Next Level button - only for Story Mode */}
+              {/* Next Level button - only for Story Mode levels 1-2 */}
               {gameMode === 'story' && levelPassed && storyLevel < 3 && (
                 <TouchableOpacity
                   style={{
@@ -6509,11 +6895,36 @@ export default function BuildScreen() {
                   }}
                   onPress={() => {
                     setShowLevelComplete(false);
-                    startStoryLevel(storyLevel + 1);
+                    openLevelIntro(storyLevel + 1);
                   }}
                 >
                   <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' }}>
                     Next Level →
+                  </Text>
+                </TouchableOpacity>
+              )}
+              
+              {/* Story Complete button — Level 3 passed → triggers completion dialogue */}
+              {gameMode === 'story' && levelPassed && storyLevel === 3 && (
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: '#FFD700',
+                    paddingVertical: 16,
+                    paddingHorizontal: 24,
+                    borderRadius: 12,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  onPress={() => {
+                    setShowLevelComplete(false);
+                    setCompletionPage(0);
+                    setCompletionDisplayedText('');
+                    setCompletionTypingDone(false);
+                    setShowCompletionDialogue(true);
+                  }}
+                >
+                  <Text style={{ color: '#1a1a2e', fontSize: 16, fontWeight: 'bold' }}>
+                    ⭐ Continue
                   </Text>
                 </TouchableOpacity>
               )}

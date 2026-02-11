@@ -301,19 +301,39 @@ export const DataProvider = ({ children }) => {
   // Add a new expense
   // Helper function to normalize category names
   const normalizeCategory = (category) => {
-    if (!category) return 'others';
+    if (!category) return 'other';
     
     const normalized = category.toLowerCase().trim();
     
+    // All allowed categories (matches Notebook EXPENSE_CATEGORIES + legacy names)
+    const allowedCategories = [
+      'food & dining', 'transport', 'shopping', 'groceries',
+      'entertainment', 'electronics', 'school supplies', 'utilities',
+      'health', 'education', 'other', 'no spend day',
+      // Legacy categories (for backward compatibility)
+      'food', 'transportation', 'others'
+    ];
+
+    // If already a valid category, return as-is
+    if (allowedCategories.includes(normalized)) {
+      return normalized;
+    }
+    
+    // Map alternative/shorthand names to standard categories
     const categoryMap = {
-      'groceries': 'food',
-      'dining': 'food',
-      'restaurant': 'food',
-      'meals': 'food',
-      'fuel': 'transportation',
-      'gas': 'transportation',
-      'commute': 'transportation',
-      'transport': 'transportation',
+      'dining': 'food & dining',
+      'restaurant': 'food & dining',
+      'meals': 'food & dining',
+      'takeout': 'food & dining',
+      'snacks': 'food & dining',
+      'coffee': 'food & dining',
+      'cafe': 'food & dining',
+      'fuel': 'transport',
+      'gas': 'transport',
+      'commute': 'transport',
+      'transportation': 'transport',
+      'bus': 'transport',
+      'uber': 'transport',
       'movies': 'entertainment',
       'cinema': 'entertainment',
       'games': 'entertainment',
@@ -321,22 +341,30 @@ export const DataProvider = ({ children }) => {
       'hobby': 'entertainment',
       'clothes': 'shopping',
       'clothing': 'shopping',
-      'gadgets': 'shopping',
-      'electronics': 'shopping',
+      'shoes': 'shopping',
+      'gadgets': 'electronics',
+      'laptop': 'electronics',
+      'phone': 'electronics',
+      'textbooks': 'school supplies',
+      'supplies': 'school supplies',
+      'stationery': 'school supplies',
+      'books': 'school supplies',
       'bills': 'utilities',
       'electricity': 'utilities',
       'water': 'utilities',
       'internet': 'utilities',
-      'phone': 'utilities',
-      'miscellaneous': 'others',
-      'misc': 'others',
-      'other': 'others'
+      'rent': 'utilities',
+      'medical': 'health',
+      'medicine': 'health',
+      'doctor': 'health',
+      'tuition': 'education',
+      'course': 'education',
+      'miscellaneous': 'other',
+      'misc': 'other',
+      'others': 'other'
     };
     
-    const mappedCategory = categoryMap[normalized] || normalized;
-    const allowedCategories = ['food', 'transportation', 'entertainment', 'shopping', 'utilities', 'others'];
-    
-    return allowedCategories.includes(mappedCategory) ? mappedCategory : 'others';
+    return categoryMap[normalized] || 'other';
   };
 
   const addExpense = async (expense) => {
