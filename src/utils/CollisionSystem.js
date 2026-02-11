@@ -386,6 +386,37 @@ class CollisionSystem {
   }
 
   /**
+   * Check if a tile position contains wall-type autotiles (A3/A4)
+   * Used to distinguish actual walls from furniture/objects with collision.
+   *
+   * RPG Maker MZ tile ID ranges:
+   *   A3 (wall tops/buildings): 4352 - 5887
+   *   A4 (wall surfaces):       5888 - 8191
+   *   B-E (decorations/furniture): 0 - 1535
+   *   A5 (simple ground):       1536 - 1663
+   *   A1 (animated):            2048 - 2815
+   *   A2 (ground):              2816 - 4351
+   */
+  isWallTile(x, y) {
+    if (x < 0 || x >= this.mapWidth || y < 0 || y >= this.mapHeight) return false;
+    if (!this.mapData) return false;
+
+    const baseIndex = this.coordsToIndex(x, y);
+    const layerSize = this.mapWidth * this.mapHeight;
+    const numLayers = Math.floor(this.mapData.length / layerSize);
+
+    for (let layer = 0; layer < numLayers; layer++) {
+      const index = baseIndex + (layer * layerSize);
+      const tileId = this.mapData[index];
+      // A3 and A4 autotiles are wall tiles
+      if (tileId >= 4352 && tileId <= 8191) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Debug: Print passability map to console
    */
   debugPrintPassabilityMap() {

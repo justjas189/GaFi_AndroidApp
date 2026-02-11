@@ -297,12 +297,51 @@ export default function BuildScreen() {
   // Level completion results
   const [levelResults, setLevelResults] = useState(null);
   
+  // Pre-Level Introduction state (Pokémon-style dialogue)
+  const [showLevelIntro, setShowLevelIntro] = useState(false);
+  const [introLevel, setIntroLevel] = useState(null);
+  const [introPage, setIntroPage] = useState(0);
+  const [introDisplayedText, setIntroDisplayedText] = useState('');
+  const [introTypingDone, setIntroTypingDone] = useState(false);
+  const introTimerRef = useRef(null);
+  
+  // Level intro dialogue scripts — each level gets multiple pages
+  const LEVEL_INTRO_SCRIPTS = {
+    1: [
+      { text: "Hey there, adventurer! I'm Koin, your financial buddy!" },
+      { text: "Welcome to Level 1: Budget Basics! This is where your journey begins." },
+      { text: "You'll learn the 50/30/20 rule — the golden rule of budgeting!" },
+      { text: "50% of your budget goes to Needs — food, transport, school supplies..." },
+      { text: "30% goes to Wants — shopping, entertainment, electronics..." },
+      { text: "And 20% should be saved! That's the secret to building wealth." },
+      { text: "You have 7 days. Stay within the budget limits, and you'll pass this level. Good luck!" },
+    ],
+    2: [
+      { text: "You made it to Level 2! I knew you had it in you!" },
+      { text: "This time, we're learning about Goal Setting!" },
+      { text: "I'll give you three savings goals: Emergency Fund, Fun Money, and Future Savings." },
+      { text: "Your mission? Allocate money towards these goals throughout the week." },
+      { text: "You need to reach at least 80% of your target to pass!" },
+      { text: "Remember, every peso saved is a step toward your dreams. Let's go!" },
+    ],
+    3: [
+      { text: "Welcome to the final challenge... Level 3: Super Saver!" },
+      { text: "You've learned budgeting. You've learned goal setting. Now it's time for the ultimate test." },
+      { text: "Your mission: Save at least 30% of your weekly budget!" },
+      { text: "This means spending wisely and resisting unnecessary purchases." },
+      { text: "Think before every spend — do you NEED it, or just WANT it?" },
+      { text: "Complete this, and you'll truly be a financial master. I believe in you!" },
+    ],
+  };
+  
   // Custom Mode state
   const [showCustomSetup, setShowCustomSetup] = useState(false);
   const [customModeType, setCustomModeType] = useState(null); // 'budgeting', 'goals', 'saving'
   const [customBudgetRules, setCustomBudgetRules] = useState({ needs: 50, wants: 30, savings: 20 });
   const [customGoals, setCustomGoals] = useState([{ name: '', target: '' }]);
   const [customSavingsTarget, setCustomSavingsTarget] = useState('20');
+  const [showCustomSettingsModal, setShowCustomSettingsModal] = useState(false);
+  const [settingsModeType, setSettingsModeType] = useState(null); // tracks which type is selected inside the settings modal
   
   // Character Animation State
   const [selectedCharacter, setSelectedCharacter] = useState('girl'); // 'girl', 'jasper', 'businessman', 'businesswoman'
@@ -1867,6 +1906,14 @@ export default function BuildScreen() {
       fontWeight: 'bold',
       color: '#FF9800',
     },
+    settingsGearButton: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: 'rgba(90, 90, 122, 0.8)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
     locationBadge: {
       position: 'absolute',
       top: 70,
@@ -2757,6 +2804,8 @@ export default function BuildScreen() {
             borderStyle: 'dashed',
             justifyContent: 'center',
             alignItems: 'center',
+            zIndex: 1100,
+            elevation: 110,
           }}
         >
           <View style={{
@@ -2775,6 +2824,97 @@ export default function BuildScreen() {
         </View>
       );
     });
+  };
+
+  // Calculate map display dimensions to match resizeMode="contain" layout
+  const getMapDisplayDimensions = useCallback(() => {
+    if (!collisionSystem.initialized) return null;
+
+    const mapPixelWidth = collisionSystem.mapWidth * collisionSystem.tileSize;
+    const mapPixelHeight = collisionSystem.mapHeight * collisionSystem.tileSize;
+
+    const scaleX = contentSize.width / mapPixelWidth;
+    const scaleY = contentSize.height / mapPixelHeight;
+    const scale = Math.min(scaleX, scaleY);
+
+    const displayedWidth = mapPixelWidth * scale;
+    const displayedHeight = mapPixelHeight * scale;
+
+    const offsetX = (contentSize.width - displayedWidth) / 2;
+    const offsetY = (contentSize.height - displayedHeight) / 2;
+
+    const tileDisplaySize = collisionSystem.tileSize * scale;
+
+    return { scale, displayedWidth, displayedHeight, offsetX, offsetY, tileDisplaySize };
+  }, [contentSize.width, contentSize.height]);
+
+  // Render wall tile overlays above the character to prevent sprite overlapping walls
+  const renderWallOverlays = () => {
+    if (!collisionSystem.initialized || !currentMap.image) return null;
+
+    const dims = getMapDisplayDimensions();
+    if (!dims || dims.tileDisplaySize <= 0) return null;
+
+    // Get character's current tile position
+    const charTile = collisionSystem.pixelsToTiles(
+      characterPosition.x, characterPosition.y,
+      contentSize.width, contentSize.height
+    );
+
+    const overlays = [];
+    const OVERLAY_RANGE = 2; // Check tiles within 2 tiles of character
+
+    for (let dy = -OVERLAY_RANGE; dy <= OVERLAY_RANGE; dy++) {
+      for (let dx = -OVERLAY_RANGE; dx <= OVERLAY_RANGE; dx++) {
+        const tileX = charTile.x + dx;
+        const tileY = charTile.y + dy;
+
+        // Skip out-of-bounds tiles
+        if (tileX < 0 || tileX >= collisionSystem.mapWidth ||
+            tileY < 0 || tileY >= collisionSystem.mapHeight) continue;
+
+        // Only render overlay for actual wall tiles (A3/A4 autotiles)
+        // Skip passable tiles and non-wall collision objects (furniture, desks, etc.)
+        if (collisionSystem.isPassable(tileX, tileY)) continue;
+        if (!collisionSystem.isWallTile(tileX, tileY)) continue;
+
+        // Calculate screen position for this tile
+        const screenX = Math.round(dims.offsetX + tileX * dims.tileDisplaySize);
+        const screenY = Math.round(dims.offsetY + tileY * dims.tileDisplaySize);
+        const tileSize = Math.ceil(dims.tileDisplaySize) + 1; // +1 to cover subpixel rounding gaps
+
+        overlays.push(
+          <View
+            key={`wall-${tileX}-${tileY}`}
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: screenX,
+              top: screenY,
+              width: tileSize,
+              height: tileSize,
+              overflow: 'hidden',
+              zIndex: 1000,
+              elevation: 101,
+            }}
+          >
+            <Image
+              source={currentMap.image}
+              style={{
+                position: 'absolute',
+                left: -(tileX * dims.tileDisplaySize),
+                top: -(tileY * dims.tileDisplaySize),
+                width: dims.displayedWidth,
+                height: dims.displayedHeight,
+              }}
+              resizeMode="stretch"
+            />
+          </View>
+        );
+      }
+    }
+
+    return overlays;
   };
 
   // Render map content based on current map
@@ -2827,6 +2967,9 @@ export default function BuildScreen() {
 
               {/* Character with Sprite Animation */}
               {renderCharacter()}
+
+              {/* Wall tile overlays - rendered above character to prevent wall overlap */}
+              {renderWallOverlays()}
             </View>
           </TouchableWithoutFeedback>
         </ImageBackground>
@@ -2862,7 +3005,101 @@ export default function BuildScreen() {
     setShowStoryIntro(true); // Show level selection instead of going directly to game
   };
 
+  // Open the Pokémon-style pre-level intro for a given level
+  const openLevelIntro = (level) => {
+    setIntroLevel(level);
+    setIntroPage(0);
+    setIntroDisplayedText('');
+    setIntroTypingDone(false);
+    setShowLevelIntro(true);
+  };
+
+  // Typewriter effect — run whenever introPage or showLevelIntro changes
+  useEffect(() => {
+    if (!showLevelIntro || introLevel === null) return;
+    const scripts = LEVEL_INTRO_SCRIPTS[introLevel];
+    if (!scripts || introPage >= scripts.length) return;
+
+    const fullText = scripts[introPage].text;
+    let charIndex = 0;
+    setIntroDisplayedText('');
+    setIntroTypingDone(false);
+
+    introTimerRef.current = setInterval(() => {
+      charIndex++;
+      setIntroDisplayedText(fullText.slice(0, charIndex));
+      if (charIndex >= fullText.length) {
+        clearInterval(introTimerRef.current);
+        introTimerRef.current = null;
+        setIntroTypingDone(true);
+      }
+    }, 35); // 35ms per character — snappy but readable
+
+    return () => {
+      if (introTimerRef.current) {
+        clearInterval(introTimerRef.current);
+        introTimerRef.current = null;
+      }
+    };
+  }, [showLevelIntro, introLevel, introPage]);
+
+  // Handle tap on the intro dialogue
+  const handleIntroTap = () => {
+    const scripts = LEVEL_INTRO_SCRIPTS[introLevel];
+    if (!scripts) return;
+
+    // If still typing, skip to full text
+    if (!introTypingDone) {
+      if (introTimerRef.current) {
+        clearInterval(introTimerRef.current);
+        introTimerRef.current = null;
+      }
+      setIntroDisplayedText(scripts[introPage].text);
+      setIntroTypingDone(true);
+      return;
+    }
+
+    // If on last page, do nothing (user must press Start Level)
+    if (introPage >= scripts.length - 1) return;
+
+    // Advance to next page
+    setIntroPage(introPage + 1);
+  };
+
+  // Go back one dialogue page
+  const handleIntroBack = () => {
+    if (introPage <= 0) return;
+    setIntroPage(introPage - 1);
+  };
+
+  // Close intro and start the actual level
+  const handleIntroStartLevel = () => {
+    const level = introLevel;
+    setShowLevelIntro(false);
+    setIntroLevel(null);
+    setIntroPage(0);
+    setIntroDisplayedText('');
+    startStoryLevel(level);
+  };
+
+  // Close intro and go back to level select
+  const handleIntroClose = () => {
+    if (introTimerRef.current) {
+      clearInterval(introTimerRef.current);
+      introTimerRef.current = null;
+    }
+    setShowLevelIntro(false);
+    setIntroLevel(null);
+    setIntroPage(0);
+    setIntroDisplayedText('');
+  };
+
   const handleCustomMode = () => {
+    // If there's already an active custom session, resume it directly
+    if (gameMode === 'custom' && activeSessionId) {
+      setShowMainMenu(false);
+      return;
+    }
     setShowCustomSetup(true);
     setShowMainMenu(false);
   };
@@ -2974,7 +3211,475 @@ export default function BuildScreen() {
     }
   };
 
-  // Render Story Mode Intro / Level Selection
+  // Apply settings changes from the Custom Settings modal (mid-game edits)
+  const applyCustomSettings = (newModeType) => {
+    // If user is changing the challenge type entirely, reconfigure state
+    if (newModeType !== customModeType) {
+      setCustomModeType(newModeType);
+
+      if (newModeType === 'budgeting') {
+        const needsPercent = customBudgetRules.needs / 100;
+        const wantsPercent = customBudgetRules.wants / 100;
+        const savingsPercent = customBudgetRules.savings / 100;
+        setBudgetCategories({
+          needs: { budget: weeklyBudget * needsPercent, spent: budgetCategories.needs?.spent || 0 },
+          wants: { budget: weeklyBudget * wantsPercent, spent: budgetCategories.wants?.spent || 0 },
+          savings: { budget: weeklyBudget * savingsPercent, spent: 0 },
+        });
+        setStoryLevel(1);
+      } else if (newModeType === 'goals') {
+        const goals = customGoals
+          .filter(g => g.name.trim() && parseFloat(g.target) > 0)
+          .map((g, index) => ({
+            id: `custom_${index}`,
+            name: g.name.trim(),
+            icon: ['🎯', '💎', '🌟', '🎁', '✨'][index % 5],
+            target: parseFloat(g.target) || 0,
+          }));
+        if (goals.length > 0) {
+          setSavingsGoals(goals);
+          const allocations = {};
+          goals.forEach(g => { allocations[g.id] = 0; });
+          setGoalAllocations(allocations);
+        }
+        setStoryLevel(2);
+      } else if (newModeType === 'saving') {
+        setStoryLevel(3);
+      }
+    } else {
+      // Same mode type — user only edited values (percentages, goals, savings target)
+      if (newModeType === 'budgeting') {
+        const needsPercent = customBudgetRules.needs / 100;
+        const wantsPercent = customBudgetRules.wants / 100;
+        const savingsPercent = customBudgetRules.savings / 100;
+        setBudgetCategories(prev => ({
+          needs: { budget: weeklyBudget * needsPercent, spent: prev.needs?.spent || 0 },
+          wants: { budget: weeklyBudget * wantsPercent, spent: prev.wants?.spent || 0 },
+          savings: { budget: weeklyBudget * savingsPercent, spent: 0 },
+        }));
+      } else if (newModeType === 'goals') {
+        const goals = customGoals
+          .filter(g => g.name.trim() && parseFloat(g.target) > 0)
+          .map((g, index) => ({
+            id: `custom_${index}`,
+            name: g.name.trim(),
+            icon: ['🎯', '💎', '🌟', '🎁', '✨'][index % 5],
+            target: parseFloat(g.target) || 0,
+          }));
+        if (goals.length > 0) {
+          setSavingsGoals(goals);
+          // Preserve existing allocations where possible
+          const allocations = {};
+          goals.forEach(g => { allocations[g.id] = goalAllocations[g.id] || 0; });
+          setGoalAllocations(allocations);
+        }
+      }
+      // For 'saving', customSavingsTarget is already updated via state
+    }
+
+    setShowCustomSettingsModal(false);
+    console.log(`⚙️ Custom settings applied: mode=${newModeType}`);
+  };
+
+  // Render Custom Settings Modal (in-game settings for Custom Mode)
+  const renderCustomSettingsModal = () => {
+    const budgetTotal = customBudgetRules.needs + customBudgetRules.wants + customBudgetRules.savings;
+    const budgetValid = budgetTotal === 100;
+    const goalsValid = customGoals.some(g => g.name.trim() && parseFloat(g.target) > 0);
+    const savingsValid = parseFloat(customSavingsTarget) > 0 && parseFloat(customSavingsTarget) <= 100;
+
+    return (
+      <Modal
+        visible={showCustomSettingsModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowCustomSettingsModal(false)}
+      >
+        <View style={settingsStyles.backdrop}>
+          <View style={settingsStyles.container}>
+            {/* Header */}
+            <View style={settingsStyles.header}>
+              <Text style={settingsStyles.title}>⚙️ Custom Settings</Text>
+              <TouchableOpacity onPress={() => setShowCustomSettingsModal(false)}>
+                <Ionicons name="close" size={24} color="#F5DEB3" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={settingsStyles.body} showsVerticalScrollIndicator={false}>
+              {/* Mode Selector */}
+              <Text style={settingsStyles.sectionLabel}>Challenge Type</Text>
+              <View style={settingsStyles.modeRow}>
+                {[
+                  { key: 'budgeting', icon: '📊', label: 'Budgeting' },
+                  { key: 'goals', icon: '🎯', label: 'Goals' },
+                  { key: 'saving', icon: '💰', label: 'Saving' },
+                ].map(m => (
+                  <TouchableOpacity
+                    key={m.key}
+                    style={[
+                      settingsStyles.modeChip,
+                      settingsModeType === m.key && settingsStyles.modeChipActive,
+                    ]}
+                    onPress={() => setSettingsModeType(m.key)}
+                  >
+                    <Text style={settingsStyles.modeChipIcon}>{m.icon}</Text>
+                    <Text style={[
+                      settingsStyles.modeChipLabel,
+                      settingsModeType === m.key && settingsStyles.modeChipLabelActive,
+                    ]}>{m.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Budgeting Settings */}
+              {settingsModeType === 'budgeting' && (
+                <View style={settingsStyles.section}>
+                  <Text style={settingsStyles.sectionLabel}>Budget Split</Text>
+                  {[
+                    { key: 'needs', label: '🏠 Needs', color: '#4CAF50' },
+                    { key: 'wants', label: '🎮 Wants', color: '#FF9800' },
+                    { key: 'savings', label: '💰 Savings', color: '#3498DB' },
+                  ].map(cat => (
+                    <View key={cat.key} style={settingsStyles.sliderRow}>
+                      <Text style={settingsStyles.sliderLabel}>{cat.label}</Text>
+                      <View style={settingsStyles.sliderControls}>
+                        <TouchableOpacity
+                          style={settingsStyles.adjBtn}
+                          onPress={() => setCustomBudgetRules(prev => ({ ...prev, [cat.key]: Math.max(0, prev[cat.key] - 5) }))}
+                        >
+                          <Ionicons name="remove" size={16} color="#FFF" />
+                        </TouchableOpacity>
+                        <Text style={[settingsStyles.sliderValue, { color: cat.color }]}>{customBudgetRules[cat.key]}%</Text>
+                        <TouchableOpacity
+                          style={settingsStyles.adjBtn}
+                          onPress={() => setCustomBudgetRules(prev => ({ ...prev, [cat.key]: Math.min(100, prev[cat.key] + 5) }))}
+                        >
+                          <Ionicons name="add" size={16} color="#FFF" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                  <Text style={[settingsStyles.totalText, !budgetValid && { color: '#FF4444' }]}>
+                    Total: {budgetTotal}% {budgetValid ? '✅' : `(${budgetTotal < 100 ? 'need ' + (100 - budgetTotal) + '% more' : (budgetTotal - 100) + '% over'})`}
+                  </Text>
+                </View>
+              )}
+
+              {/* Goals Settings */}
+              {settingsModeType === 'goals' && (
+                <View style={settingsStyles.section}>
+                  <Text style={settingsStyles.sectionLabel}>Savings Goals</Text>
+                  {customGoals.map((goal, index) => (
+                    <View key={index} style={settingsStyles.goalRow}>
+                      <TextInput
+                        style={settingsStyles.goalNameInput}
+                        placeholder="Goal name"
+                        placeholderTextColor="#666"
+                        value={goal.name}
+                        onChangeText={(text) => {
+                          const g = [...customGoals];
+                          g[index].name = text;
+                          setCustomGoals(g);
+                        }}
+                      />
+                      <TextInput
+                        style={settingsStyles.goalAmtInput}
+                        placeholder="₱"
+                        placeholderTextColor="#666"
+                        keyboardType="numeric"
+                        value={goal.target}
+                        onChangeText={(text) => {
+                          const g = [...customGoals];
+                          g[index].target = text.replace(/[^0-9.]/g, '');
+                          setCustomGoals(g);
+                        }}
+                      />
+                      {customGoals.length > 1 && (
+                        <TouchableOpacity onPress={() => setCustomGoals(customGoals.filter((_, i) => i !== index))}>
+                          <Ionicons name="close-circle" size={22} color="#E74C3C" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ))}
+                  {customGoals.length < 5 && (
+                    <TouchableOpacity
+                      style={settingsStyles.addGoalBtn}
+                      onPress={() => setCustomGoals([...customGoals, { name: '', target: '' }])}
+                    >
+                      <Ionicons name="add-circle" size={18} color="#4CAF50" />
+                      <Text style={settingsStyles.addGoalText}>Add Goal</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
+              {/* Saving Settings */}
+              {settingsModeType === 'saving' && (
+                <View style={settingsStyles.section}>
+                  <Text style={settingsStyles.sectionLabel}>Savings Target</Text>
+                  <View style={settingsStyles.savingsRow}>
+                    <TouchableOpacity
+                      style={settingsStyles.adjBtn}
+                      onPress={() => setCustomSavingsTarget(prev => Math.max(5, parseInt(prev) - 5).toString())}
+                    >
+                      <Ionicons name="remove" size={20} color="#FFF" />
+                    </TouchableOpacity>
+                    <Text style={settingsStyles.savingsBigValue}>{customSavingsTarget}%</Text>
+                    <TouchableOpacity
+                      style={settingsStyles.adjBtn}
+                      onPress={() => setCustomSavingsTarget(prev => Math.min(80, parseInt(prev) + 5).toString())}
+                    >
+                      <Ionicons name="add" size={20} color="#FFF" />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={settingsStyles.quickRow}>
+                    {[10, 20, 30, 40, 50].map(p => (
+                      <TouchableOpacity
+                        key={p}
+                        style={[settingsStyles.quickBtn, customSavingsTarget === p.toString() && settingsStyles.quickBtnActive]}
+                        onPress={() => setCustomSavingsTarget(p.toString())}
+                      >
+                        <Text style={[settingsStyles.quickBtnText, customSavingsTarget === p.toString() && { color: '#FFF' }]}>{p}%</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Apply Button */}
+            <TouchableOpacity
+              style={[
+                settingsStyles.applyBtn,
+                (settingsModeType === 'budgeting' && !budgetValid) && settingsStyles.applyBtnDisabled,
+                (settingsModeType === 'goals' && !goalsValid) && settingsStyles.applyBtnDisabled,
+                (settingsModeType === 'saving' && !savingsValid) && settingsStyles.applyBtnDisabled,
+              ]}
+              onPress={() => applyCustomSettings(settingsModeType)}
+              disabled={
+                (settingsModeType === 'budgeting' && !budgetValid) ||
+                (settingsModeType === 'goals' && !goalsValid) ||
+                (settingsModeType === 'saving' && !savingsValid)
+              }
+            >
+              <Text style={settingsStyles.applyBtnText}>Apply Changes</Text>
+              <Ionicons name="checkmark-circle" size={20} color="#FFF" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  // Custom Settings Modal Styles
+  const settingsStyles = StyleSheet.create({
+    backdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    container: {
+      width: '90%',
+      maxHeight: '85%',
+      backgroundColor: '#1a1a2e',
+      borderRadius: 16,
+      borderWidth: 2,
+      borderColor: '#5A5A7A',
+      overflow: 'hidden',
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingVertical: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: 'rgba(255,255,255,0.1)',
+    },
+    title: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: '#F5DEB3',
+    },
+    body: {
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+    },
+    sectionLabel: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#D4C4A8',
+      marginBottom: 10,
+      marginTop: 8,
+    },
+    section: {
+      marginTop: 4,
+    },
+    modeRow: {
+      flexDirection: 'row',
+      gap: 8,
+      marginBottom: 12,
+    },
+    modeChip: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+      paddingVertical: 10,
+      borderRadius: 10,
+      backgroundColor: 'rgba(45, 45, 68, 0.9)',
+      borderWidth: 2,
+      borderColor: '#5A5A7A',
+    },
+    modeChipActive: {
+      borderColor: '#F5DEB3',
+      backgroundColor: 'rgba(245, 222, 179, 0.15)',
+    },
+    modeChipIcon: {
+      fontSize: 16,
+    },
+    modeChipLabel: {
+      fontSize: 12,
+      color: '#888',
+      fontWeight: '600',
+    },
+    modeChipLabelActive: {
+      color: '#F5DEB3',
+    },
+    sliderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 10,
+    },
+    sliderLabel: {
+      fontSize: 14,
+      color: '#F5DEB3',
+    },
+    sliderControls: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    adjBtn: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      backgroundColor: 'rgba(90, 90, 122, 0.8)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    sliderValue: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      width: 42,
+      textAlign: 'center',
+    },
+    totalText: {
+      textAlign: 'center',
+      fontSize: 14,
+      color: '#4CAF50',
+      fontWeight: '600',
+      marginTop: 4,
+    },
+    goalRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 10,
+    },
+    goalNameInput: {
+      flex: 1,
+      backgroundColor: 'rgba(45, 45, 68, 0.9)',
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      color: '#FFF',
+      fontSize: 14,
+      borderWidth: 1,
+      borderColor: '#5A5A7A',
+    },
+    goalAmtInput: {
+      width: 80,
+      backgroundColor: 'rgba(45, 45, 68, 0.9)',
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      color: '#FFF',
+      fontSize: 14,
+      borderWidth: 1,
+      borderColor: '#5A5A7A',
+      textAlign: 'center',
+    },
+    addGoalBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      alignSelf: 'center',
+      paddingVertical: 6,
+    },
+    addGoalText: {
+      color: '#4CAF50',
+      fontSize: 13,
+    },
+    savingsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 20,
+      marginVertical: 10,
+    },
+    savingsBigValue: {
+      fontSize: 32,
+      fontWeight: 'bold',
+      color: '#F5DEB3',
+    },
+    quickRow: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 8,
+      marginTop: 8,
+    },
+    quickBtn: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 8,
+      backgroundColor: 'rgba(45, 45, 68, 0.9)',
+      borderWidth: 1,
+      borderColor: '#5A5A7A',
+    },
+    quickBtnActive: {
+      borderColor: '#F5DEB3',
+      backgroundColor: 'rgba(245, 222, 179, 0.2)',
+    },
+    quickBtnText: {
+      fontSize: 13,
+      color: '#888',
+      fontWeight: '600',
+    },
+    applyBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      marginHorizontal: 20,
+      marginVertical: 16,
+      paddingVertical: 14,
+      borderRadius: 12,
+      backgroundColor: '#4CAF50',
+    },
+    applyBtnDisabled: {
+      backgroundColor: '#555',
+      opacity: 0.5,
+    },
+    applyBtnText: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: '#FFF',
+    },
+  });
   const renderStoryIntro = () => (
     <ImageBackground
       source={require('../../../assets/Game_Graphics/menu/main_menu_bg.jpg')}
@@ -3012,7 +3717,7 @@ export default function BuildScreen() {
                   storyStyles.levelButton,
                   isUnlocked ? storyStyles.levelUnlocked : storyStyles.levelLocked,
                 ]}
-                onPress={() => isUnlocked && startStoryLevel(level)}
+                onPress={() => isUnlocked && openLevelIntro(level)}
                 activeOpacity={isUnlocked ? 0.7 : 1}
                 disabled={!isUnlocked}
               >
@@ -4101,6 +4806,280 @@ export default function BuildScreen() {
     },
   });
 
+  // ==================== POKÉMON-STYLE PRE-LEVEL INTRO ====================
+  const renderLevelIntro = () => {
+    const scripts = LEVEL_INTRO_SCRIPTS[introLevel];
+    const isLastPage = introPage >= (scripts?.length || 1) - 1;
+    const levelConfig = STORY_LEVELS[introLevel];
+
+    return (
+      <ImageBackground
+        source={require('../../../assets/Game_Graphics/menu/main_menu_bg.jpg')}
+        style={introStyles.background}
+        resizeMode="cover"
+      >
+        <TouchableWithoutFeedback onPress={handleIntroTap}>
+          <View style={introStyles.overlay}>
+            {/* Back to level select */}
+            <TouchableOpacity
+              style={introStyles.closeButton}
+              onPress={handleIntroClose}
+            >
+              <Ionicons name="arrow-back" size={22} color="#F5DEB3" />
+            </TouchableOpacity>
+
+            {/* Level badge */}
+            <View style={introStyles.levelBadge}>
+              <Text style={introStyles.levelBadgeText}>
+                {levelConfig?.icon} Level {introLevel}: {levelConfig?.name}
+              </Text>
+            </View>
+
+            {/* Koin character — centered above dialogue */}
+            <View style={introStyles.characterContainer}>
+              <Image
+                source={require('../../../assets/mascot/koin_tutorial.png')}
+                style={introStyles.characterImage}
+                resizeMode="contain"
+              />
+            </View>
+
+            {/* Dialogue box — Pokémon style */}
+            <View style={introStyles.dialogueContainer}>
+              <View style={introStyles.dialogueBox}>
+                {/* Dialogue text with typewriter effect */}
+                <Text style={introStyles.dialogueText}>
+                  {introDisplayedText}
+                  {!introTypingDone && (
+                    <Text style={introStyles.cursor}>▌</Text>
+                  )}
+                </Text>
+
+                {/* Bottom row: back arrow, page dots, advance indicator */}
+                <View style={introStyles.dialogueFooter}>
+                  {/* Back button */}
+                  <TouchableOpacity
+                    onPress={handleIntroBack}
+                    disabled={introPage <= 0}
+                    style={[introStyles.navButton, introPage <= 0 && introStyles.navButtonDisabled]}
+                    hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                  >
+                    <Ionicons
+                      name="chevron-back"
+                      size={20}
+                      color={introPage > 0 ? '#F5DEB3' : '#555'}
+                    />
+                  </TouchableOpacity>
+
+                  {/* Page dots */}
+                  <View style={introStyles.dotsContainer}>
+                    {scripts?.map((_, i) => (
+                      <View
+                        key={i}
+                        style={[
+                          introStyles.dot,
+                          i === introPage && introStyles.dotActive,
+                          i < introPage && introStyles.dotCompleted,
+                        ]}
+                      />
+                    ))}
+                  </View>
+
+                  {/* Advance indicator or empty space */}
+                  {introTypingDone && !isLastPage ? (
+                    <View style={introStyles.advanceIndicator}>
+                      <Ionicons name="chevron-forward" size={16} color="#F5DEB3" />
+                      <Animated.View
+                        style={{
+                          opacity: walkingPulse, // reuse existing pulse animation
+                        }}
+                      >
+                        <Text style={introStyles.tapHint}>Tap</Text>
+                      </Animated.View>
+                    </View>
+                  ) : (
+                    <View style={introStyles.navButton} />
+                  )}
+                </View>
+              </View>
+
+              {/* Start Level button — only appears on the last page after typing is done */}
+              {isLastPage && introTypingDone && (
+                <TouchableOpacity
+                  style={introStyles.startButton}
+                  onPress={handleIntroStartLevel}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="play" size={20} color="#1a1a2e" />
+                  <Text style={introStyles.startButtonText}>Start Level</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+      </ImageBackground>
+    );
+  };
+
+  const introStyles = StyleSheet.create({
+    background: {
+      flex: 1,
+      width: '100%',
+      height: '100%',
+    },
+    overlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.65)',
+      justifyContent: 'flex-end',
+      paddingBottom: 40,
+    },
+    closeButton: {
+      position: 'absolute',
+      top: 16,
+      left: 16,
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: 'rgba(45, 45, 68, 0.9)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 2,
+      borderColor: '#5A5A7A',
+      zIndex: 10,
+    },
+    levelBadge: {
+      position: 'absolute',
+      top: 22,
+      alignSelf: 'center',
+      backgroundColor: 'rgba(45, 45, 68, 0.95)',
+      paddingHorizontal: 20,
+      paddingVertical: 8,
+      borderRadius: 20,
+      borderWidth: 2,
+      borderColor: '#5A5A7A',
+    },
+    levelBadgeText: {
+      fontSize: 14,
+      fontWeight: 'bold',
+      color: '#F5DEB3',
+      textShadowColor: '#000',
+      textShadowOffset: { width: 1, height: 1 },
+      textShadowRadius: 0,
+    },
+    characterContainer: {
+      alignItems: 'center',
+      marginBottom: -10,
+    },
+    characterImage: {
+      width: 200,
+      height: 200,
+    },
+    dialogueContainer: {
+      paddingHorizontal: 16,
+      alignItems: 'center',
+    },
+    dialogueBox: {
+      width: '100%',
+      backgroundColor: '#2D2D44',
+      borderWidth: 4,
+      borderTopColor: '#5A5A7A',
+      borderLeftColor: '#5A5A7A',
+      borderBottomColor: '#1A1A2E',
+      borderRightColor: '#1A1A2E',
+      paddingHorizontal: 20,
+      paddingTop: 20,
+      paddingBottom: 12,
+      minHeight: 130,
+    },
+    dialogueText: {
+      fontSize: 17,
+      color: '#F5DEB3',
+      lineHeight: 26,
+      fontWeight: '500',
+      textShadowColor: '#000',
+      textShadowOffset: { width: 1, height: 1 },
+      textShadowRadius: 0,
+      minHeight: 60,
+    },
+    cursor: {
+      color: '#F5DEB3',
+      fontSize: 17,
+    },
+    dialogueFooter: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginTop: 12,
+    },
+    navButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    navButtonDisabled: {
+      opacity: 0.3,
+    },
+    dotsContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    dot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: '#555',
+    },
+    dotActive: {
+      backgroundColor: '#F5DEB3',
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+    },
+    dotCompleted: {
+      backgroundColor: '#8B7355',
+    },
+    advanceIndicator: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    tapHint: {
+      fontSize: 12,
+      color: '#F5DEB3',
+      fontWeight: '600',
+    },
+    startButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#F5DEB3',
+      paddingVertical: 14,
+      paddingHorizontal: 32,
+      borderRadius: 8,
+      marginTop: 16,
+      gap: 8,
+      borderWidth: 3,
+      borderTopColor: '#FFF8DC',
+      borderLeftColor: '#FFF8DC',
+      borderBottomColor: '#C4A86B',
+      borderRightColor: '#C4A86B',
+      shadowColor: '#000',
+      shadowOffset: { width: 2, height: 2 },
+      shadowOpacity: 0.4,
+      shadowRadius: 0,
+      elevation: 4,
+    },
+    startButtonText: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: '#1a1a2e',
+    },
+  });
+  // ==================== END PRE-LEVEL INTRO ====================
+
   // Render Main Menu
   const renderMainMenu = () => (
     <ImageBackground
@@ -4596,6 +5575,15 @@ export default function BuildScreen() {
     },
   });
 
+  // Show Pokémon-style Pre-Level Intro
+  if (showLevelIntro && introLevel !== null) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        {renderLevelIntro()}
+      </SafeAreaView>
+    );
+  }
+
   // Show Story Intro / Level Selection
   if (showStoryIntro) {
     return (
@@ -4643,15 +5631,25 @@ export default function BuildScreen() {
         <View style={styles.headerRight}>
           <Text style={styles.spendingLabel}>Today's Spending</Text>
           <Text style={styles.spendingAmount}>₱{todaySpending.toFixed(2)}</Text>
-          {/* Weekly Budget - Only show in Story Mode */}
-          {gameMode === 'story' && (
+          {/* Weekly Budget - Show in Story Mode and Custom Mode */}
+          {(gameMode === 'story' || gameMode === 'custom') && (
             <>
               <Text style={[styles.spendingLabel, { marginTop: 6 }]}>Weekly Budget</Text>
-              <Text style={[styles.spendingAmount, { 
-                color: getRemainingWeeklyBudget() < weeklyBudget * 0.2 ? '#FF4444' : '#4CAF50' 
-              }]}>
-                ₱{getRemainingWeeklyBudget().toFixed(2)}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={[styles.spendingAmount, { 
+                  color: getRemainingWeeklyBudget() < weeklyBudget * 0.2 ? '#FF4444' : '#4CAF50' 
+                }]}>
+                  ₱{getRemainingWeeklyBudget().toFixed(2)}
+                </Text>
+                {gameMode === 'custom' && (
+                  <TouchableOpacity
+                    onPress={() => { setSettingsModeType(customModeType); setShowCustomSettingsModal(true); }}
+                    style={styles.settingsGearButton}
+                  >
+                    <Ionicons name="settings-sharp" size={18} color="#F5DEB3" />
+                  </TouchableOpacity>
+                )}
+              </View>
             </>
           )}
         </View>
@@ -5418,6 +6416,9 @@ export default function BuildScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Custom Mode Settings Modal */}
+      {gameMode === 'custom' && renderCustomSettingsModal()}
 
       {/* Level Complete Modal */}
       <Modal

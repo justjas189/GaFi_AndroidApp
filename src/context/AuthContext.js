@@ -20,6 +20,7 @@ export const AuthProvider = ({ children }) => {
   const [userToken, setUserToken] = useState(null);
   const [userInfo, setUserInfo] = useState(null);
   const [error, setError] = useState(null);
+  const isResettingPasswordRef = React.useRef(false);
 
   useEffect(() => {
     checkLoginStatus();
@@ -27,6 +28,21 @@ export const AuthProvider = ({ children }) => {
     // Set up Supabase auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state changed:', event, session?.user?.id);
+
+      // Ignore PASSWORD_RECOVERY events — these fire during the password
+      // reset OTP flow and must NOT set userToken, otherwise the navigator
+      // would swap from AuthNavigator to MainNavigator mid-reset.
+      if (event === 'PASSWORD_RECOVERY') {
+        console.log('Password recovery event — ignoring to stay on auth screens');
+        return;
+      }
+
+      // Ignore SIGNED_IN events that fire as a side effect of verifyOtp
+      // during an active password reset flow
+      if (event === 'SIGNED_IN' && isResettingPasswordRef.current) {
+        console.log('SIGNED_IN during password reset — ignoring transient session');
+        return;
+      }
       
       if (event === 'SIGNED_IN' && session) {
         // Get user profile data from database to get the full name and username
@@ -274,7 +290,9 @@ export const AuthProvider = ({ children }) => {
   const sendPasswordResetEmail = async (email) => {
     try {
       setError(null);
-      setIsLoading(true);
+      // NOTE: Do NOT set global isLoading here — AppNavigator uses it to
+      // swap to <LoadingScreen>, which unmounts the auth navigator and
+      // destroys the navigation stack.  Screens use local loading state.
 
       const { error } = await supabase.auth.resetPasswordForEmail(email);
       if (error) throw error;
@@ -286,21 +304,33 @@ export const AuthProvider = ({ children }) => {
         success: false, 
         error: formatSupabaseError(error)
       };
-    } finally {
-      setIsLoading(false);
     }
   };
 
   const resetPassword = async (code, newPassword, email) => {
     try {
       setError(null);
-      setIsLoading(true);
+      // NOTE: Do NOT set global isLoading here — same reason as above.
+      isResettingPasswordRef.current = true; // Prevent auth listener from processing transient session
 
-      const { error } = await supabase.auth.updateUser({
+      // Step 1: Verify the OTP code to establish a recovery session
+      const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
+        email,
+        token: code,
+        type: 'recovery',
+      });
+
+      if (verifyError) throw verifyError;
+
+      // Step 2: Now that we have an authenticated session, update the password
+      const { error: updateError } = await supabase.auth.updateUser({
         password: newPassword,
       });
 
-      if (error) throw error;
+      if (updateError) throw updateError;
+
+      // Step 3: Sign out so the user can log in fresh with the new password
+      await supabase.auth.signOut();
 
       return { success: true };
     } catch (error) {
@@ -310,7 +340,7 @@ export const AuthProvider = ({ children }) => {
         error: formatSupabaseError(error)
       };
     } finally {
-      setIsLoading(false);
+      isResettingPasswordRef.current = false;
     }
   };
 

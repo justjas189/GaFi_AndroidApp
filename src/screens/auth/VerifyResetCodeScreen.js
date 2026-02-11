@@ -10,7 +10,8 @@ const VerifyResetCodeScreen = ({ navigation, route }) => {
   const { email } = route.params;
   const [resetCode, setResetCode] = useState(['', '', '', '', '', '']);
   const [newPassword, setNewPassword] = useState('');
-  const { resetPassword, isLoading, error } = useContext(AuthContext);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { resetPassword } = useContext(AuthContext);
   const { theme } = useContext(ThemeContext);
   const codeInputs = useRef([...Array(6)].map(() => React.createRef()));
 
@@ -61,9 +62,6 @@ const VerifyResetCodeScreen = ({ navigation, route }) => {
     }
   };  const handleResetPassword = async () => {
     try {
-      // Reset any previous errors
-      if (error) return;
-
       const code = resetCode.join('');
       if (!code || code.length !== 6) {
         Alert.alert('Error', 'Please enter the complete 6-digit code');
@@ -89,8 +87,9 @@ const VerifyResetCodeScreen = ({ navigation, route }) => {
         return;
       }
 
-      const success = await resetPassword(code, newPassword.trim(), email);
-      if (success) {
+      setIsSubmitting(true);
+      const result = await resetPassword(code, newPassword.trim(), email);
+      if (result.success) {
         Alert.alert(
           'Success', 
           'Your password has been reset successfully. Please log in with your new password.',
@@ -115,7 +114,7 @@ const VerifyResetCodeScreen = ({ navigation, route }) => {
           }]
         );
       } else {
-        Alert.alert('Error', error || 'Failed to reset password. Please try again.');
+        Alert.alert('Error', result.error || 'Failed to reset password. Please try again.');
       }
     } catch (err) {
       console.error('Password reset error:', err);
@@ -123,6 +122,8 @@ const VerifyResetCodeScreen = ({ navigation, route }) => {
         'Error',
         'An unexpected error occurred while resetting your password. Please try again.'
       );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -201,9 +202,9 @@ const VerifyResetCodeScreen = ({ navigation, route }) => {
         <TouchableOpacity
           style={[styles.button, { backgroundColor: theme.colors.primary }]}
           onPress={handleResetPassword}
-          disabled={isLoading}
+          disabled={isSubmitting}
         >
-          {isLoading ? (
+          {isSubmitting ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <Text style={styles.buttonText}>Reset Password</Text>
