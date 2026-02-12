@@ -297,12 +297,23 @@ const computePredictionForMonth = (expenses, targetMonthIdx, targetYear, current
     return yearB - yearA || monthB - monthA;
   });
 
-  // Monthly history (last 6 months)
-  const monthlyHistory = sortedMonths.slice(0, 6).map(key => {
-    const data = monthlyData[key];
-    const mName = new Date(data.year, data.month, 1).toLocaleString('default', { month: 'short' });
-    return { month: mName, year: data.year, total: data.total, key };
-  }).reverse();
+  // Monthly history (last 6 calendar months — filters out stale data with large gaps)
+  const sixMonthsCutoff = new Date(targetYear, targetMonthIdx, 1);
+  sixMonthsCutoff.setMonth(sixMonthsCutoff.getMonth() - 6);
+
+  const monthlyHistory = sortedMonths
+    .filter(key => {
+      const [year, month] = key.split('-').map(Number);
+      const monthDate = new Date(year, month, 1);
+      return monthDate >= sixMonthsCutoff;
+    })
+    .slice(0, 6)
+    .map(key => {
+      const data = monthlyData[key];
+      const mName = new Date(data.year, data.month, 1).toLocaleString('default', { month: 'short' });
+      return { month: mName, year: data.year, total: data.total, key };
+    })
+    .reverse();
 
   // SIGNAL 1: Weighted Recent Average
   const weights = [0.35, 0.25, 0.20, 0.10, 0.05, 0.05];
