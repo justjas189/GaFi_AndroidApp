@@ -68,7 +68,6 @@ const BudgetGoalsScreen = ({ navigation }) => {
 
       const budgetData = {
         monthly,
-        savingsGoal: 0,
         userId: parsedUserInfo.id,
         categories: {
           food: { limit: categoryBudget, spent: 0 },

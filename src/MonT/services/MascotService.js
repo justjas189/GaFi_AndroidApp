@@ -170,12 +170,12 @@ export class MascotService {
       try {
         const { data: budgetData, error: budgetError } = await supabase
           .from('budgets')
-          .select('total_budget')
+          .select('monthly')
           .eq('user_id', currentUserId);
         
         if (!budgetError && budgetData) {
           budgets = budgetData.map(budget => ({
-            amount: budget.total_budget,
+            amount: budget.monthly,
             spent_amount: 0 // Will be calculated from budget_categories if needed
           }));
         }

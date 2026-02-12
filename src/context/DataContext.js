@@ -17,7 +17,6 @@ export const DataProvider = ({ children }) => {
   const defaultBudget = {
     monthly: 0,
     weekly: 0,
-    savingsGoal: 0,
     categories: {
       food: { limit: 0, spent: 0 },
       transportation: { limit: 0, spent: 0 },
@@ -218,7 +217,6 @@ export const DataProvider = ({ children }) => {
       const transformedBudget = budgetData ? {
         monthly: budgetData.monthly || 0,
         weekly: budgetData.weekly || 0,
-        savingsGoal: budgetData.savings_goal || 0,
         categories: {
           food: { limit: 0, spent: 0 },
           transportation: { limit: 0, spent: 0 },
@@ -607,8 +605,7 @@ export const DataProvider = ({ children }) => {
           .from('budgets')
           .update({
             monthly: newBudget.monthly,
-            weekly: newBudget.weekly,
-            savings_goal: newBudget.savingsGoal
+            weekly: newBudget.weekly
           })
           .eq('user_id', userId)
           .select()
@@ -663,7 +660,7 @@ export const DataProvider = ({ children }) => {
         }
       } else {
         // Create new budget using the enhanced service
-        await budgetService.createDefaultBudget(userId, newBudget.monthly, newBudget.savingsGoal);
+        await budgetService.createDefaultBudget(userId, newBudget.monthly);
       }
 
       // Update local state

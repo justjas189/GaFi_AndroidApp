@@ -77,9 +77,9 @@ const BudgetManagementScreen = () => {
       .join(' ');
   };
 
-  // Calculate smart allocation for a category based on total budget and savings goal
-  const getSmartAllocation = (categoryName, totalBudget, savingsGoal = 0) => {
-    const availableBudget = totalBudget - savingsGoal;
+  // Calculate smart allocation for a category based on total budget
+  const getSmartAllocation = (categoryName, totalBudget) => {
+    const availableBudget = totalBudget;
     const normalizedCategory = categoryName.toLowerCase();
     const percentage = categoryAllocationRules[normalizedCategory] || 0.05; // Default 5% for unknown categories
     return availableBudget * percentage;
@@ -137,8 +137,8 @@ const BudgetManagementScreen = () => {
 
     try {
       const budgetData = {
-        totalBudget: parseFloat(budgetForm.amount),
         monthly: parseFloat(budgetForm.amount),
+        weekly: Math.round((parseFloat(budgetForm.amount) / 4) * 100) / 100,
         budgetPeriod: 'monthly'
       };
 
@@ -171,14 +171,13 @@ const BudgetManagementScreen = () => {
       let allocatedAmount = parseFloat(categoryForm.allocated_amount);
       
       if (!allocatedAmount || isNaN(allocatedAmount)) {
-        const totalBudget = parseFloat(selectedBudget.total_budget) || 0;
-        const savingsGoal = parseFloat(selectedBudget.savings_goal) || 0;
-        allocatedAmount = getSmartAllocation(categoryForm.name, totalBudget, savingsGoal);
+        const totalBudget = parseFloat(selectedBudget.monthly) || 0;
+        allocatedAmount = getSmartAllocation(categoryForm.name, totalBudget);
         
         // Show user the smart allocation
         Alert.alert(
           'Smart Allocation',
-          `Based on your budget (₱${totalBudget.toLocaleString()}) and savings goal (₱${savingsGoal.toLocaleString()}), we recommend ₱${allocatedAmount.toFixed(2)} for ${capitalizeCategory(categoryForm.name)}.`,
+          `Based on your budget (₱${totalBudget.toLocaleString()}), we recommend ₱${allocatedAmount.toFixed(2)} for ${capitalizeCategory(categoryForm.name)}.`,
           [
             { text: 'Use Recommended', onPress: () => proceedWithAllocation(allocatedAmount) },
             { text: 'Cancel', style: 'cancel' }
@@ -266,12 +265,11 @@ const BudgetManagementScreen = () => {
           text: 'Recalculate',
           onPress: async () => {
             try {
-              const totalBudget = parseFloat(budget.total_budget) || 0;
-              const savingsGoal = parseFloat(budget.savings_goal) || 0;
+              const totalBudget = parseFloat(budget.monthly) || 0;
 
               for (const category of categories) {
                 const categoryName = category.category_name || category.name;
-                const newAllocation = getSmartAllocation(categoryName, totalBudget, savingsGoal);
+                const newAllocation = getSmartAllocation(categoryName, totalBudget);
                 
                 await BudgetService.addBudgetCategory(
                   categoryName.toLowerCase(),
@@ -430,7 +428,7 @@ const BudgetManagementScreen = () => {
     // Categories come directly from budget.budget_categories (nested)
     const budgetCategories = budget.budget_categories || [];
     const totalSpent = budgetCategories.reduce((sum, cat) => sum + (parseFloat(cat.spent_amount) || 0), 0);
-    const budgetAmount = parseFloat(budget.total_budget) || parseFloat(budget.amount) || 0;
+    const budgetAmount = parseFloat(budget.monthly) || parseFloat(budget.amount) || 0;
     const progressPercentage = budgetAmount > 0 ? (totalSpent / budgetAmount) * 100 : 0;
 
     // Format dates, use current month/year if invalid

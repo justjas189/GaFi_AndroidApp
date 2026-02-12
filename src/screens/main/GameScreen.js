@@ -474,8 +474,8 @@ export default function BuildScreen() {
       description: 'The ultimate challenge! Save at least 30% of your weekly budget.',
       type: 'saving',
       icon: '👑',
-      savingsGoal: 0.40, // 30% savings required
-      goalText: 'Save 30% of your budget',
+      savingsGoal: 0.40, // 40% savings required
+      goalText: 'Save 40% of your budget',
     },
   };
   
@@ -607,9 +607,44 @@ export default function BuildScreen() {
           setWeeklySpending(activeCustom.weekly_spending || 0);
           if (activeCustom.category_spending) setCategorySpending(activeCustom.category_spending);
           if (activeCustom.custom_rules) setCustomBudgetRules(activeCustom.custom_rules);
+          // Restore mode type and storyLevel so the correct HUD renders
+          const modeType = activeCustom.mode_type;
+          if (modeType) setCustomModeType(modeType);
+          if (modeType === 'budgeting') {
+            setStoryLevel(1);
+            // Restore budget categories from DB
+            const rules = activeCustom.custom_rules || { needs: 50, wants: 30, savings: 20 };
+            setBudgetCategories({
+              needs:   { budget: (activeCustom.weekly_budget || 0) * (rules.needs / 100), spent: parseFloat(activeCustom.needs_spent) || 0 },
+              wants:   { budget: (activeCustom.weekly_budget || 0) * (rules.wants / 100), spent: parseFloat(activeCustom.wants_spent) || 0 },
+              savings: { budget: (activeCustom.weekly_budget || 0) * (rules.savings / 100), spent: 0 },
+            });
+          } else if (modeType === 'goals') {
+            setStoryLevel(2);
+            if (activeCustom.custom_goals) {
+              const goals = activeCustom.custom_goals.map((g, i) => ({
+                id: `custom_${i}`, name: g.name, icon: ['🎯','💎','🌟','🎁','✨'][i % 5], target: g.target || 0
+              }));
+              setSavingsGoals(goals);
+              const allocs = {};
+              goals.forEach(g => { allocs[g.id] = 0; });
+              if (activeCustom.goals_progress) {
+                activeCustom.goals_progress.forEach(gp => {
+                  const matchGoal = goals.find(g => g.name === gp.name);
+                  if (matchGoal) allocs[matchGoal.id] = gp.allocated || 0;
+                });
+              }
+              setGoalAllocations(allocs);
+            }
+          } else if (modeType === 'saving') {
+            setStoryLevel(3);
+            if (activeCustom.custom_savings_target != null) {
+              setCustomSavingsTarget(String(activeCustom.custom_savings_target));
+            }
+          }
           setShowMainMenu(false);
           setCurrentMapId('dorm');
-          console.log(`🔄 Resumed active custom session ${activeCustom.id}`);
+          console.log(`🔄 Resumed active custom session ${activeCustom.id} (${modeType})`);
         }
 
         console.log('✅ Game progress hydrated from Supabase');
@@ -1281,13 +1316,13 @@ export default function BuildScreen() {
       
       // Update category spending for story mode
       if (gameMode === 'story' || gameMode === 'custom') {
-        setCategorySpending(prev => ({
-          ...prev,
-          [category]: (prev[category] || 0) + amount
-        }));
+        const updatedCategorySpending = { ...categorySpending, [category]: (categorySpending[category] || 0) + amount };
+        setCategorySpending(updatedCategorySpending);
         
         // Update budget categories
         const budgetType = CATEGORY_BUDGET_MAP[category] || 'wants';
+        const updatedNeedsSpent = budgetCategories.needs.spent + (budgetType === 'needs' ? amount : 0);
+        const updatedWantsSpent = budgetCategories.wants.spent + (budgetType === 'wants' ? amount : 0);
         setBudgetCategories(prev => ({
           ...prev,
           [budgetType]: {
@@ -1297,7 +1332,24 @@ export default function BuildScreen() {
         }));
         
         // Update weekly spending
-        setWeeklySpending(prev => prev + amount);
+        const updatedWeeklySpending = weeklySpending + amount;
+        setWeeklySpending(updatedWeeklySpending);
+        
+        // Persist session spending to Supabase
+        if (activeSessionId) {
+          const sessionUpdate = {
+            weeklySpending: updatedWeeklySpending,
+            categorySpending: updatedCategorySpending,
+            needsSpent: updatedNeedsSpent,
+            wantsSpent: updatedWantsSpent,
+            savingsAmount: weeklyBudget - updatedWeeklySpending,
+          };
+          if (gameMode === 'story') {
+            gameDatabaseService.updateStorySessionSpending(activeSessionId, sessionUpdate);
+          } else {
+            gameDatabaseService.updateCustomSessionSpending(activeSessionId, sessionUpdate);
+          }
+        }
       }
       
       console.log(`✅ Recorded ${description}: ₱${amount}`);
@@ -1867,15 +1919,28 @@ export default function BuildScreen() {
         // Update session spending if in story/custom mode
         if (activeSessionId && (gameMode === 'story' || gameMode === 'custom')) {
           const updatedSpending = weeklySpending + expenseAmountNum;
+          const updatedCategorySpending = { ...categorySpending, [savedCategory]: (categorySpending[savedCategory] || 0) + expenseAmountNum };
+          
+          // Calculate updated needs/wants spent
+          const budgetType = CATEGORY_BUDGET_MAP[savedCategory] || 'wants';
+          const updatedNeedsSpent = budgetCategories.needs.spent + (budgetType === 'needs' ? expenseAmountNum : 0);
+          const updatedWantsSpent = budgetCategories.wants.spent + (budgetType === 'wants' ? expenseAmountNum : 0);
+          
           if (gameMode === 'story') {
             gameDatabaseService.updateStorySessionSpending(activeSessionId, {
               weeklySpending: updatedSpending,
-              categorySpending: { ...categorySpending, [savedCategory]: (categorySpending[savedCategory] || 0) + expenseAmountNum },
+              categorySpending: updatedCategorySpending,
+              needsSpent: updatedNeedsSpent,
+              wantsSpent: updatedWantsSpent,
+              savingsAmount: weeklyBudget - updatedSpending,
             });
           } else {
             gameDatabaseService.updateCustomSessionSpending(activeSessionId, {
               weeklySpending: updatedSpending,
-              categorySpending: { ...categorySpending, [savedCategory]: (categorySpending[savedCategory] || 0) + expenseAmountNum },
+              categorySpending: updatedCategorySpending,
+              needsSpent: updatedNeedsSpent,
+              wantsSpent: updatedWantsSpent,
+              savingsAmount: weeklyBudget - updatedSpending,
             });
           }
         }
@@ -5022,6 +5087,7 @@ export default function BuildScreen() {
     dialogueContainer: {
       paddingHorizontal: 16,
       alignItems: 'center',
+      marginBottom: 180,
     },
     dialogueBox: {
       width: '100%',
@@ -6659,13 +6725,13 @@ export default function BuildScreen() {
 
                       // Update category spending for story/custom mode
                       if (gameMode === 'story' || gameMode === 'custom') {
-                        setCategorySpending(prev => ({
-                          ...prev,
-                          [notebookCategory]: (prev[notebookCategory] || 0) + amount
-                        }));
+                        const updatedCategorySpending = { ...categorySpending, [notebookCategory]: (categorySpending[notebookCategory] || 0) + amount };
+                        setCategorySpending(updatedCategorySpending);
 
                         // Update budget categories (needs/wants)
                         const budgetType = CATEGORY_BUDGET_MAP[notebookCategory] || 'wants';
+                        const updatedNeedsSpent = budgetCategories.needs.spent + (budgetType === 'needs' ? amount : 0);
+                        const updatedWantsSpent = budgetCategories.wants.spent + (budgetType === 'wants' ? amount : 0);
                         setBudgetCategories(prev => ({
                           ...prev,
                           [budgetType]: {
@@ -6675,7 +6741,24 @@ export default function BuildScreen() {
                         }));
 
                         // Update weekly spending
-                        setWeeklySpending(prev => prev + amount);
+                        const updatedWeeklySpending = weeklySpending + amount;
+                        setWeeklySpending(updatedWeeklySpending);
+
+                        // Persist session spending to Supabase
+                        if (activeSessionId) {
+                          const sessionUpdate = {
+                            weeklySpending: updatedWeeklySpending,
+                            categorySpending: updatedCategorySpending,
+                            needsSpent: updatedNeedsSpent,
+                            wantsSpent: updatedWantsSpent,
+                            savingsAmount: weeklyBudget - updatedWeeklySpending,
+                          };
+                          if (gameMode === 'story') {
+                            gameDatabaseService.updateStorySessionSpending(activeSessionId, sessionUpdate);
+                          } else {
+                            gameDatabaseService.updateCustomSessionSpending(activeSessionId, sessionUpdate);
+                          }
+                        }
                       }
 
                       // Check achievements

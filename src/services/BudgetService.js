@@ -58,8 +58,6 @@ export class BudgetService {
         const { data, error } = await supabase
           .from('budgets')
           .update({
-            total_budget: budgetData.totalBudget,
-            savings_goal: budgetData.savingsGoal,
             monthly: budgetData.monthly,
             weekly: budgetData.weekly,
             budget_period: budgetData.budgetPeriod || 'monthly',
@@ -77,8 +75,6 @@ export class BudgetService {
           .from('budgets')
           .insert({
             user_id: userId,
-            total_budget: budgetData.totalBudget,
-            savings_goal: budgetData.savingsGoal,
             monthly: budgetData.monthly,
             weekly: budgetData.weekly,
             budget_period: budgetData.budgetPeriod || 'monthly',
@@ -294,8 +290,8 @@ export class BudgetService {
         (sum, cat) => sum + parseFloat(cat.spent_amount), 0
       ) || 0;
 
-      const totalBudget = parseFloat(budget.total_budget) || 0;
-      const remaining = totalBudget - totalSpent; // Remaining from total budget
+      const totalBudget = parseFloat(budget.monthly) || 0;
+      const remaining = totalBudget - totalSpent;
       const percentageUsed = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
 
       // Get recent transactions
@@ -314,7 +310,6 @@ export class BudgetService {
           totalSpent,
           remaining,
           percentageUsed,
-          savingsGoal: parseFloat(budget.savings_goal) || 0,
           monthly: parseFloat(budget.monthly || 0),
           weekly: parseFloat(budget.weekly || 0)
         },

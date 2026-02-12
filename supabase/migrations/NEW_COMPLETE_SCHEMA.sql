@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS profiles (
 CREATE TABLE IF NOT EXISTS budgets (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  total_budget DECIMAL(12, 2) NOT NULL DEFAULT 0,
+  monthly DECIMAL(12, 2) NOT NULL DEFAULT 0,
+  weekly DECIMAL(12, 2) NOT NULL DEFAULT 0,
   currency VARCHAR(3) NOT NULL DEFAULT 'PHP',
   budget_period VARCHAR(20) NOT NULL DEFAULT 'monthly',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -377,12 +378,12 @@ CREATE OR REPLACE FUNCTION create_default_budget_categories()
 RETURNS TRIGGER AS $$
 BEGIN
   INSERT INTO budget_categories (budget_id, category_name, allocated_amount) VALUES
-    (NEW.id, 'food', NEW.total_budget * 0.30),
-    (NEW.id, 'transportation', NEW.total_budget * 0.15),
-    (NEW.id, 'entertainment', NEW.total_budget * 0.10),
-    (NEW.id, 'shopping', NEW.total_budget * 0.20),
-    (NEW.id, 'utilities', NEW.total_budget * 0.15),
-    (NEW.id, 'others', NEW.total_budget * 0.10);
+    (NEW.id, 'food', COALESCE(NEW.monthly, 0) * 0.30),
+    (NEW.id, 'transportation', COALESCE(NEW.monthly, 0) * 0.15),
+    (NEW.id, 'entertainment', COALESCE(NEW.monthly, 0) * 0.10),
+    (NEW.id, 'shopping', COALESCE(NEW.monthly, 0) * 0.20),
+    (NEW.id, 'utilities', COALESCE(NEW.monthly, 0) * 0.15),
+    (NEW.id, 'others', COALESCE(NEW.monthly, 0) * 0.10);
   
   RETURN NEW;
 END;

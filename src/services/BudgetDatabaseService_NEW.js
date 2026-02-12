@@ -288,11 +288,10 @@ export class BudgetDatabaseService {
   /**
    * Returns fallback budget data when tables don't exist
    * @param {number} monthlyBudget - Total budget amount
-   * @param {number} savingsGoal - Savings goal amount
    * @returns {Object} Fallback budget structure
    */
-  getFallbackBudgetData(monthlyBudget = 0, savingsGoal = 0) {
-    const budgetableAmount = Math.max(0, monthlyBudget - savingsGoal);
+  getFallbackBudgetData(monthlyBudget = 0) {
+    const budgetableAmount = Math.max(0, monthlyBudget);
     const categoryBudget = Math.round((budgetableAmount / 6) * 100) / 100;
     
     return {
@@ -301,7 +300,6 @@ export class BudgetDatabaseService {
         id: 'fallback-budget',
         monthly: monthlyBudget,
         weekly: Math.round((monthlyBudget / 4) * 100) / 100,
-        savings_goal: savingsGoal,
         currency: 'PHP',
         budget_categories: [
           { category_name: 'food', allocated_amount: categoryBudget, spent_amount: 0 },
@@ -320,17 +318,16 @@ export class BudgetDatabaseService {
    * Create a default budget for new users with proper allocation
    * @param {string} userId - User ID
    * @param {number} monthlyBudget - Monthly budget amount from onboarding
-   * @param {number} savingsGoal - Savings goal from onboarding
    * @returns {Object} Created budget
    */
-  async createDefaultBudget(userId, monthlyBudget = 20500, savingsGoal = 0) {
+  async createDefaultBudget(userId, monthlyBudget = 20500) {
     try {
-      DebugUtils.log('DB_SERVICE', 'Creating default budget', { userId, monthlyBudget, savingsGoal });
+      DebugUtils.log('DB_SERVICE', 'Creating default budget', { userId, monthlyBudget });
 
       // Check if tables exist first
       const tablesExist = await this.checkTablesExist();
       if (!tablesExist) {
-        return this.getFallbackBudgetData(monthlyBudget, savingsGoal);
+        return this.getFallbackBudgetData(monthlyBudget);
       }
 
       // Check if user already has a budget
@@ -351,7 +348,6 @@ export class BudgetDatabaseService {
           .update({
             monthly: monthlyBudget,
             weekly: Math.round((monthlyBudget / 4) * 100) / 100,
-            savings_goal: savingsGoal,
             updated_at: new Date().toISOString()
           })
           .eq('id', existingBudget.id)
@@ -370,8 +366,7 @@ export class BudgetDatabaseService {
             user_id: userId,
             monthly: monthlyBudget,
             weekly: Math.round((monthlyBudget / 4) * 100) / 100,
-            currency: 'PHP',
-            savings_goal: savingsGoal
+            currency: 'PHP'
           })
           .select()
           .single();
@@ -380,8 +375,8 @@ export class BudgetDatabaseService {
         budget = newBudget;
       }
 
-      // Calculate budgetable amount (monthly budget minus savings goal)
-      const budgetableAmount = Math.max(0, monthlyBudget - savingsGoal);
+      // Calculate budgetable amount
+      const budgetableAmount = Math.max(0, monthlyBudget);
       
       // Define proper category allocation percentages
       const categoryPercentages = {
@@ -473,7 +468,6 @@ export class BudgetDatabaseService {
         categoriesCount: allCategories?.length || 0,
         categoryAllocations: categories.map(c => `${c.name}: ₱${c.allocation}`),
         monthlyBudget,
-        savingsGoal,
         wasUpdate: !!existingBudget
       });
 
@@ -795,10 +789,9 @@ export class BudgetDatabaseService {
 
       const budget = budgetResult.data;
       const monthlyBudget = parseFloat(budget.monthly || 0);
-      const savingsGoal = parseFloat(budget.savings_goal || 0);
       
-      // Calculate budgetable amount (monthly budget minus savings goal)
-      const budgetableAmount = Math.max(0, monthlyBudget - savingsGoal);
+      // Calculate budgetable amount
+      const budgetableAmount = Math.max(0, monthlyBudget);
       
       // Define proper category allocation percentages
       const categoryPercentages = {
@@ -812,7 +805,6 @@ export class BudgetDatabaseService {
 
       DebugUtils.log('DB_SERVICE', 'Recalculating with proper percentages', {
         monthlyBudget,
-        savingsGoal,
         budgetableAmount,
         categoryPercentages
       });
