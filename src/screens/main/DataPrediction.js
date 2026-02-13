@@ -377,11 +377,13 @@ const computePredictionForMonth = (expenses, targetMonthIdx, targetYear, current
   const yearsOfData = yearsSet.size;
 
   if (hasYearOverYearData && monthlyHistory.length >= 3) {
+    // YoY is the primary signal; recent trend and seasonal act as secondary adjustments
     const seasonalAdjustedAvg = historicalAverage * seasonalMultiplier;
-    totalPredicted = recentWeightedPrediction * 0.45 + sameMonthPrediction * 0.35 + seasonalAdjustedAvg * 0.20;
+    totalPredicted = recentWeightedPrediction * 0.25 + sameMonthPrediction * 0.55 + seasonalAdjustedAvg * 0.20;
   } else if (hasYearOverYearData) {
+    // Limited recent data — lean even more heavily on YoY
     const seasonalAdjustedAvg = historicalAverage * seasonalMultiplier;
-    totalPredicted = recentWeightedPrediction * 0.30 + sameMonthPrediction * 0.50 + seasonalAdjustedAvg * 0.20;
+    totalPredicted = recentWeightedPrediction * 0.15 + sameMonthPrediction * 0.65 + seasonalAdjustedAvg * 0.20;
   } else if (monthlyHistory.length >= 3) {
     totalPredicted = recentWeightedPrediction * seasonalMultiplier;
   } else {
@@ -421,7 +423,8 @@ const computePredictionForMonth = (expenses, targetMonthIdx, targetYear, current
         if (prevYearCatAmount > 0) {
           const yearGap = targetYear - mostRecentPrevYear;
           const inflationAdjustedCat = prevYearCatAmount * Math.pow(1 + inflationRate, yearGap);
-          predictedAmount = predictedAmount * 0.65 + inflationAdjustedCat * 0.35;
+          // Prioritize YoY category data over proportional allocation
+          predictedAmount = predictedAmount * 0.40 + inflationAdjustedCat * 0.60;
         }
       }
 

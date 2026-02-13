@@ -1264,10 +1264,6 @@ export default function BuildScreen() {
         Alert.alert('Invalid Fare', 'Please enter a valid fare amount.');
         return;
       }
-      // Record commute expense
-      if (fare > 0) {
-        await recordTransportExpense('Commute Fare', fare, 'Transport');
-      }
     } else if (transportMode === 'car') {
       if (didBuyFuel === null) {
         Alert.alert('Fuel Question', 'Please select if you bought fuel or not.');
@@ -1279,70 +1275,104 @@ export default function BuildScreen() {
           Alert.alert('Invalid Amount', 'Please enter a valid fuel cost.');
           return;
         }
-        // Record fuel expense
-        await recordTransportExpense('Gas/Fuel', fuel, 'Transport');
       }
     }
     
-    // Now travel to the destination
-    await travelToMap(selectedDestination);
+    // ── Capture values before clearing state ──
+    const savedDestination = selectedDestination;
+    const savedTransportMode = transportMode;
+    const savedFareAmount = fareAmount;
+    const savedDidBuyFuel = didBuyFuel;
+    const savedFuelAmount = fuelAmount;
+    const savedOriginMap = currentMapId;
 
-    // ── Persist transport expense to Supabase ──
-    const fareVal = transportMode === 'commute' ? parseFloat(fareAmount) || 0 : null;
-    const fuelVal = (transportMode === 'car' && didBuyFuel) ? parseFloat(fuelAmount) || 0 : null;
-    if (transportMode && transportMode !== 'walk') {
-      gameDatabaseService.recordTransportExpense({
-        transportMode: transportMode || 'walk',
-        originMap: currentMapId,
-        destinationMap: selectedDestination,
-        fareAmount: fareVal,
-        fuelAmount: fuelVal,
-        sessionId: activeSessionId,
-      });
+    // ── Optimistic UI: travel immediately (closes transport modal inside travelToMap) ──
+    travelToMap(savedDestination);
+
+    // ── Background: record transport expense and persist to Supabase ──
+    try {
+      if (savedTransportMode === 'commute') {
+        const fare = parseFloat(savedFareAmount);
+        if (fare > 0) {
+          recordTransportExpense('Commute Fare', fare, 'Transport');
+        }
+      } else if (savedTransportMode === 'car' && savedDidBuyFuel) {
+        const fuel = parseFloat(savedFuelAmount);
+        if (fuel > 0) {
+          recordTransportExpense('Gas/Fuel', fuel, 'Transport');
+        }
+      }
+
+      // Persist transport log to Supabase (fire-and-forget)
+      const fareVal = savedTransportMode === 'commute' ? parseFloat(savedFareAmount) || 0 : null;
+      const fuelVal = (savedTransportMode === 'car' && savedDidBuyFuel) ? parseFloat(savedFuelAmount) || 0 : null;
+      if (savedTransportMode && savedTransportMode !== 'walk') {
+        gameDatabaseService.recordTransportExpense({
+          transportMode: savedTransportMode || 'walk',
+          originMap: savedOriginMap,
+          destinationMap: savedDestination,
+          fareAmount: fareVal,
+          fuelAmount: fuelVal,
+          sessionId: activeSessionId,
+        });
+      }
+    } catch (error) {
+      console.error('❌ ConfirmTravel background save error:', error);
     }
   };
 
-  // Record transport expense
+  // Record transport expense (non-blocking, matches Canteen pattern)
   const recordTransportExpense = async (description, amount, category) => {
+    // Optimistic local state updates (instant)
+    setCategorySpending(prev => ({
+      ...prev,
+      [category]: (prev[category] || 0) + amount
+    }));
+
+    if (gameMode === 'story' || gameMode === 'custom') {
+      const budgetType = CATEGORY_BUDGET_MAP[category] || 'wants';
+      setBudgetCategories(prev => ({
+        ...prev,
+        [budgetType]: {
+          ...prev[budgetType],
+          spent: prev[budgetType].spent + amount
+        }
+      }));
+      setWeeklySpending(prev => prev + amount);
+    }
+
+    // Background save — non-blocking
     try {
-      await addExpense({
+      const expenseData = {
         amount: amount,
         category: category,
-        description: description,
-        created_at: new Date().toISOString(),
-      });
-      
-      // todaySpending is auto-refreshed via useEffect on [expenses]
-      
-      // Update category spending for story mode
-      if (gameMode === 'story' || gameMode === 'custom') {
-        const updatedCategorySpending = { ...categorySpending, [category]: (categorySpending[category] || 0) + amount };
-        setCategorySpending(updatedCategorySpending);
-        
-        // Update budget categories
-        const budgetType = CATEGORY_BUDGET_MAP[category] || 'wants';
-        const updatedNeedsSpent = budgetCategories.needs.spent + (budgetType === 'needs' ? amount : 0);
-        const updatedWantsSpent = budgetCategories.wants.spent + (budgetType === 'wants' ? amount : 0);
-        setBudgetCategories(prev => ({
-          ...prev,
-          [budgetType]: {
-            ...prev[budgetType],
-            spent: prev[budgetType].spent + amount
-          }
-        }));
-        
-        // Update weekly spending
-        const updatedWeeklySpending = weeklySpending + amount;
-        setWeeklySpending(updatedWeeklySpending);
-        
-        // Persist session spending to Supabase
-        if (activeSessionId) {
+        note: description,
+        date: new Date().toISOString(),
+      };
+
+      console.log('💾 Transport: Saving expense via DataContext:', JSON.stringify(expenseData));
+      const success = await addExpense(expenseData);
+
+      if (!success) {
+        console.error('❌ Transport: Failed to save expense');
+        Alert.alert('Sync Error', 'Transport expense may not have been saved.');
+      } else {
+        console.log(`✅ Transport: Recorded ${description}: ₱${amount}`);
+
+        // Persist session spending to Supabase (fire-and-forget)
+        if (activeSessionId && (gameMode === 'story' || gameMode === 'custom')) {
+          const updatedSpending = weeklySpending + amount;
+          const updatedCategorySpending = { ...categorySpending, [category]: (categorySpending[category] || 0) + amount };
+          const budgetType = CATEGORY_BUDGET_MAP[category] || 'wants';
+          const updatedNeedsSpent = budgetCategories.needs.spent + (budgetType === 'needs' ? amount : 0);
+          const updatedWantsSpent = budgetCategories.wants.spent + (budgetType === 'wants' ? amount : 0);
+
           const sessionUpdate = {
-            weeklySpending: updatedWeeklySpending,
+            weeklySpending: updatedSpending,
             categorySpending: updatedCategorySpending,
             needsSpent: updatedNeedsSpent,
             wantsSpent: updatedWantsSpent,
-            savingsAmount: weeklyBudget - updatedWeeklySpending,
+            savingsAmount: weeklyBudget - updatedSpending,
           };
           if (gameMode === 'story') {
             gameDatabaseService.updateStorySessionSpending(activeSessionId, sessionUpdate);
@@ -1350,11 +1380,19 @@ export default function BuildScreen() {
             gameDatabaseService.updateCustomSessionSpending(activeSessionId, sessionUpdate);
           }
         }
+
+        // Log activity (fire-and-forget)
+        gameDatabaseService.logActivity({
+          activityType: 'expense_recorded',
+          mapId: currentMapId,
+          amount: amount,
+          details: { category, note: description, source: 'transport' },
+          sessionId: activeSessionId,
+        });
+        gameDatabaseService.incrementUserLevelStats({ expensesRecorded: 1 });
       }
-      
-      console.log(`✅ Recorded ${description}: ₱${amount}`);
     } catch (error) {
-      console.error('Error recording transport expense:', error);
+      console.error('❌ Transport: Error saving expense:', error);
     }
   };
 
@@ -1393,12 +1431,14 @@ export default function BuildScreen() {
       : [...visitedLocations, mapId];
     setVisitedLocations(newVisitedLocations);
     
-    // Check travel and exploration achievements
-    await checkAchievements('first_travel', {});
-    await checkAchievements('location_visited', { 
-      locationId: mapId, 
-      visitedLocations: newVisitedLocations 
-    });
+    // Check travel and exploration achievements (fire-and-forget, no blocking)
+    Promise.all([
+      checkAchievements('first_travel', {}),
+      checkAchievements('location_visited', { 
+        locationId: mapId, 
+        visitedLocations: newVisitedLocations 
+      }),
+    ]).catch(() => {});
 
     // ── Log map travel to Supabase ──
     gameDatabaseService.logActivity({
@@ -6711,47 +6751,75 @@ export default function BuildScreen() {
                       return;
                     }
 
-                    setIsSubmitting(true);
+                    // Capture values before clearing (same pattern as Canteen)
+                    const savedAmount = amount;
+                    const savedNote = expenseNote;
+                    const savedCategory = notebookCategory;
+                    const currentDate = new Date();
+
+                    // Optimistic UI — close modal immediately
+                    setShowNotebookModal(false);
+                    setExpenseAmount('');
+                    setExpenseNote('');
+                    setNotebookCategory('Food & Dining');
+
+                    // Quick non-blocking feedback
+                    Alert.alert(
+                      '✅ Expense Recorded!',
+                      `₱${savedAmount.toFixed(2)} added to ${savedCategory}`,
+                      [{ text: 'OK' }]
+                    );
+
+                    // Optimistic local state updates (instant, no await)
+                    setCategorySpending(prev => ({
+                      ...prev,
+                      [savedCategory]: (prev[savedCategory] || 0) + savedAmount
+                    }));
+
+                    if (gameMode === 'story' || gameMode === 'custom') {
+                      const budgetType = CATEGORY_BUDGET_MAP[savedCategory] || 'wants';
+                      setBudgetCategories(prev => ({
+                        ...prev,
+                        [budgetType]: {
+                          ...prev[budgetType],
+                          spent: prev[budgetType].spent + savedAmount
+                        }
+                      }));
+                      setWeeklySpending(prev => prev + savedAmount);
+                    }
+
+                    // Save in background — non-blocking
                     try {
-                      // Record the expense
-                      await addExpense({
-                        amount: amount,
-                        category: notebookCategory,
-                        description: expenseNote || `${notebookCategory} expense`,
-                        created_at: new Date().toISOString(),
-                      });
+                      const expenseData = {
+                        amount: savedAmount,
+                        category: savedCategory,
+                        note: savedNote || `${savedCategory} expense`,
+                        date: currentDate.toISOString(),
+                      };
 
-                      // todaySpending is auto-refreshed via useEffect on [expenses]
+                      console.log('💾 Notebook: Saving expense via DataContext:', JSON.stringify(expenseData));
+                      const success = await addExpense(expenseData);
 
-                      // Update category spending for story/custom mode
-                      if (gameMode === 'story' || gameMode === 'custom') {
-                        const updatedCategorySpending = { ...categorySpending, [notebookCategory]: (categorySpending[notebookCategory] || 0) + amount };
-                        setCategorySpending(updatedCategorySpending);
+                      if (!success) {
+                        console.error('❌ Notebook: Failed to save expense');
+                        Alert.alert('Sync Error', 'Your expense may not have been saved. Please check your expenses list.');
+                      } else {
+                        console.log('✅ Notebook: Expense saved successfully');
 
-                        // Update budget categories (needs/wants)
-                        const budgetType = CATEGORY_BUDGET_MAP[notebookCategory] || 'wants';
-                        const updatedNeedsSpent = budgetCategories.needs.spent + (budgetType === 'needs' ? amount : 0);
-                        const updatedWantsSpent = budgetCategories.wants.spent + (budgetType === 'wants' ? amount : 0);
-                        setBudgetCategories(prev => ({
-                          ...prev,
-                          [budgetType]: {
-                            ...prev[budgetType],
-                            spent: prev[budgetType].spent + amount
-                          }
-                        }));
+                        // Persist session spending to Supabase (fire-and-forget)
+                        if (activeSessionId && (gameMode === 'story' || gameMode === 'custom')) {
+                          const updatedSpending = weeklySpending + savedAmount;
+                          const updatedCategorySpending = { ...categorySpending, [savedCategory]: (categorySpending[savedCategory] || 0) + savedAmount };
+                          const budgetType = CATEGORY_BUDGET_MAP[savedCategory] || 'wants';
+                          const updatedNeedsSpent = budgetCategories.needs.spent + (budgetType === 'needs' ? savedAmount : 0);
+                          const updatedWantsSpent = budgetCategories.wants.spent + (budgetType === 'wants' ? savedAmount : 0);
 
-                        // Update weekly spending
-                        const updatedWeeklySpending = weeklySpending + amount;
-                        setWeeklySpending(updatedWeeklySpending);
-
-                        // Persist session spending to Supabase
-                        if (activeSessionId) {
                           const sessionUpdate = {
-                            weeklySpending: updatedWeeklySpending,
+                            weeklySpending: updatedSpending,
                             categorySpending: updatedCategorySpending,
                             needsSpent: updatedNeedsSpent,
                             wantsSpent: updatedWantsSpent,
-                            savingsAmount: weeklyBudget - updatedWeeklySpending,
+                            savingsAmount: weeklyBudget - updatedSpending,
                           };
                           if (gameMode === 'story') {
                             gameDatabaseService.updateStorySessionSpending(activeSessionId, sessionUpdate);
@@ -6759,32 +6827,27 @@ export default function BuildScreen() {
                             gameDatabaseService.updateCustomSessionSpending(activeSessionId, sessionUpdate);
                           }
                         }
+
+                        // Log to Supabase game activity (fire-and-forget)
+                        gameDatabaseService.logActivity({
+                          activityType: 'expense_recorded',
+                          mapId: currentMapId,
+                          locationId: currentLocation,
+                          amount: savedAmount,
+                          details: { category: savedCategory, note: savedNote, source: 'notebook' },
+                          sessionId: activeSessionId,
+                        });
+                        gameDatabaseService.incrementUserLevelStats({ expensesRecorded: 1 });
+
+                        // Achievements — fire-and-forget (no await blocking)
+                        checkAchievements('expense_logged', {
+                          expenseCount: expenseStats.total + 1,
+                          category: savedCategory,
+                        }).catch(() => {});
                       }
-
-                      // Check achievements
-                      const currentStats = await fetchExpenseStats();
-                      await checkAchievements('expense_logged', {
-                        expenseCount: currentStats?.total || expenseStats.total + 1,
-                        category: notebookCategory,
-                      });
-
-                      // Close modal and reset
-                      setShowNotebookModal(false);
-                      setExpenseAmount('');
-                      setExpenseNote('');
-                      setNotebookCategory('Food & Dining');
-
-                      // Success feedback
-                      Alert.alert(
-                        '✅ Expense Recorded!',
-                        `₱${amount.toFixed(2)} added to ${notebookCategory}`,
-                        [{ text: 'OK' }]
-                      );
                     } catch (error) {
-                      console.error('Error recording notebook expense:', error);
-                      Alert.alert('Error', 'Failed to save expense. Please try again.');
-                    } finally {
-                      setIsSubmitting(false);
+                      console.error('❌ Notebook: Error saving expense:', error);
+                      Alert.alert('Sync Error', `Your expense may not have been saved: ${error.message || 'Unknown error'}`);
                     }
                   }}
                   disabled={isSubmitting}

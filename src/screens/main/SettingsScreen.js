@@ -29,8 +29,8 @@ const SettingsScreen = ({ navigation }) => {
   const [name, setName] = useState(userInfo?.name || '');
   const [email, setEmail] = useState(userInfo?.email || '');
   const [username, setUsername] = useState(userInfo?.username || '');
-  const [monthlyBudget, setMonthlyBudget] = useState(budget.monthly.toString());
-  const [savingsGoal, setSavingsGoal] = useState(budget.savingsGoal.toString());
+  const [monthlyBudget, setMonthlyBudget] = useState((budget?.monthly ?? 0).toString());
+  const [savingsGoal, setSavingsGoal] = useState((budget?.savingsGoal ?? 0).toString());
 
   // Update name and username state when userInfo changes
   useEffect(() => {
@@ -162,8 +162,8 @@ const SettingsScreen = ({ navigation }) => {
                 </View>
                 <View style={styles.settingInfo}>
                   <Text style={[styles.settingText, { color: theme.colors.text }]}>Budget & Goals</Text>
-                  <Text style={[styles.settingValue, { color: theme.colors.text }]}>Monthly: ₱{budget.monthly.toLocaleString()}</Text>
-                  <Text style={[styles.settingValue, { color: theme.colors.text }]}>Savings Goal: ₱{budget.savingsGoal.toLocaleString()}</Text>
+                  <Text style={[styles.settingValue, { color: theme.colors.text }]}>Monthly: ₱{(budget?.monthly ?? 0).toLocaleString()}</Text>
+                  <Text style={[styles.settingValue, { color: theme.colors.text }]}>Savings Goal: ₱{(budget?.savingsGoal ?? 0).toLocaleString()}</Text>
                 </View>
               </View>
               <Ionicons name="chevron-forward" size={20} color={theme.colors.text} style={{ opacity: 0.6 }} />

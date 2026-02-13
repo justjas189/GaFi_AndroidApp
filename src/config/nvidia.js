@@ -664,6 +664,36 @@ Focus on: Filipino student context, practical savings tips, budget optimization,
   }
 };
 
+// Sanitize a JSON string by stripping JS/C-style comments and control characters
+// Fixes: "JSON Parse error: Unexpected character: /"
+const sanitizeJSONString = (str) => {
+  if (!str || typeof str !== 'string') return str;
+
+  // 1. Remove single-line comments ( // ... ) that are NOT inside strings
+  //    Negative lookbehind for odd number of unescaped quotes is hard in JS,
+  //    so we use a state-machine-free heuristic: strip lines starting with //
+  //    and trailing // comments only outside of quoted values.
+  let sanitized = str
+    // Remove lines that are only a comment
+    .replace(/^\s*\/\/.*$/gm, '')
+    // Remove trailing comments after JSON values (e.g., "key": "val" // comment)
+    .replace(/,?\s*\/\/[^\n"]*$/gm, match => {
+      // Keep the comma if present
+      return match.trimStart().startsWith(',') ? ',' : '';
+    });
+
+  // 2. Remove multi-line comments /* ... */
+  sanitized = sanitized.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  // 3. Remove invisible/control characters (except normal whitespace)
+  sanitized = sanitized.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+
+  // 4. Remove trailing commas before } or ] (common LLM mistake)
+  sanitized = sanitized.replace(/,\s*([\]}])/g, '$1');
+
+  return sanitized.trim();
+};
+
 // Helper function to extract JSON from mixed text responses
 const extractJSON = (response) => {
   try {
@@ -674,13 +704,16 @@ const extractJSON = (response) => {
     }
     
     // Convert to string if not already
-    const responseStr = typeof response === 'string' ? response : String(response);
+    let responseStr = typeof response === 'string' ? response : String(response);
     
     DebugUtils.log('NVIDIA_AI', 'Attempting to extract JSON from response', { 
       responseStart: responseStr.substring(0, 100),
       responseType: typeof response,
       responseLength: responseStr.length
     });
+
+    // Sanitize: strip comments and invalid characters BEFORE any parsing
+    responseStr = sanitizeJSONString(responseStr);
     
     // Check for truncated response first
     if (responseStr.trim().endsWith(',') || 
@@ -698,8 +731,9 @@ const extractJSON = (response) => {
   } catch (error) {
     // If direct parsing fails, try to extract JSON from the response
     
-    // Ensure response is a string
-    const responseStr = typeof response === 'string' ? response : (response ? String(response) : '');
+    // Ensure response is a string and sanitize it
+    let responseStr = typeof response === 'string' ? response : (response ? String(response) : '');
+    responseStr = sanitizeJSONString(responseStr);
     
     if (!responseStr) {
       DebugUtils.error('NVIDIA_AI', 'Cannot extract JSON from empty response');
@@ -764,7 +798,7 @@ const extractJSON = (response) => {
     const codeBlockMatch = responseStr.match(/```(?:json)?\s*(\[[\s\S]*?\]|\{[\s\S]*?\})\s*```/);
     if (codeBlockMatch) {
       DebugUtils.log('NVIDIA_AI', 'Found JSON in code block', { match: codeBlockMatch[1].substring(0, 100) });
-      return codeBlockMatch[1];
+      return sanitizeJSONString(codeBlockMatch[1]);
     }
     
     // Try to clean up common issues
