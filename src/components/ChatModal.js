@@ -20,7 +20,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import Markdown from 'react-native-markdown-display';
 import { useTheme } from '../context/ThemeContext';
-import { useMascot } from '../MonT/context/MascotContext';
 import { useNavigation } from '@react-navigation/native';
 import { DataContext } from '../context/DataContext';
 import { AuthContext } from '../context/AuthContext';
@@ -122,7 +121,6 @@ const SCREEN_CONTEXTS = {
 
 const ChatModal = ({ visible, onClose }) => {
   const { colors, theme } = useTheme();
-  const mascot = useMascot();
   const navigation = useNavigation();
   const { expenses, budget, calculateTotalExpenses } = useContext(DataContext);
   const { userInfo } = useContext(AuthContext);

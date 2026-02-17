@@ -474,9 +474,17 @@ class GameDatabaseService {
       if (userLevels?.story_level_1_completed) unlocked.push(2);
       if (userLevels?.story_level_2_completed) unlocked.push(3);
 
+      // Derive intro-seen flags from user_levels
+      const introSeen = {
+        1: !!userLevels?.intro_seen_level_1,
+        2: !!userLevels?.intro_seen_level_2,
+        3: !!userLevels?.intro_seen_level_3,
+      };
+
       console.log('📦 Loaded game progress:', {
         hasUserLevels: !!userLevels,
         unlockedLevels: unlocked,
+        introSeen,
         selectedCharacter: character?.selected_character || 'girl',
         tutorialCompleted: tutorial?.tutorial_completed || false,
         activeStorySession: activeStory?.id || null,
@@ -490,6 +498,7 @@ class GameDatabaseService {
         activeStory,
         activeCustom,
         unlockedLevels: unlocked,
+        introSeen,
       };
     } catch (err) {
       console.error('❌ loadGameProgress error:', err.message);
@@ -594,6 +603,121 @@ class GameDatabaseService {
       if (updateErr) throw updateErr;
     } catch (err) {
       console.error('❌ incrementUserLevelStats error:', err.message);
+    }
+  }
+
+  // ─── 10. Intro-seen flags (one-time level intros) ───────
+
+  /**
+   * Mark a story level intro as seen for the current user.
+   * Persists to the `user_levels` table (intro_seen_level_X column).
+   */
+  async markIntroSeen(level) {
+    try {
+      const userId = await this._getUserId();
+      if (!userId) return;
+
+      const col = `intro_seen_level_${level}`;
+      // Ensure the row exists first
+      await supabase
+        .from('user_levels')
+        .upsert(
+          { user_id: userId },
+          { onConflict: 'user_id', ignoreDuplicates: true }
+        );
+
+      const { error } = await supabase
+        .from('user_levels')
+        .update({ [col]: true, updated_at: new Date().toISOString() })
+        .eq('user_id', userId);
+
+      if (error) throw error;
+      console.log(`✅ Marked intro seen for level ${level}`);
+    } catch (err) {
+      console.error('❌ markIntroSeen error:', err.message);
+    }
+  }
+
+  /**
+   * Load which level intros have been seen from the DB.
+   * Returns an object like { 1: true, 2: false, 3: false }.
+   */
+  async getIntroSeenLevels() {
+    try {
+      const userId = await this._getUserId();
+      if (!userId) return {};
+
+      const { data, error } = await supabase
+        .from('user_levels')
+        .select('intro_seen_level_1, intro_seen_level_2, intro_seen_level_3')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) return {};
+
+      return {
+        1: !!data.intro_seen_level_1,
+        2: !!data.intro_seen_level_2,
+        3: !!data.intro_seen_level_3,
+      };
+    } catch (err) {
+      console.error('❌ getIntroSeenLevels error:', err.message);
+      return {};
+    }
+  }
+
+  // ─── 11. Find active session by level ─────────────────────
+
+  /**
+   * Find an in-progress story session for a specific level.
+   * Used to resume instead of creating duplicates.
+   */
+  async findActiveStorySession(level) {
+    try {
+      const userId = await this._getUserId();
+      if (!userId) return null;
+
+      const { data, error } = await supabase
+        .from('story_mode_sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('level', level)
+        .eq('status', 'in_progress')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error('❌ findActiveStorySession error:', err.message);
+      return null;
+    }
+  }
+
+  /**
+   * Find an in-progress custom mode session.
+   */
+  async findActiveCustomSession() {
+    try {
+      const userId = await this._getUserId();
+      if (!userId) return null;
+
+      const { data, error } = await supabase
+        .from('custom_mode_sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'in_progress')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error('❌ findActiveCustomSession error:', err.message);
+      return null;
     }
   }
 

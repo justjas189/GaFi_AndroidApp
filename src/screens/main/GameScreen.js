@@ -443,6 +443,10 @@ export default function BuildScreen() {
     shoppingCount: 0,
     electronicsCount: 0
   });
+
+  // Cached active sessions (populated during hydration, consumed when user selects a level)
+  const cachedActiveStoryRef = useRef(null);
+  const cachedActiveCustomRef = useRef(null);
   
   // Story Level Configurations - Restructured
   // Level 1: Budgeting (50/30/20 rule)
@@ -541,7 +545,7 @@ export default function BuildScreen() {
         const progress = await gameDatabaseService.loadGameProgress();
         if (!progress) return;
 
-        const { userLevels, character, tutorial, activeStory, activeCustom, unlockedLevels: unlocked } = progress;
+        const { userLevels, character, tutorial, activeStory, activeCustom, unlockedLevels: unlocked, introSeen } = progress;
 
         // 1. Unlocked story levels
         if (unlocked && unlocked.length > 0) {
@@ -552,6 +556,15 @@ export default function BuildScreen() {
         const cmUnlocked = await AsyncStorage.getItem(`customModeUnlocked_${user.id}`);
         if (cmUnlocked === 'true') {
           setCustomModeUnlocked(true);
+        }
+
+        // 1c. Sync intro-seen flags from DB → AsyncStorage (cross-device persistence)
+        if (introSeen) {
+          for (const lvl of [1, 2, 3]) {
+            if (introSeen[lvl]) {
+              await AsyncStorage.setItem(`level_intro_seen_${user.id}_${lvl}`, 'true');
+            }
+          }
         }
 
         // 2. Character selection
@@ -566,88 +579,19 @@ export default function BuildScreen() {
           });
         }
 
-        // 3. Resume active story session (if any)
+        // 3. Cache active story session for later resumption (DO NOT auto-navigate)
         if (activeStory) {
-          const levelConfig = STORY_LEVELS[activeStory.level];
-          if (levelConfig) {
-            setGameMode('story');
-            setActiveSessionId(activeStory.id);
-            setStoryLevel(activeStory.level);
-            setWeeklyBudget(activeStory.weekly_budget || 0);
-            setStoryStartDate(new Date(activeStory.start_date));
-            setStoryEndDate(new Date(activeStory.end_date));
-            setWeeklySpending(activeStory.weekly_spending || 0);
-            if (activeStory.category_spending) setCategorySpending(activeStory.category_spending);
-            if (activeStory.needs_spent != null || activeStory.wants_spent != null) {
-              setBudgetCategories({
-                needs:   { budget: activeStory.needs_budget || 0, spent: activeStory.needs_spent || 0 },
-                wants:   { budget: activeStory.wants_budget || 0, spent: activeStory.wants_spent || 0 },
-                savings: { budget: activeStory.savings_budget || 0, spent: 0 },
-              });
-            }
-            if (activeStory.goals_data) {
-              setSavingsGoals(activeStory.goals_data);
-              // Rebuild allocations from goals_data if they have allocations
-              const allocs = {};
-              activeStory.goals_data.forEach(g => { allocs[g.id] = g.allocated || 0; });
-              setGoalAllocations(allocs);
-            }
-            setShowMainMenu(false);
-            setCurrentMapId('dorm');
-            console.log(`🔄 Resumed active story session ${activeStory.id} (Level ${activeStory.level})`);
-          }
+          cachedActiveStoryRef.current = activeStory;
+          console.log(`📦 Cached active story session ${activeStory.id} (Level ${activeStory.level})`);
         }
-        // 4. Resume active custom session (if any and no active story)
-        else if (activeCustom) {
-          setGameMode('custom');
-          setActiveSessionId(activeCustom.id);
-          setWeeklyBudget(activeCustom.weekly_budget || 0);
-          setStoryStartDate(new Date(activeCustom.start_date));
-          setStoryEndDate(new Date(activeCustom.end_date));
-          setWeeklySpending(activeCustom.weekly_spending || 0);
-          if (activeCustom.category_spending) setCategorySpending(activeCustom.category_spending);
-          if (activeCustom.custom_rules) setCustomBudgetRules(activeCustom.custom_rules);
-          // Restore mode type and storyLevel so the correct HUD renders
-          const modeType = activeCustom.mode_type;
-          if (modeType) setCustomModeType(modeType);
-          if (modeType === 'budgeting') {
-            setStoryLevel(1);
-            // Restore budget categories from DB
-            const rules = activeCustom.custom_rules || { needs: 50, wants: 30, savings: 20 };
-            setBudgetCategories({
-              needs:   { budget: (activeCustom.weekly_budget || 0) * (rules.needs / 100), spent: parseFloat(activeCustom.needs_spent) || 0 },
-              wants:   { budget: (activeCustom.weekly_budget || 0) * (rules.wants / 100), spent: parseFloat(activeCustom.wants_spent) || 0 },
-              savings: { budget: (activeCustom.weekly_budget || 0) * (rules.savings / 100), spent: 0 },
-            });
-          } else if (modeType === 'goals') {
-            setStoryLevel(2);
-            if (activeCustom.custom_goals) {
-              const goals = activeCustom.custom_goals.map((g, i) => ({
-                id: `custom_${i}`, name: g.name, icon: ['🎯','💎','🌟','🎁','✨'][i % 5], target: g.target || 0
-              }));
-              setSavingsGoals(goals);
-              const allocs = {};
-              goals.forEach(g => { allocs[g.id] = 0; });
-              if (activeCustom.goals_progress) {
-                activeCustom.goals_progress.forEach(gp => {
-                  const matchGoal = goals.find(g => g.name === gp.name);
-                  if (matchGoal) allocs[matchGoal.id] = gp.allocated || 0;
-                });
-              }
-              setGoalAllocations(allocs);
-            }
-          } else if (modeType === 'saving') {
-            setStoryLevel(3);
-            if (activeCustom.custom_savings_target != null) {
-              setCustomSavingsTarget(String(activeCustom.custom_savings_target));
-            }
-          }
-          setShowMainMenu(false);
-          setCurrentMapId('dorm');
-          console.log(`🔄 Resumed active custom session ${activeCustom.id} (${modeType})`);
+        // 4. Cache active custom session for later resumption (DO NOT auto-navigate)
+        if (activeCustom) {
+          cachedActiveCustomRef.current = activeCustom;
+          console.log(`📦 Cached active custom session ${activeCustom.id} (${activeCustom.mode_type})`);
         }
 
-        console.log('✅ Game progress hydrated from Supabase');
+        // Always stay on Main Menu — user chooses when to resume
+        console.log('✅ Game progress hydrated from Supabase (staying on Main Menu)');
       } catch (err) {
         console.error('❌ Failed to hydrate game progress:', err.message);
       }
@@ -903,6 +847,10 @@ export default function BuildScreen() {
     
     setShowLevelComplete(true);
 
+    // Clear cached active sessions since this one is now completed
+    if (gameMode === 'story') cachedActiveStoryRef.current = null;
+    if (gameMode === 'custom') cachedActiveCustomRef.current = null;
+
     // ── Persist level completion to Supabase ──
     const xpEarned = passed ? (storyLevel === 1 ? 100 : storyLevel === 2 ? 150 : 200) : 0;
     const starsEarned = passed ? (results.type === 'budgeting'
@@ -941,6 +889,14 @@ export default function BuildScreen() {
 
   // Start Story Mode with a specific level
   const startStoryLevel = async (level) => {
+    // Guard: if an active session already exists for this level, resume it instead
+    const existingSession = await gameDatabaseService.findActiveStorySession(level);
+    if (existingSession) {
+      console.log(`⚠️ Active session found for level ${level} — resuming instead of creating new`);
+      resumeStorySession(existingSession);
+      return;
+    }
+
     // Get user's monthly budget from DataContext/Supabase
     try {
       const { data: budgetData, error } = await supabase
@@ -3139,6 +3095,132 @@ export default function BuildScreen() {
     }
   };
 
+  // ─── Resume helpers (Bug 1 + Bug 3 fix) ──────────────────
+
+  /**
+   * Apply a cached/fetched story session to component state and navigate to gameplay.
+   * This avoids creating a duplicate session.
+   */
+  const resumeStorySession = (session) => {
+    const levelConfig = STORY_LEVELS[session.level];
+    if (!levelConfig) return;
+
+    setGameMode('story');
+    setActiveSessionId(session.id);
+    setStoryLevel(session.level);
+    setWeeklyBudget(session.weekly_budget || 0);
+    setStoryStartDate(new Date(session.start_date));
+    setStoryEndDate(new Date(session.end_date));
+    setWeeklySpending(session.weekly_spending || 0);
+    if (session.category_spending) setCategorySpending(session.category_spending);
+    if (session.needs_spent != null || session.wants_spent != null) {
+      setBudgetCategories({
+        needs:   { budget: session.needs_budget || 0, spent: session.needs_spent || 0 },
+        wants:   { budget: session.wants_budget || 0, spent: session.wants_spent || 0 },
+        savings: { budget: session.savings_budget || 0, spent: 0 },
+      });
+    }
+    if (session.goals_data) {
+      setSavingsGoals(session.goals_data);
+      const allocs = {};
+      session.goals_data.forEach(g => { allocs[g.id] = g.allocated || 0; });
+      setGoalAllocations(allocs);
+    }
+
+    setShowStoryIntro(false);
+    setShowMainMenu(false);
+    setCurrentMapId('dorm');
+    console.log(`🔄 Resumed active story session ${session.id} (Level ${session.level})`);
+  };
+
+  /**
+   * Apply a cached/fetched custom session to component state and navigate to gameplay.
+   */
+  const resumeCustomSession = (session) => {
+    setGameMode('custom');
+    setActiveSessionId(session.id);
+    setWeeklyBudget(session.weekly_budget || 0);
+    setStoryStartDate(new Date(session.start_date));
+    setStoryEndDate(new Date(session.end_date));
+    setWeeklySpending(session.weekly_spending || 0);
+    if (session.category_spending) setCategorySpending(session.category_spending);
+    if (session.custom_rules) setCustomBudgetRules(session.custom_rules);
+
+    const modeType = session.mode_type;
+    if (modeType) setCustomModeType(modeType);
+    if (modeType === 'budgeting') {
+      setStoryLevel(1);
+      const rules = session.custom_rules || { needs: 50, wants: 30, savings: 20 };
+      setBudgetCategories({
+        needs:   { budget: (session.weekly_budget || 0) * (rules.needs / 100), spent: parseFloat(session.needs_spent) || 0 },
+        wants:   { budget: (session.weekly_budget || 0) * (rules.wants / 100), spent: parseFloat(session.wants_spent) || 0 },
+        savings: { budget: (session.weekly_budget || 0) * (rules.savings / 100), spent: 0 },
+      });
+    } else if (modeType === 'goals') {
+      setStoryLevel(2);
+      if (session.custom_goals) {
+        const goals = session.custom_goals.map((g, i) => ({
+          id: `custom_${i}`, name: g.name, icon: ['🎯','💎','🌟','🎁','✨'][i % 5], target: g.target || 0
+        }));
+        setSavingsGoals(goals);
+        const allocs = {};
+        goals.forEach(g => { allocs[g.id] = 0; });
+        if (session.goals_progress) {
+          session.goals_progress.forEach(gp => {
+            const matchGoal = goals.find(g => g.name === gp.name);
+            if (matchGoal) allocs[matchGoal.id] = gp.allocated || 0;
+          });
+        }
+        setGoalAllocations(allocs);
+      }
+    } else if (modeType === 'saving') {
+      setStoryLevel(3);
+      if (session.custom_savings_target != null) {
+        setCustomSavingsTarget(String(session.custom_savings_target));
+      }
+    }
+
+    setShowCustomSetup(false);
+    setShowMainMenu(false);
+    setCurrentMapId('dorm');
+    console.log(`🔄 Resumed active custom session ${session.id} (${modeType})`);
+  };
+
+  /**
+   * Unified handler when the user taps a story level button.
+   * 1. Checks for an existing active session → resumes if found (Bug 3 fix)
+   * 2. Checks if the level intro has been seen → skips intro if true (Bug 2 fix)
+   * 3. Otherwise shows the intro dialogue
+   */
+  const handleLevelSelect = async (level) => {
+    // 1. Check cached active session first, then fall back to DB query
+    let activeSession = null;
+    const cached = cachedActiveStoryRef.current;
+    if (cached && cached.level === level && cached.status === 'in_progress') {
+      activeSession = cached;
+    } else {
+      // Query DB for an in-progress session for this specific level
+      activeSession = await gameDatabaseService.findActiveStorySession(level);
+    }
+
+    if (activeSession) {
+      // Resume existing session — no data reset
+      resumeStorySession(activeSession);
+      return;
+    }
+
+    // 2. No active session — check if level intro has already been seen
+    const key = `level_intro_seen_${user?.id}_${level}`;
+    const seen = await AsyncStorage.getItem(key);
+    if (seen === 'true') {
+      // Skip intro, start a brand-new level directly
+      startStoryLevel(level);
+    } else {
+      // Show the intro dialogue (first time)
+      openLevelIntro(level);
+    }
+  };
+
   // Handle menu button press
   const handleStoryMode = () => {
     // Clear any leftover tutorial state
@@ -3218,8 +3300,14 @@ export default function BuildScreen() {
   };
 
   // Close intro and start the actual level
-  const handleIntroStartLevel = () => {
+  const handleIntroStartLevel = async () => {
     const level = introLevel;
+
+    // Mark intro as seen — persist to AsyncStorage + DB
+    const key = `level_intro_seen_${user?.id}_${level}`;
+    await AsyncStorage.setItem(key, 'true');
+    gameDatabaseService.markIntroSeen(level); // fire-and-forget DB update
+
     setShowLevelIntro(false);
     setIntroLevel(null);
     setIntroPage(0);
@@ -3239,17 +3327,26 @@ export default function BuildScreen() {
     setIntroDisplayedText('');
   };
 
-  const handleCustomMode = () => {
+  const handleCustomMode = async () => {
     // Clear any leftover tutorial state
     if (tutorialActive) {
       setTutorialActive(false);
       setTutorialStep(0);
     }
-    // If there's already an active custom session, resume it directly
-    if (gameMode === 'custom' && activeSessionId) {
-      setShowMainMenu(false);
+
+    // Check for a cached active custom session first, then DB fallback
+    let activeCustom = cachedActiveCustomRef.current;
+    if (!activeCustom) {
+      activeCustom = await gameDatabaseService.findActiveCustomSession();
+    }
+
+    if (activeCustom) {
+      // Resume existing custom session — no data reset
+      resumeCustomSession(activeCustom);
       return;
     }
+
+    // No active session — show custom setup
     setShowCustomSetup(true);
     setShowMainMenu(false);
   };
@@ -3867,7 +3964,7 @@ export default function BuildScreen() {
                   storyStyles.levelButton,
                   isUnlocked ? storyStyles.levelUnlocked : storyStyles.levelLocked,
                 ]}
-                onPress={() => isUnlocked && openLevelIntro(level)}
+                onPress={() => isUnlocked && handleLevelSelect(level)}
                 activeOpacity={isUnlocked ? 0.7 : 1}
                 disabled={!isUnlocked}
               >

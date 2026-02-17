@@ -8,7 +8,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { View, Text, ActivityIndicator } from 'react-native';
-import { NotificationService } from './src/MonT/services/NotificationService';
 
 // Enhanced Components & Utilities
 import ErrorBoundary from './src/components/ErrorBoundary';
@@ -29,8 +28,6 @@ import { navigationRef } from './src/navigation/navigationRef';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { DataProvider } from './src/context/DataContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
-import { ChatbotProvider } from './src/context/EnhancedChatbotContext';
-import { MascotProvider } from './src/MonT/context/MascotContext';
 
 const Stack = createStackNavigator();
 
@@ -214,23 +211,9 @@ export default function App() {
       // Initialize security manager
       await SecurityManager.initialize();
       DebugUtils.debug('APP', 'Security manager initialized');
-      
-      // Initialize notifications
-      NotificationService.initialize();
-      // Handle notification taps
-      const subscription = NotificationService.addNotificationResponseListener(response => {
-        const data = response.notification.request.content.data;
-        
-        if (data.screen) {
-          // Navigate to appropriate screen
-          navigationRef.current?.navigate(data.screen);
-        }
-      });
 
       DebugUtils.log('APP', 'Application initialization completed');
       setIsInitialized(true);
-      
-      return () => subscription?.remove();
     } catch (error) {
       DebugUtils.error('APP', 'Failed to initialize application', error);
       // Still allow app to continue
@@ -251,12 +234,8 @@ export default function App() {
             <ThemedNavigationContainer>
               <AuthProvider>
                 <DataProvider>
-                  <ChatbotProvider>
-                    <MascotProvider>
-                      <StatusBar style="auto" />
-                      <AppNavigator />
-                    </MascotProvider>
-                  </ChatbotProvider>
+                    <StatusBar style="auto" />
+                    <AppNavigator />
                 </DataProvider>
               </AuthProvider>
             </ThemedNavigationContainer>

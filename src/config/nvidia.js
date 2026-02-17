@@ -1,13 +1,9 @@
 // NVIDIA API configuration for Llama model
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DebugUtils from '../utils/DebugUtils';
-import { ChatMemoryManager } from '../services/ChatMemoryManager';
-import { ErrorRecoveryManager } from '../services/ErrorRecoveryManager';
 import { BudgetAlertManager } from '../services/BudgetAlertManager';
 
 // Initialize service instances
-const chatMemoryManager = new ChatMemoryManager();
-const errorRecoveryManager = new ErrorRecoveryManager();
 const budgetAlertManager = new BudgetAlertManager();
 
 // NVIDIA API configuration
@@ -186,19 +182,11 @@ export const getChatCompletion = async (messages, options = {}) => {
       responseTime
     });
     
-    // Use error recovery system
-    const recovery = await errorRecoveryManager.handleError('nvidia_api_error', {
-      error: error.message,
-      responseTime,
-      messageCount: messages.length
-    }, { messages });
+    // Log error for debugging
+    DebugUtils.warn('NVIDIA_API', 'API error, returning fallback response');
     
-    if (recovery.success && recovery.type === 'local_fallback') {
-      // Return a basic fallback response
-      return "I'm having trouble connecting to my AI services, but I can still help with basic expense tracking. Please try again or use simpler commands.";
-    }
-    
-    throw error;
+    // Return a basic fallback response
+    return "I'm having trouble connecting to my AI services, but I can still help with basic expense tracking. Please try again or use simpler commands.";
   }
 };
 
@@ -469,12 +457,6 @@ Focus on: spending patterns, budget adherence, category-specific tips, and Filip
       DebugUtils.error('NVIDIA_AI', 'AI response parsing failed', parseError);
       DebugUtils.log('NVIDIA_AI', 'Raw response that failed to parse', { response: response.substring(0, 200) });
       
-      // Use error recovery for parsing failures
-      const recovery = await errorRecoveryManager.handleError('ai_parsing_error', {
-        response,
-        parseError: parseError.message
-      }, {});
-      
       // Fallback to manual insights
       insights = generateFallbackInsights(expenses, budget);
     }
@@ -487,12 +469,6 @@ Focus on: spending patterns, budget adherence, category-specific tips, and Filip
 
   } catch (error) {
     DebugUtils.error('NVIDIA_AI', 'Error analyzing expenses with AI', error);
-    
-    // Use error recovery system
-    await errorRecoveryManager.handleError('ai_analysis_error', {
-      error: error.message,
-      expenseCount: expenses.length
-    }, {});
     
     return generateFallbackInsights(expenses, budget);
   }
@@ -637,12 +613,6 @@ Focus on: Filipino student context, practical savings tips, budget optimization,
       DebugUtils.error('NVIDIA_AI', 'Recommendation parsing failed', parseError);
       DebugUtils.log('NVIDIA_AI', 'Raw response that failed to parse', { response: response.substring(0, 200) });
       
-      // Use error recovery
-      await errorRecoveryManager.handleError('ai_parsing_error', {
-        response,
-        parseError: parseError.message
-      }, {});
-      
       recommendations = generateFallbackRecommendations(expenses, budget);
     }
 
@@ -653,12 +623,6 @@ Focus on: Filipino student context, practical savings tips, budget optimization,
 
   } catch (error) {
     DebugUtils.error('NVIDIA_AI', 'Error getting AI recommendations', error);
-    
-    // Use error recovery system
-    await errorRecoveryManager.handleError('ai_recommendation_error', {
-      error: error.message,
-      expenseCount: expenses.length
-    }, {});
     
     return generateFallbackRecommendations(expenses, budget);
   }
@@ -1170,38 +1134,20 @@ export const processExpenseForAlerts = async (userId, expense, currentBudget, ca
 // Memory-optimized conversation context
 export const getOptimizedConversationContext = async (userId, sessionId, limit = 10) => {
   try {
-    const result = await chatMemoryManager.loadMessages(userId, sessionId, 0, limit);
-    
-    // Return only essential context for AI processing
-    return result.messages.map(msg => ({
-      role: msg.isBot ? 'assistant' : 'user',
-      content: msg.text,
-      timestamp: msg.timestamp
-    }));
+    // Chat memory service removed — return empty context
+    return [];
   } catch (error) {
     DebugUtils.error('NVIDIA_AI', 'Error getting conversation context', error);
     return [];
   }
 };
 
-// Enhanced error recovery for AI failures
+// Error recovery for AI failures
 export const handleAIFailure = async (errorType, context) => {
-  try {
-    const recovery = await errorRecoveryManager.handleError(errorType, context, {});
-    
-    if (recovery.success) {
-      return {
-        success: true,
-        fallbackResponse: recovery.response.text,
-        recoveryType: recovery.type,
-        requiresUserAction: recovery.response.requiresUserAction,
-        actionType: recovery.response.actionType
-      };
-    }
-    
-    return { success: false, error: 'Recovery failed' };
-  } catch (error) {
-    DebugUtils.error('NVIDIA_AI', 'Error in AI failure recovery', error);
-    return { success: false, error: error.message };
-  }
+  DebugUtils.warn('NVIDIA_AI', `AI failure: ${errorType}`, context);
+  return {
+    success: false,
+    error: 'Recovery service not available',
+    fallbackResponse: 'Service temporarily unavailable. Please try again.',
+  };
 };

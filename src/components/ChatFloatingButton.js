@@ -3,7 +3,7 @@ import React, { useContext } from 'react';
 import { TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { ThemeContext } from '../../context/ThemeContext';
+import { ThemeContext } from '../context/ThemeContext';
 
 const NotesFloatingButton = ({ style }) => {
   const navigation = useNavigation();

@@ -1,10 +1,11 @@
 import React, { useContext } from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { View, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemeContext } from '../context/ThemeContext';
 
-// Import only the core screens that we know work
+// Core screens
 import HomeScreen from '../screens/main/HomeScreen';
 import ExpenseScreen from '../screens/main/ExpenseScreen';
 import ExpenseGraphScreen from '../screens/main/ExpenseGraphScreen';
@@ -13,9 +14,6 @@ import NoteScreen from '../screens/main/NoteScreen';
 import AddNoteScreen from '../screens/main/AddNoteScreen';
 import SettingsScreen from '../screens/main/SettingsScreen';
 import LearnScreen from '../screens/main/LearnScreen';
-import SavingsGoalsScreen from '../screens/main/SavingsGoalsScreen';
-import ChatScreen from '../screens/main/EnhancedChatScreen';
-import ChatHistorySettingsScreen from '../screens/main/ChatHistorySettingsScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -66,14 +64,8 @@ const TabNavigator = () => {
             iconName = focused ? 'stats-chart' : 'stats-chart-outline';
           } else if (route.name === 'Budget') {
             iconName = focused ? 'card' : 'card-outline';
-          } else if (route.name === 'MonT AI') {
-            iconName = focused ? 'chatbubble' : 'chatbubble-outline';
           } else if (route.name === 'Learn') {
             iconName = focused ? 'school' : 'school-outline';
-          } else if (route.name === 'Goals') {
-            iconName = focused ? 'trophy' : 'trophy-outline';
-          } else if (route.name === 'Social') {
-            iconName = focused ? 'people' : 'people-outline';
           }
 
           return <Ionicons name={iconName} size={size} color={color} />;
@@ -93,10 +85,7 @@ const TabNavigator = () => {
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Expenses" component={ExpenseScreen} />
       <Tab.Screen name="Budget" component={PlaceholderScreen} />
-      <Tab.Screen name="MonT AI" component={ChatScreen} />
       <Tab.Screen name="Learn" component={LearnScreen} />
-      <Tab.Screen name="Goals" component={SavingsGoalsScreen} />
-      <Tab.Screen name="Social" component={PlaceholderScreen} />
     </Tab.Navigator>
   );
 };
@@ -113,13 +102,11 @@ const MainNavigator = () => {
       <Stack.Screen name="ExpenseGraph" component={ExpenseGraphScreen} />
       <Stack.Screen name="AddNote" component={AddNoteScreen} />
       <Stack.Screen name="Notes" component={NoteScreen} />
-      <Stack.Screen name="ChatHistorySettings" component={ChatHistorySettingsScreen} />
       <Stack.Screen name="Calendar" component={CalendarScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="Achievements" component={PlaceholderScreen} />
       <Stack.Screen name="FriendRequests" component={PlaceholderScreen} />
       <Stack.Screen name="FriendsList" component={PlaceholderScreen} />
-      <Stack.Screen name="OldSavingsGoals" component={SavingsGoalsScreen} />
       <Stack.Screen name="OldLearn" component={LearnScreen} />
     </Stack.Navigator>
   );

@@ -17,11 +17,6 @@ import { supabase } from '../../config/supabase';
 import { AuthContext } from '../../context/AuthContext';
 import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
-import { useMascot } from '../../MonT/context/MascotContext';
-import { MonTMascot } from '../../MonT/components/MascotSystem';
-import { MascotIntegrationHelpers } from '../../MonT/utils/IntegrationHelpers';
-import { MonTNotificationToast, MonTDailyMessage, MonTBudgetAlert } from '../../components/MonTNotificationToast';
-import { useMonTNotifications } from '../../utils/MonTNotificationManager';
 
 const HomeScreen = ({ navigation }) => {
   const { userInfo } = useContext(AuthContext);
@@ -34,17 +29,11 @@ const HomeScreen = ({ navigation }) => {
     insights: contextInsights
   } = useContext(DataContext);
   const { theme } = useContext(ThemeContext);
-  const mascot = useMascot();
-  const montNotifications = useMonTNotifications();
   
   const [refreshing, setRefreshing] = useState(false);
   const [recentExpenses, setRecentExpenses] = useState([]);
   const [insights, setInsights] = useState([]);
-  
-  // MonT notification states
-  const [showDailyMessage, setShowDailyMessage] = useState(false);
-  const [showBudgetAlert, setShowBudgetAlert] = useState(false);
-  const [budgetAlertData, setBudgetAlertData] = useState(null);
+
 
   // Test function to reset onboarding status for testing
   const resetOnboardingForTesting = async () => {
@@ -183,44 +172,6 @@ const HomeScreen = ({ navigation }) => {
     setInsights(contextInsights || []);
   }, [expenses, contextInsights]);
 
-  // Trigger mascot welcome reaction when home screen loads
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (monthlyRemaining <= 0) {
-        // Use new global notification system
-        montNotifications.budgetWarning(Math.abs(monthlyRemaining));
-        
-        MascotIntegrationHelpers.onBudgetExceeded(mascot, Math.abs(monthlyRemaining));
-        // Show budget alert notification
-        setBudgetAlertData({
-          category: 'Monthly Budget',
-          exceeded: Math.abs(monthlyRemaining),
-          budget: budget.monthly
-        });
-        setShowBudgetAlert(true);
-      } else if (monthlySpent < budget.monthly * 0.5) {
-        // Show encouraging message for good spending
-        montNotifications.budgetOnTrack(monthlyRemaining, daysLeft);
-        
-        MascotIntegrationHelpers.onGoodSpendingDay(mascot, monthlyRemaining);
-        // Show encouraging daily message
-        setTimeout(() => setShowDailyMessage(true), 3000);
-      } else {
-        // Welcome back message
-        montNotifications.welcomeBack(userInfo?.name || 'User');
-        
-        MascotIntegrationHelpers.onHomeScreenOpen(mascot, {
-          currentStreak: 1, // You can get this from your user data
-          totalSaved: Math.max(0, budget.monthly - monthlySpent)
-        });
-        // Show daily message after a delay
-        setTimeout(() => setShowDailyMessage(true), 4000);
-      }
-    }, 2000); // Delay to let the screen load
-
-    return () => clearTimeout(timer);
-  }, [monthlyRemaining, monthlySpent, budget.monthly, mascot, montNotifications, daysLeft, userInfo]);
-  
   const formatCurrency = (amount) => {
     return '₱' + parseFloat(amount).toFixed(2);
   };
@@ -522,27 +473,6 @@ const HomeScreen = ({ navigation }) => {
         directionalLockEnabled={true}
         showsVerticalScrollIndicator={false}
       />
-
-      {/* MonT Global Draggable Chat Bubble replaces the floating mascot */}
-      
-      {/* MonT Notification Toasts */}
-      <MonTDailyMessage 
-        visible={showDailyMessage}
-        onDismiss={() => setShowDailyMessage(false)}
-      />
-      
-      {budgetAlertData && (
-        <MonTBudgetAlert
-          visible={showBudgetAlert}
-          category={budgetAlertData.category}
-          exceeded={budgetAlertData.exceeded}
-          budget={budgetAlertData.budget}
-          onDismiss={() => {
-            setShowBudgetAlert(false);
-            setBudgetAlertData(null);
-          }}
-        />
-      )}
     </SafeAreaView>
   );
 };

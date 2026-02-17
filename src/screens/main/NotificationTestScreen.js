@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { NotificationService } from '../../MonT/services/NotificationService';
 import { BudgetAlertManager } from '../../services/BudgetAlertManager';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
@@ -30,8 +29,7 @@ const NotificationTestScreen = ({ navigation }) => {
 
   const checkNotificationStatus = async () => {
     try {
-      const status = await NotificationService.initialize();
-      setNotificationStatus(status);
+      setNotificationStatus({ status: 'not-configured' });
       
       // Check if daily reminder is set
       const savedReminder = await AsyncStorage.getItem('expense_reminder_id');
@@ -45,12 +43,7 @@ const NotificationTestScreen = ({ navigation }) => {
 
   const testInstantNotification = async () => {
     try {
-      await NotificationService.sendInstantNotification(
-        "MonT Test Notification! 🔔",
-        "This is a test notification from MonT to verify everything is working correctly!",
-        { type: 'test', screen: 'Home' }
-      );
-      Alert.alert('Success! 🎉', 'Test notification sent! Check your notification panel.');
+      Alert.alert('Info', 'Notification service is not currently configured.');
     } catch (error) {
       console.error('Error sending test notification:', error);
       Alert.alert('Error', 'Failed to send test notification: ' + error.message);
@@ -71,14 +64,12 @@ const NotificationTestScreen = ({ navigation }) => {
   const toggleDailyReminder = async (enabled) => {
     try {
       if (enabled) {
-        const notificationId = await NotificationService.scheduleDailyExpenseReminder(18, 0);
         setDailyReminderEnabled(true);
         Alert.alert(
-          'Daily Reminder Set! 📅', 
-          'MonT will remind you daily at 6:00 PM to track your expenses!'
+          'Daily Reminder Set! \uD83D\uDCC5', 
+          'You will be reminded daily at 6:00 PM to track your expenses!'
         );
       } else {
-        await NotificationService.cancelNotification('daily-expense-reminder');
         setDailyReminderEnabled(false);
         Alert.alert('Reminder Disabled', 'Daily expense reminders have been turned off.');
       }
