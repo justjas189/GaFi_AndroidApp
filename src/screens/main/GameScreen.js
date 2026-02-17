@@ -186,53 +186,122 @@ export default function BuildScreen() {
   const [showHowToPlay, setShowHowToPlay] = useState(false); // Legacy - not used anymore
   const [tutorialStep, setTutorialStep] = useState(0);
   const [tutorialActive, setTutorialActive] = useState(false); // In-game tutorial mode
+  const [tutorialCompleted, setTutorialCompleted] = useState(false); // Persisted — gates Story Mode
+  const [tutorialConditions, setTutorialConditions] = useState(new Set()); // Tracks step completion conditions
+  const [tutorialViewedCar, setTutorialViewedCar] = useState(false); // Track if car transport was viewed in tutorial
   
   // Koin Tutorial Guide Image
   const KOIN_TUTORIAL_IMAGE = require('../../../assets/mascot/koin_tutorial.png');
   
-  // In-game Tutorial steps configuration
+  // Helper: mark a tutorial condition as met
+  const markTutorialCondition = (conditionKey) => {
+    setTutorialConditions(prev => {
+      const next = new Set(prev);
+      next.add(conditionKey);
+      return next;
+    });
+  };
+  
+  // Helper: check if current tutorial step's condition is met
+  const isTutorialStepComplete = () => {
+    const step = TUTORIAL_STEPS[tutorialStep];
+    if (!step) return false;
+    if (step.nextAlwaysEnabled) return true;
+    if (step.conditionKey && tutorialConditions.has(step.conditionKey)) return true;
+    return false;
+  };
+  
+  // In-game Tutorial steps configuration — step-by-step, action-gated
   const TUTORIAL_STEPS = [
     {
-      title: "Welcome! 👋",
-      message: "Hi! I'm Koin, your financial buddy! Let me show you around!",
-      highlight: null,
-      position: 'center',
-    },
-    {
-      title: "This is your room! 🏠",
-      message: "You start at Home. Tap anywhere on the map to walk around!",
-      highlight: 'map',
-      position: 'top',
-    },
-    {
-      title: "The Closet 👔",
-      message: "See this closet? Walk here to change your character's look!",
-      highlight: 'closet',
-      position: 'right',
-    },
-    {
-      title: "The Notebook 📓",
-      message: "Walk to the Notebook to quickly log any expense! You can also mark 'No Spend' days here.",
-      highlight: 'notebook',
-      position: 'left',
-    },
-    {
-      title: "Exit Door 🚪",
-      message: "Walk to doors to travel between Home, School, and the Mall!",
-      highlight: 'door',
-      position: 'bottom',
-    },
-    {
+      id: 'budget_intro',
       title: "Budget Tracker 📊",
-      message: "Your spending shows here. In Story Mode, follow the 50/30/20 budget rule!",
-      highlight: 'header',
+      message: "Hi! I'm Koin, your financial buddy! See the Budget Tracker at the top? It shows your daily spending and weekly budget. Keep an eye on it!",
+      nextAlwaysEnabled: true,
+      conditionKey: null,
       position: 'bottom',
+      highlight: 'header',
     },
     {
-      title: "You're all set! 🌟",
-      message: "Explore, record expenses, and become a money master! Good luck!",
-      highlight: null,
+      id: 'walk_around',
+      title: "Move Around! 🏠",
+      message: "This is your room! Tap anywhere on the screen to walk your character around. Try it now!",
+      nextAlwaysEnabled: false,
+      conditionKey: 'walked',
+      position: 'top',
+      highlight: 'map',
+    },
+    {
+      id: 'closet',
+      title: "The Closet 👔",
+      message: "Walk to the Closet and change your character's outfit! Tap on the closet area to open it.",
+      nextAlwaysEnabled: false,
+      conditionKey: 'outfit_changed',
+      position: 'right',
+      highlight: 'closet',
+    },
+    {
+      id: 'notebook',
+      title: "The Notebook 📓",
+      message: "The Notebook lets you quickly log any expense. Walk to it and tap on it!",
+      nextAlwaysEnabled: false,
+      conditionKey: 'notebook_opened',
+      position: 'left',
+      highlight: 'notebook',
+    },
+    {
+      id: 'log_expense',
+      title: "Log an Expense 📝",
+      message: "Enter any amount and description, then tap Save. Don't worry — this is just practice and won't be saved to your records!",
+      nextAlwaysEnabled: false,
+      conditionKey: 'notebook_expense_logged',
       position: 'center',
+      highlight: null,
+    },
+    {
+      id: 'exit_door',
+      title: "The Exit Door 🚪",
+      message: "Walk to the Exit Door to see the places you can go! Choose School and learn about transport expenses.",
+      nextAlwaysEnabled: false,
+      conditionKey: 'arrived_at_school',
+      position: 'bottom',
+      highlight: 'door',
+    },
+    {
+      id: 'school_canteen',
+      title: "Interactable Rooms 🏫",
+      message: "Schools and malls have rooms where you can log expenses! Walk to the Canteen and try logging a food expense. This is just practice!",
+      nextAlwaysEnabled: false,
+      conditionKey: 'canteen_expense_logged',
+      position: 'top',
+      highlight: null,
+    },
+    {
+      id: 'go_to_mall',
+      title: "The Mall 🏬",
+      message: "Let's visit the Mall! Walk to the School Exit and travel there.",
+      nextAlwaysEnabled: false,
+      conditionKey: 'arrived_at_mall',
+      position: 'center',
+      highlight: null,
+    },
+    {
+      id: 'mall_expense',
+      title: "Mall Shopping 🛍️",
+      message: "Walk to any store and log an expense! This is still practice — nothing will be saved.",
+      nextAlwaysEnabled: false,
+      conditionKey: 'mall_expense_logged',
+      position: 'center',
+      highlight: null,
+    },
+    {
+      id: 'tutorial_done',
+      title: "You're All Set! 🌟",
+      message: "Amazing job! You've learned all the basics — budgeting, traveling, and logging expenses. Now go start Story Mode and become a financial master!",
+      nextAlwaysEnabled: true,
+      conditionKey: null,
+      position: 'center',
+      highlight: null,
     },
   ];
   
@@ -242,6 +311,8 @@ export default function BuildScreen() {
     setGameMode('tutorial');
     setTutorialActive(true);
     setTutorialStep(0);
+    setTutorialConditions(new Set());
+    setTutorialViewedCar(false);
     setCurrentMapId('dorm'); // Always start tutorial at home
     // Persist tutorial start to Supabase
     gameDatabaseService.saveTutorialProgress({ currentStep: 0, stepsCompleted: [], tutorialCompleted: false });
@@ -252,8 +323,15 @@ export default function BuildScreen() {
   const endTutorial = () => {
     setTutorialActive(false);
     setTutorialStep(0);
+    setTutorialConditions(new Set());
+    setTutorialViewedCar(false);
     setShowMainMenu(true);
     setGameMode(null);
+    setTutorialCompleted(true);
+    // Persist to AsyncStorage for quick local check
+    if (user?.id) {
+      AsyncStorage.setItem(`tutorialCompleted_${user.id}`, 'true');
+    }
     // Persist tutorial completion to Supabase
     gameDatabaseService.saveTutorialProgress({ currentStep: 0, stepsCompleted: [], tutorialCompleted: true });
     gameDatabaseService.logActivity({ activityType: 'tutorial_step', details: { step: 'done', action: 'completed' } });
@@ -579,12 +657,21 @@ export default function BuildScreen() {
           });
         }
 
-        // 3. Cache active story session for later resumption (DO NOT auto-navigate)
+        // 3. Tutorial completion — hydrate from DB or AsyncStorage
+        if (tutorial?.tutorial_completed) {
+          setTutorialCompleted(true);
+        } else {
+          // Fallback to AsyncStorage
+          const tcLocal = await AsyncStorage.getItem(`tutorialCompleted_${user.id}`);
+          if (tcLocal === 'true') setTutorialCompleted(true);
+        }
+
+        // 4. Cache active story session for later resumption (DO NOT auto-navigate)
         if (activeStory) {
           cachedActiveStoryRef.current = activeStory;
           console.log(`📦 Cached active story session ${activeStory.id} (Level ${activeStory.level})`);
         }
-        // 4. Cache active custom session for later resumption (DO NOT auto-navigate)
+        // 5. Cache active custom session for later resumption (DO NOT auto-navigate)
         if (activeCustom) {
           cachedActiveCustomRef.current = activeCustom;
           console.log(`📦 Cached active custom session ${activeCustom.id} (${activeCustom.mode_type})`);
@@ -1158,14 +1245,26 @@ export default function BuildScreen() {
     switch (location.action) {
       case 'expense':
         setExpenseCategory(location.category || 'Other');
-        Alert.alert(
-          `Welcome to ${location.name}! ${location.icon}`,
-          'Ready to record your purchase?',
-          [
-            { text: 'Yes', onPress: () => setShowExpenseModal(true) },
-            { text: 'Not now', style: 'cancel' },
-          ]
-        );
+        // Tutorial: different prompt
+        if (tutorialActive && gameMode === 'tutorial') {
+          Alert.alert(
+            `Welcome to ${location.name}! ${location.icon}`,
+            'Let\'s practice logging an expense here! (This won\'t be saved)',
+            [
+              { text: 'Let\'s Go!', onPress: () => setShowExpenseModal(true) },
+              { text: 'Not now', style: 'cancel' },
+            ]
+          );
+        } else {
+          Alert.alert(
+            `Welcome to ${location.name}! ${location.icon}`,
+            'Ready to record your purchase?',
+            [
+              { text: 'Yes', onPress: () => setShowExpenseModal(true) },
+              { text: 'Not now', style: 'cancel' },
+            ]
+          );
+        }
         break;
       case 'travel':
         console.log('🚪 Opening travel modal with destinations:', location.destinations);
@@ -1178,6 +1277,10 @@ export default function BuildScreen() {
         break;
       case 'notebook':
         console.log('📓 Opening notebook for quick expense entry');
+        // Tutorial: mark notebook opened condition
+        if (tutorialActive && gameMode === 'tutorial') {
+          markTutorialCondition('notebook_opened');
+        }
         setShowNotebookModal(true);
         break;
       case 'info':
@@ -1206,6 +1309,10 @@ export default function BuildScreen() {
     setTransportMode(mode);
     if (mode === 'car') {
       setDidBuyFuel(null); // Reset fuel question when switching to car
+      // Tutorial: mark that user has viewed car transport
+      if (tutorialActive && gameMode === 'tutorial') {
+        setTutorialViewedCar(true);
+      }
     }
   };
 
@@ -1244,6 +1351,15 @@ export default function BuildScreen() {
 
     // ── Optimistic UI: travel immediately (closes transport modal inside travelToMap) ──
     travelToMap(savedDestination);
+
+    // ── Tutorial mode: skip all DB saves, just mark conditions ──
+    if (tutorialActive && gameMode === 'tutorial') {
+      // Mark arrival conditions
+      if (savedDestination === 'school') markTutorialCondition('arrived_at_school');
+      if (savedDestination === 'mall') markTutorialCondition('arrived_at_mall');
+      console.log('🎓 Tutorial: Skipped transport expense save (practice mode)');
+      return;
+    }
 
     // ── Background: record transport expense and persist to Supabase ──
     try {
@@ -1621,6 +1737,11 @@ export default function BuildScreen() {
   const handleScreenPress = (event) => {
     const { locationX, locationY } = event.nativeEvent;
     
+    // Tutorial: mark 'walked' condition when user taps to move
+    if (tutorialActive && gameMode === 'tutorial') {
+      markTutorialCondition('walked');
+    }
+    
     console.log('===== TAP DEBUG =====');
     console.log('Current map:', currentMapId);
     console.log('Content dimensions:', contentSize.width, 'x', contentSize.height);
@@ -1830,6 +1951,20 @@ export default function BuildScreen() {
     setShowExpenseModal(false);
     setExpenseAmount('');
     setExpenseNote('');
+
+    // ── Tutorial mode: skip DB save, mark conditions ──
+    if (tutorialActive && gameMode === 'tutorial') {
+      Alert.alert(
+        '🎓 Practice Expense!',
+        `You practiced logging ₱${savedAmount} on ${savedCategory}.\n\nThis wasn't saved — great job learning!`,
+        [{ text: 'OK' }]
+      );
+      // Mark tutorial conditions based on current map
+      if (currentMapId === 'school') markTutorialCondition('canteen_expense_logged');
+      if (currentMapId === 'mall') markTutorialCondition('mall_expense_logged');
+      console.log('🎓 Tutorial: Skipped expense save (practice mode)');
+      return;
+    }
 
     // Show quick feedback toast-style (non-blocking)
     Alert.alert(
@@ -3223,6 +3358,18 @@ export default function BuildScreen() {
 
   // Handle menu button press
   const handleStoryMode = () => {
+    // Gate behind tutorial completion
+    if (!tutorialCompleted) {
+      Alert.alert(
+        '🎓 Tutorial Required',
+        'Please complete the Tutorial first to learn the basics before starting Story Mode!',
+        [
+          { text: 'Start Tutorial', onPress: startTutorial },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+      return;
+    }
     // Clear any leftover tutorial state
     if (tutorialActive) {
       setTutorialActive(false);
@@ -5639,16 +5786,22 @@ export default function BuildScreen() {
         <View style={menuStyles.menuButtonsContainer}>
           {/* Story Mode Button */}
           <TouchableOpacity
-            style={[menuStyles.menuButton, menuStyles.storyModeButton]}
+            style={[
+              menuStyles.menuButton, 
+              menuStyles.storyModeButton,
+              !tutorialCompleted && menuStyles.lockedModeButton,
+            ]}
             onPress={handleStoryMode}
             activeOpacity={0.7}
           >
             <View style={menuStyles.menuButtonIcon}>
-              <Ionicons name="book" size={24} color="#F5DEB3" />
+              <Ionicons name={tutorialCompleted ? 'book' : 'lock-closed'} size={24} color={tutorialCompleted ? '#F5DEB3' : '#888'} />
             </View>
             <View style={menuStyles.menuButtonContent}>
-              <Text style={menuStyles.menuButtonText}>Story Mode</Text>
-              {/*<Text style={menuStyles.menuButtonSubtext}>Follow the adventure</Text>*/}
+              <Text style={[menuStyles.menuButtonText, !tutorialCompleted && { color: '#888' }]}>Story Mode</Text>
+              {!tutorialCompleted && (
+                <Text style={{ fontSize: 11, color: '#666', marginTop: 2 }}>Complete Tutorial first</Text>
+              )}
             </View>
           </TouchableOpacity>
 
@@ -6215,7 +6368,7 @@ export default function BuildScreen() {
         <View style={styles.headerLeft}>
           <Text style={styles.headerTitle}>{currentMap.icon} {currentMap.name}</Text>
           <Text style={styles.headerSubtitle}>
-            {gameMode === 'story' ? `Story Mode - Level ${storyLevel}` : 'Custom Mode'}
+            {gameMode === 'tutorial' ? '🎓 Tutorial' : gameMode === 'story' ? `Story Mode - Level ${storyLevel}` : 'Custom Mode'}
           </Text>
         </View>
         <View style={styles.headerRight}>
@@ -6409,10 +6562,10 @@ export default function BuildScreen() {
           {/* Semi-transparent overlay for non-highlighted areas */}
           <View style={tutorialStyles.gameOverlay} pointerEvents="box-none">
             {/* Highlight specific UI elements based on current step */}
-            {TUTORIAL_STEPS[tutorialStep].highlight === 'fab' && (
+            {TUTORIAL_STEPS[tutorialStep]?.highlight === 'fab' && (
               <View style={tutorialStyles.highlightFab} />
             )}
-            {TUTORIAL_STEPS[tutorialStep].highlight === 'header' && (
+            {TUTORIAL_STEPS[tutorialStep]?.highlight === 'header' && (
               <View style={tutorialStyles.highlightHeader} />
             )}
           </View>
@@ -6421,11 +6574,11 @@ export default function BuildScreen() {
           <View 
             style={[
               tutorialStyles.koinGameContainer,
-              TUTORIAL_STEPS[tutorialStep].position === 'top' && tutorialStyles.koinPositionTop,
-              TUTORIAL_STEPS[tutorialStep].position === 'bottom' && tutorialStyles.koinPositionBottom,
-              TUTORIAL_STEPS[tutorialStep].position === 'left' && tutorialStyles.koinPositionLeft,
-              TUTORIAL_STEPS[tutorialStep].position === 'right' && tutorialStyles.koinPositionRight,
-              TUTORIAL_STEPS[tutorialStep].position === 'center' && tutorialStyles.koinPositionCenter,
+              TUTORIAL_STEPS[tutorialStep]?.position === 'top' && tutorialStyles.koinPositionTop,
+              TUTORIAL_STEPS[tutorialStep]?.position === 'bottom' && tutorialStyles.koinPositionBottom,
+              TUTORIAL_STEPS[tutorialStep]?.position === 'left' && tutorialStyles.koinPositionLeft,
+              TUTORIAL_STEPS[tutorialStep]?.position === 'right' && tutorialStyles.koinPositionRight,
+              TUTORIAL_STEPS[tutorialStep]?.position === 'center' && tutorialStyles.koinPositionCenter,
             ]}
             pointerEvents="box-none"
           >
@@ -6440,10 +6593,24 @@ export default function BuildScreen() {
               {/* Speech Bubble with Navigation Inside */}
               <View style={tutorialStyles.speechBubbleGame}>
                 <Text style={tutorialStyles.speechTitleGame}>
-                  {TUTORIAL_STEPS[tutorialStep].title}
+                  {TUTORIAL_STEPS[tutorialStep]?.title}
                 </Text>
                 <Text style={tutorialStyles.speechMessageGame}>
-                  {TUTORIAL_STEPS[tutorialStep].message}
+                  {TUTORIAL_STEPS[tutorialStep]?.message}
+                </Text>
+
+                {/* Condition hint - show what user needs to do */}
+                {!isTutorialStepComplete() && TUTORIAL_STEPS[tutorialStep]?.conditionKey && (
+                  <View style={{ backgroundColor: '#FFF3E0', borderRadius: 8, padding: 6, marginBottom: 8 }}>
+                    <Text style={{ fontSize: 11, color: '#E65100', textAlign: 'center', fontStyle: 'italic' }}>
+                      ⏳ Complete the action above to continue
+                    </Text>
+                  </View>
+                )}
+                
+                {/* Step Counter */}
+                <Text style={{ fontSize: 11, color: '#999', textAlign: 'center', marginBottom: 6 }}>
+                  Step {tutorialStep + 1} of {TUTORIAL_STEPS.length}
                 </Text>
                 
                 {/* Progress Dots */}
@@ -6480,11 +6647,15 @@ export default function BuildScreen() {
                     )}
                     
                     <TouchableOpacity
-                      style={tutorialStyles.nextButtonInline}
+                      style={[
+                        tutorialStyles.nextButtonInline,
+                        !isTutorialStepComplete() && { backgroundColor: '#CCC' },
+                      ]}
+                      disabled={!isTutorialStepComplete()}
                       onPress={() => {
                         if (tutorialStep < TUTORIAL_STEPS.length - 1) {
                           const nextStep = tutorialStep + 1;
-                          setTutorialStep(prev => prev + 1);
+                          setTutorialStep(nextStep);
                           // Persist step progress to Supabase
                           gameDatabaseService.saveTutorialProgress({ currentStep: nextStep, stepsCompleted: Array.from({ length: nextStep }, (_, i) => String(i)), tutorialCompleted: false });
                         } else {
@@ -6545,6 +6716,10 @@ export default function BuildScreen() {
                       onPress={() => {
                         if (isUnlocked) {
                           setSelectedCharacter(key);
+                          // Tutorial: mark outfit changed condition
+                          if (tutorialActive && gameMode === 'tutorial') {
+                            markTutorialCondition('outfit_changed');
+                          }
                           // ── Persist character selection to Supabase ──
                           gameDatabaseService.saveCharacterCustomization({
                             selectedCharacter: key,
@@ -6645,6 +6820,15 @@ export default function BuildScreen() {
                 <Text style={styles.modalSubtitle}>Quick Add Any Expense</Text>
               </View>
             </View>
+
+            {/* Tutorial guidance banner inside notebook modal */}
+            {tutorialActive && gameMode === 'tutorial' && (
+              <View style={{ backgroundColor: '#FFF3E0', borderRadius: 10, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#FF9800' }}>
+                <Text style={{ fontSize: 13, color: '#E65100', textAlign: 'center', fontWeight: '600' }}>
+                  🎓 Practice logging! Enter any amount and tap Save. This won't be saved to your records.
+                </Text>
+              </View>
+            )}
 
             <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 590 }}>
               {/* Category Selection */}
@@ -6761,7 +6945,8 @@ export default function BuildScreen() {
                 </View>
               )}
 
-              {/* No Spend Today Button */}
+              {/* No Spend Today Button — hidden in tutorial */}
+              {!(tutorialActive && gameMode === 'tutorial') && (
               <TouchableOpacity
                 style={{
                   flexDirection: 'row',
@@ -6820,6 +7005,7 @@ export default function BuildScreen() {
                   No Spend Today
                 </Text>
               </TouchableOpacity>
+              )}
 
               {/* Action Buttons */}
               <View style={styles.buttonContainer}>
@@ -6859,6 +7045,18 @@ export default function BuildScreen() {
                     setExpenseAmount('');
                     setExpenseNote('');
                     setNotebookCategory('Food & Dining');
+
+                    // ── Tutorial mode: skip DB save, mark condition ──
+                    if (tutorialActive && gameMode === 'tutorial') {
+                      Alert.alert(
+                        '🎓 Practice Expense!',
+                        `You practiced logging ₱${savedAmount.toFixed(2)} in ${savedCategory}.\n\nThis wasn't saved — nice work!`,
+                        [{ text: 'OK' }]
+                      );
+                      markTutorialCondition('notebook_expense_logged');
+                      console.log('🎓 Tutorial: Skipped notebook expense save (practice mode)');
+                      return;
+                    }
 
                     // Quick non-blocking feedback
                     Alert.alert(
@@ -7235,6 +7433,19 @@ export default function BuildScreen() {
             <Text style={styles.travelTitle}>🚪 Where to?</Text>
             <Text style={styles.travelSubtitle}>Choose your destination</Text>
 
+            {/* Tutorial guidance banner inside travel modal */}
+            {tutorialActive && gameMode === 'tutorial' && (
+              <View style={{ backgroundColor: '#FFF3E0', borderRadius: 10, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#FF9800' }}>
+                <Text style={{ fontSize: 13, color: '#E65100', textAlign: 'center', fontWeight: '600' }}>
+                  {TUTORIAL_STEPS[tutorialStep]?.id === 'exit_door' 
+                    ? '🎓 Choose School to continue the tutorial!'
+                    : TUTORIAL_STEPS[tutorialStep]?.id === 'go_to_mall'
+                    ? '🎓 Choose the Mall to continue!'
+                    : '🎓 Pick a destination!'}
+                </Text>
+              </View>
+            )}
+
             {travelDestinations.map((destId) => {
               const dest = MAPS[destId];
               if (!dest) return null;
@@ -7286,6 +7497,24 @@ export default function BuildScreen() {
                 How will you travel to {selectedDestination ? MAPS[selectedDestination]?.name : ''}?
               </Text>
             </View>
+
+            {/* Tutorial guidance banner inside transport modal */}
+            {tutorialActive && gameMode === 'tutorial' && (
+              <View style={{ backgroundColor: '#FFF3E0', borderRadius: 10, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#FF9800' }}>
+                <Text style={{ fontSize: 13, color: '#E65100', textAlign: 'center', fontWeight: '600' }}>
+                  {!transportMode && !tutorialViewedCar
+                    ? '🎓 First, try the Car option to learn about gas tracking!'
+                    : !transportMode && tutorialViewedCar
+                    ? '🎓 Great! Now choose Commute to log your fare!'
+                    : transportMode === 'car'
+                    ? '🎓 You can track gas expenses here! Now go back and try Commute.'
+                    : transportMode === 'commute'
+                    ? '🎓 Enter your commute fare and confirm! This is practice only.'
+                    : '🎓 Pick a transport mode!'
+                  }
+                </Text>
+              </View>
+            )}
 
             {/* Transport Mode Selection */}
             {!transportMode && (
@@ -7539,6 +7768,15 @@ export default function BuildScreen() {
                 <Text style={styles.modalSubtitle}>What did you buy?</Text>
               </View>
             </View>
+
+            {/* Tutorial guidance banner inside expense modal */}
+            {tutorialActive && gameMode === 'tutorial' && (
+              <View style={{ backgroundColor: '#FFF3E0', borderRadius: 10, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#FF9800' }}>
+                <Text style={{ fontSize: 13, color: '#E65100', textAlign: 'center', fontWeight: '600' }}>
+                  🎓 Practice time! Log an expense here. It won't be saved to your records.
+                </Text>
+              </View>
+            )}
 
             <ScrollView showsVerticalScrollIndicator={false}>
               {/* Quick Amount Buttons */}
