@@ -266,16 +266,38 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      // ── IMMEDIATE: nuke React state so the navigator swaps to Auth instantly ──
+      setUserToken(null);
+      setUserInfo(null);
 
-      // Clear all auth-related storage
-      await AsyncStorage.multiRemove([
-        'userToken',
-        'userInfo',
-        'onboardingComplete',
-        'isFirstLogin'
-      ]);
+      // ── BACKGROUND: Supabase sign-out + AsyncStorage wipe (fire-and-forget) ──
+      // We don't await this — the user sees the login screen right away.
+      (async () => {
+        try {
+          await supabase.auth.signOut();
+        } catch (e) {
+          console.warn('Supabase signOut error (non-critical):', e.message);
+        }
+        try {
+          const allKeys = await AsyncStorage.getAllKeys();
+          const keysToRemove = allKeys.filter(k =>
+            k.startsWith('userToken') ||
+            k.startsWith('userInfo') ||
+            k.startsWith('onboardingComplete') ||
+            k.startsWith('isFirstLogin') ||
+            k.startsWith('hasOnboarded_') ||
+            k.startsWith('customModeUnlocked_') ||
+            k.startsWith('unlocked_skins_') ||
+            k.startsWith('chat_') ||
+            k.startsWith('game_')
+          );
+          if (keysToRemove.length > 0) {
+            await AsyncStorage.multiRemove(keysToRemove);
+          }
+        } catch (e) {
+          console.warn('AsyncStorage cleanup error (non-critical):', e.message);
+        }
+      })();
 
       return { success: true };
     } catch (error) {

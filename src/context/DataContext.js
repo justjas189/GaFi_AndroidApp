@@ -109,14 +109,41 @@ export const DataProvider = ({ children }) => {
     // Set up auth state listener to reload data when user changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
-        console.log('User signed in, reloading data for:', session.user.id);
-        await loadData();
+        console.log('User signed in, loading core data for:', session.user.id);
+        // Load budget/expenses/notes fast — defer slow AI insights so UI renders first
+        await loadData({ deferInsights: true });
+
+        // Re-subscribe realtime channels for the NEW user
+        if (expenseSubscription) { expenseSubscription.unsubscribe(); expenseSubscription = null; }
+        if (budgetSubscription) { budgetSubscription.unsubscribe(); budgetSubscription = null; }
+
+        expenseSubscription = supabase
+          .channel('expenses_changes_' + session.user.id)
+          .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'expenses',
+            filter: `user_id=eq.${session.user.id}`
+          }, async () => { await loadData(); })
+          .subscribe();
+
+        budgetSubscription = supabase
+          .channel('budget_changes_' + session.user.id)
+          .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'budgets',
+            filter: `user_id=eq.${session.user.id}`
+          }, async () => { await loadData(); })
+          .subscribe();
       } else if (event === 'SIGNED_OUT') {
-        console.log('User signed out, clearing data');
+        console.log('User signed out, clearing all data');
         setBudget(defaultBudget);
         setExpenses([]);
         setNotes([]);
         setInsights([]);
+        setError(null);
+        setIsLoading(false);
         
         // Clean up real-time subscriptions
         if (expenseSubscription) {
@@ -142,12 +169,16 @@ export const DataProvider = ({ children }) => {
   }, []);
 
   // Load data from Supabase
-  const loadData = async () => {
+  // Options:
+  //   deferInsights: true  →  load budget/expenses/notes immediately,
+  //                           schedule slow NVIDIA AI insight generation in background.
+  //                           Used during login so the UI renders fast.
+  const loadData = async ({ deferInsights = false } = {}) => {
     try {
       const session = await ensureAuthenticated();
       const userId = session.user.id;
 
-      console.log('Loading data for user ID:', userId);
+      console.log('Loading data for user ID:', userId, deferInsights ? '(insights deferred)' : '');
 
       // Load budget data with explicit user scoping
       const { data: budgetData, error: budgetError } = await supabase
@@ -243,51 +274,60 @@ export const DataProvider = ({ children }) => {
       setExpenses(expensesData || []);
       setNotes(notesData || []);
 
-      // Generate AI insights using Nvidia Llama - FILTER TO CURRENT MONTH
-      if (expensesData?.length > 0) {
-        try {
-          // Filter expenses to current month only for AI analysis
-          const now = new Date();
-          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-          monthStart.setHours(0, 0, 0, 0);
-          const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-          
-          const currentMonthExpenses = expensesData.filter(exp => {
-            const expDate = new Date(exp.date);
-            return expDate >= monthStart && expDate <= monthEnd;
-          });
+      // ── AI insight generation (uses closure-captured data, not stale state) ──
+      const runInsightGeneration = async () => {
+        if (expensesData?.length > 0) {
+          try {
+            const now = new Date();
+            const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+            monthStart.setHours(0, 0, 0, 0);
+            const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
-          // Generate insights based on current month data only
-          const insights = await analyzeExpenses(currentMonthExpenses, transformedBudget);
-          const recommendations = await getRecommendations(session.user, currentMonthExpenses, transformedBudget);
-          setInsights([...insights, ...recommendations]);
-          console.log('AI insights generated successfully for current month:', insights.length + recommendations.length, 'insights');
-        } catch (insightError) {
-          console.error('Error generating AI insights:', insightError);
-          // Fall back to basic insights if AI fails
-          const now = new Date();
-          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-          monthStart.setHours(0, 0, 0, 0);
-          const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-          
-          const currentMonthExpenses = expensesData.filter(exp => {
-            const expDate = new Date(exp.date);
-            return expDate >= monthStart && expDate <= monthEnd;
-          });
-          
-          const basicInsights = generateBasicInsights(currentMonthExpenses, transformedBudget);
-          setInsights(basicInsights);
+            const currentMonthExpenses = expensesData.filter(exp => {
+              const expDate = new Date(exp.date);
+              return expDate >= monthStart && expDate <= monthEnd;
+            });
+
+            const aiInsights = await analyzeExpenses(currentMonthExpenses, transformedBudget);
+            const recommendations = await getRecommendations(session.user, currentMonthExpenses, transformedBudget);
+            setInsights([...aiInsights, ...recommendations]);
+            console.log('AI insights generated:', aiInsights.length + recommendations.length);
+          } catch (insightError) {
+            console.error('Error generating AI insights:', insightError);
+            const now = new Date();
+            const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+            monthStart.setHours(0, 0, 0, 0);
+            const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+            const currentMonthExpenses = expensesData.filter(exp => {
+              const expDate = new Date(exp.date);
+              return expDate >= monthStart && expDate <= monthEnd;
+            });
+
+            const basicInsights = generateBasicInsights(currentMonthExpenses, transformedBudget);
+            setInsights(basicInsights);
+          }
+        } else {
+          setInsights([{
+            id: 'welcome',
+            type: 'info',
+            title: 'Welcome to GaFI',
+            message: 'Start tracking your expenses to get AI-powered insights!',
+            icon: 'bulb-outline',
+            color: '#4CAF50'
+          }]);
         }
+      };
+
+      if (deferInsights) {
+        // Login path: let the UI render immediately, generate insights in background
+        console.log('Deferring AI insight generation to background...');
+        setTimeout(() => {
+          runInsightGeneration().catch(e => console.error('Deferred insight generation error:', e));
+        }, 800);
       } else {
-        // No expenses yet - show welcome insights
-        setInsights([{
-          id: 'welcome',
-          type: 'info',
-          title: 'Welcome to GaFI',
-          message: 'Start tracking your expenses to get AI-powered insights!',
-          icon: 'bulb-outline',
-          color: '#4CAF50'
-        }]);
+        // Normal path (expense added, refresh, etc.): generate insights inline
+        await runInsightGeneration();
       }
 
     } catch (error) {

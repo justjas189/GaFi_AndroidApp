@@ -17,7 +17,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../../context/AuthContext';
 import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
-import { reset } from '../../navigation/navigationRef';
 
 const SettingsScreen = ({ navigation }) => {
   const { logout, userInfo, updateProfile } = useContext(AuthContext);
@@ -98,10 +97,10 @@ const SettingsScreen = ({ navigation }) => {
           style: 'destructive',
           onPress: async () => {
             const result = await logout();
-            if (result.success) {
-              // Use global navigation to reset to Auth screen
-              reset('Auth');
-            } else {
+            // Navigator automatically switches to Auth when userToken becomes null.
+            // No manual reset('Auth') needed — it caused race conditions with
+            // the declarative navigator swap.
+            if (!result.success) {
               Alert.alert('Error', 'Failed to logout. Please try again.');
             }
           }
