@@ -75,18 +75,8 @@ const TabNavigator = () => {
             iconName = focused ? 'wallet' : 'wallet-outline';
           } else if (route.name === 'Expenses') {
             iconName = focused ? 'stats-chart' : 'stats-chart-outline';
-          } else if (route.name === 'Budget') {
-            iconName = focused ? 'card' : 'card-outline';
-          } else if (route.name === 'MonT AI') {
-            iconName = focused ? 'chatbubble' : 'chatbubble-outline';
           } else if (route.name === 'Explore') {
             iconName = focused ? 'apps' : 'apps-outline';
-          } else if (route.name === 'Learn') {
-            iconName = focused ? 'school' : 'school-outline';
-          } else if (route.name === 'Goals') {
-            iconName = focused ? 'trophy' : 'trophy-outline';
-          } else if (route.name === 'Social') {
-            iconName = focused ? 'people' : 'people-outline';
           } else if (route.name === 'Game') {
             iconName = focused ? 'game-controller' : 'game-controller-outline';
           }

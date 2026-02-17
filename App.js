@@ -11,6 +11,7 @@ import { View, Text, ActivityIndicator } from 'react-native';
 
 // Enhanced Components & Utilities
 import ErrorBoundary from './src/components/ErrorBoundary';
+import GlobalDraggableKoin from './src/components/GlobalDraggableKoin';
 import DebugUtils from './src/utils/DebugUtils';
 import PerformanceManager from './src/utils/PerformanceManager';
 import SecurityManager from './src/utils/SecurityManager';
@@ -30,6 +31,13 @@ import { DataProvider } from './src/context/DataContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 
 const Stack = createStackNavigator();
+
+// Only show the Koin bubble when the user is authenticated
+const AuthenticatedBubble = () => {
+  const { userToken, userInfo } = useAuth();
+  if (!userToken || !userInfo) return null;
+  return <GlobalDraggableKoin />;
+};
 
 // Simple loading screen component
 const LoadingScreen = ({ message }) => (
@@ -235,7 +243,10 @@ export default function App() {
               <AuthProvider>
                 <DataProvider>
                     <StatusBar style="auto" />
-                    <AppNavigator />
+                    <View style={{ flex: 1 }}>
+                      <AppNavigator />
+                      <AuthenticatedBubble />
+                    </View>
                 </DataProvider>
               </AuthProvider>
             </ThemedNavigationContainer>
