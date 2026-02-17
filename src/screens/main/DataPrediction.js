@@ -112,18 +112,6 @@ const generateInsights = (categoryBreakdown, monthlyHistory, trend, predicted, a
     });
   }
 
-  // Seasonal insight
-  if (seasonalMultiplier && seasonalMultiplier !== 1) {
-    const seasonDir = seasonalMultiplier > 1 ? 'higher' : 'lower';
-    const seasonPct = Math.abs(Math.round((seasonalMultiplier - 1) * 100));
-    insights.push({
-      icon: seasonalMultiplier > 1 ? 'arrow-up-circle' : 'arrow-down-circle',
-      color: seasonalMultiplier > 1 ? '#FF6B6B' : '#4CD964',
-      title: `Seasonal Pattern: ${targetMonth}`,
-      message: `${targetMonth} historically sees ~${seasonPct}% ${seasonDir} spending than average. This seasonal pattern has been factored into your prediction.`,
-    });
-  }
-
   // Trend insight
   if (trend === 'increasing') {
     insights.push({
@@ -194,11 +182,12 @@ const generateInsights = (categoryBreakdown, monthlyHistory, trend, predicted, a
 
   // Multi-year data insight
   if (yearsOfData && yearsOfData > 1) {
+    const spanLabel = yearsOfData === 1 ? '1 year' : `${yearsOfData} years`;
     insights.push({
       icon: 'time',
       color: '#00BCD4',
-      title: `${yearsOfData} Years of Data Used`,
-      message: `Your prediction leverages ${yearsOfData} years of spending history, comparing the same month across years for higher accuracy.`,
+      title: `${spanLabel} of Data Used`,
+      message: `Your prediction leverages ${spanLabel} of spending history, comparing the same month across years for higher accuracy.`,
     });
   }
 
@@ -367,23 +356,25 @@ const computePredictionForMonth = (expenses, targetMonthIdx, targetYear, current
     }
   }
 
-  // SIGNAL 3: Seasonal Multiplier
-  const seasonalMultiplier = SEASONAL_MULTIPLIERS[targetMonthIdx] || 1;
+  // SIGNAL 3: Seasonal Multiplier (temporarily disabled — kept at 1)
+  const seasonalMultiplier = 1;
 
-  // BLEND ALL SIGNALS
+  // Calculate actual data span in years (instead of counting distinct calendar years)
+  const allDates = expenses.map(e => new Date(e.date || e.created_at));
+  const minDate = new Date(Math.min(...allDates));
+  const maxDate = new Date(Math.max(...allDates));
+  const dataSpanYears = Math.max(1, Math.round(((maxDate - minDate) / (365.25 * 24 * 60 * 60 * 1000)) * 10) / 10);
+
+  // BLEND ALL SIGNALS (seasonal temporarily removed)
   let totalPredicted;
-  const yearsOfData = yearsSet.size;
+  const yearsOfData = dataSpanYears;
 
   if (hasYearOverYearData && monthlyHistory.length >= 3) {
-    // YoY is the primary signal; recent trend and seasonal act as secondary adjustments
-    const seasonalAdjustedAvg = historicalAverage * seasonalMultiplier;
-    totalPredicted = recentWeightedPrediction * 0.25 + sameMonthPrediction * 0.55 + seasonalAdjustedAvg * 0.20;
+    totalPredicted = recentWeightedPrediction * 0.35 + sameMonthPrediction * 0.65;
   } else if (hasYearOverYearData) {
-    // Limited recent data — lean even more heavily on YoY
-    const seasonalAdjustedAvg = historicalAverage * seasonalMultiplier;
-    totalPredicted = recentWeightedPrediction * 0.15 + sameMonthPrediction * 0.65 + seasonalAdjustedAvg * 0.20;
+    totalPredicted = recentWeightedPrediction * 0.20 + sameMonthPrediction * 0.80;
   } else if (monthlyHistory.length >= 3) {
-    totalPredicted = recentWeightedPrediction * seasonalMultiplier;
+    totalPredicted = recentWeightedPrediction;
   } else {
     totalPredicted = recentWeightedPrediction;
   }
@@ -472,6 +463,11 @@ const computePredictionForMonth = (expenses, targetMonthIdx, targetYear, current
         comparisonAmount = Math.round(allTimeAvg);
       }
 
+      // Always provide the historical average for secondary display
+      const historicalAvgForCategory = Math.round(allTimeAvg);
+      // Show the historical line only when primary comparison is YoY (not all-time)
+      const showHistoricalLine = comparisonLabel !== 'All-time avg' && historicalAvgForCategory > 0;
+
       return {
         category,
         total,
@@ -481,6 +477,8 @@ const computePredictionForMonth = (expenses, targetMonthIdx, targetYear, current
         trend: categoryTrend,
         comparisonLabel,
         comparisonAmount,
+        historicalAvg: historicalAvgForCategory,
+        showHistoricalLine,
       };
     })
     .sort((a, b) => b.total - a.total);
@@ -560,6 +558,9 @@ const DataPredictionScreen = ({ navigation }) => {
   const [showCategoryBreakdown, setShowCategoryBreakdown] = useState(false);
   const [showPredictedByCategory, setShowPredictedByCategory] = useState(false);
   const [showPredictiveInsights, setShowPredictiveInsights] = useState(false);
+  const [showMonthlyHistory, setShowMonthlyHistory] = useState(false);
+  const [showHowWeCalculate, setShowHowWeCalculate] = useState(false);
+  const [showAiInsights, setShowAiInsights] = useState(false);
 
   const toggleSection = (setter) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -798,11 +799,16 @@ const DataPredictionScreen = ({ navigation }) => {
         <View style={styles.summaryCard}>
           <View style={styles.summaryHeader}>
             <Text style={styles.summaryLabel}>
-              {predictions.isCurrentMonth ? 'Projected Spending for' : 'Predicted Spending for'} {displayMonth}
+              Projected Spending for {displayMonth}
             </Text>
-            <View style={[styles.confidenceBadge, { backgroundColor: predictions.confidence >= 70 ? '#4CD964' : '#FFCC00' }]}>
-              <Text style={styles.confidenceText}>{predictions.confidence}% Confidence</Text>
-            </View>
+            {(() => {
+              const confColor = predictions.confidence >= 75 ? '#4CD964' : predictions.confidence >= 50 ? '#FFCC00' : '#FF6B6B';
+              return (
+                <View style={[styles.confidenceBadge, { backgroundColor: confColor + '20', borderWidth: 1, borderColor: confColor + '40' }]}>
+                  <Text style={[styles.confidenceText, { color: confColor }]}>{predictions.confidence}% Confidence</Text>
+                </View>
+              );
+            })()}
           </View>
           
           <Text style={styles.predictedAmount}>₱{predictions.totalPredicted.toLocaleString()}</Text>
@@ -867,14 +873,6 @@ const DataPredictionScreen = ({ navigation }) => {
               <Text style={styles.factorLabel}>Inflation Applied:</Text>
               <Text style={styles.factorValue}>{((predictions.inflationRate || 0) * 100).toFixed(1)}%</Text>
             </View>
-            <View style={styles.factorRow}>
-              <Ionicons name="leaf-outline" size={16} color="#4CAF50" />
-              <Text style={styles.factorLabel}>Seasonal Factor:</Text>
-              <Text style={styles.factorValue}>
-                {predictions.seasonalMultiplier > 1 ? '+' : ''}
-                {(((predictions.seasonalMultiplier || 1) - 1) * 100).toFixed(0)}%
-              </Text>
-            </View>
             {predictions.hasYearOverYearData && predictions.yoyGrowthRate !== 0 && (
               <View style={styles.factorRow}>
                 <Ionicons name="swap-vertical-outline" size={16} color="#00BCD4" />
@@ -888,7 +886,7 @@ const DataPredictionScreen = ({ navigation }) => {
               <Ionicons name="layers-outline" size={16} color="#00D4FF" />
               <Text style={styles.factorLabel}>Data Span:</Text>
               <Text style={styles.factorValue}>
-                {predictions.yearsOfData || 1} year{(predictions.yearsOfData || 1) > 1 ? 's' : ''}
+                {predictions.yearsOfData || 1} year{(predictions.yearsOfData || 1) !== 1 ? 's' : ''}
               </Text>
             </View>
           </View>
@@ -917,21 +915,23 @@ const DataPredictionScreen = ({ navigation }) => {
                 {predictions.categoryBreakdown.map((item) => {
                   const barWidthPct = maxPredicted > 0 ? (item.predictedAmount / maxPredicted) * 100 : 0;
                   return (
-                    <View key={item.category} style={styles.hBarRow}>
-                      <Text style={styles.hBarLabel} numberOfLines={1}>
+                    <View key={item.category} style={styles.hBarGroup}>
+                      <Text style={styles.hBarCategoryName}>
                         {item.category}
                       </Text>
-                      <View style={styles.hBarTrack}>
-                        <View
-                          style={[
-                            styles.hBarFill,
-                            { width: `${Math.max(barWidthPct, 2)}%`, backgroundColor: item.color },
-                          ]}
-                        />
+                      <View style={styles.hBarRow}>
+                        <View style={styles.hBarTrack}>
+                          <View
+                            style={[
+                              styles.hBarFill,
+                              { width: `${Math.max(barWidthPct, 2)}%`, backgroundColor: item.color },
+                            ]}
+                          />
+                        </View>
+                        <Text style={styles.hBarValue}>
+                          ₱{item.predictedAmount.toLocaleString()}
+                        </Text>
                       </View>
-                      <Text style={styles.hBarValue}>
-                        ₱{item.predictedAmount.toLocaleString()}
-                      </Text>
                     </View>
                   );
                 })}
@@ -997,11 +997,13 @@ const DataPredictionScreen = ({ navigation }) => {
                 <View style={styles.categoryRight}>
                   <Text style={styles.categoryAmount}>₱{item.predictedAmount.toLocaleString()}</Text>
                   <Text style={styles.categoryPrevious}>
-                    vs ₱{item.comparisonAmount?.toLocaleString() || '0'}/mo
+                    vs ₱{item.comparisonAmount?.toLocaleString() || '0'} ({item.comparisonLabel || 'All-time avg'})
                   </Text>
-                  <Text style={styles.categoryComparisonSource}>
-                    {item.comparisonLabel || 'All-time avg'}
-                  </Text>
+                  {item.showHistoricalLine && (
+                    <Text style={styles.categoryHistoricalAvg}>
+                      Historical avg: ₱{item.historicalAvg?.toLocaleString() || '0'}/mo
+                    </Text>
+                  )}
                 </View>
               </TouchableOpacity>
             ))}
@@ -1040,53 +1042,81 @@ const DataPredictionScreen = ({ navigation }) => {
           </View>
         )}
 
-        {/* Historical Trend */}
+        {/* ===== ACCORDION: Monthly Spending History ===== */}
         {predictions.monthlyHistory.length > 1 && (
-          <View style={styles.historySection}>
-            <Text style={styles.sectionTitle}>Monthly Spending History</Text>
-            <View style={styles.historyChart}>
-              {predictions.monthlyHistory.map((month, index) => {
-                const maxTotal = Math.max(...predictions.monthlyHistory.map(m => m.total));
-                const heightPercent = maxTotal > 0 ? (month.total / maxTotal) * 100 : 0;
-                
-                return (
-                  <View key={month.key} style={styles.historyBarContainer}>
-                    <Text style={styles.historyBarValue}>
-                      ₱{(month.total / 1000).toFixed(1)}k
-                    </Text>
-                    <View style={styles.historyBarTrack}>
-                      <View 
-                        style={[
-                          styles.historyBar, 
-                          { 
-                            height: `${heightPercent}%`,
-                            backgroundColor: index === predictions.monthlyHistory.length - 1 
-                              ? colors?.primary || '#FF6B00' 
-                              : colors?.textSecondary || '#888'
-                          }
-                        ]} 
-                      />
-                    </View>
-                    <Text style={styles.historyBarLabel}>{month.month}</Text>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
+          <>
+            <TouchableOpacity
+              style={styles.accordionHeader}
+              onPress={() => toggleSection(setShowMonthlyHistory)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.accordionHeaderLeft}>
+                <Ionicons name="stats-chart" size={20} color={colors?.primary || '#FF6B00'} />
+                <Text style={styles.accordionTitle}>Monthly Spending History</Text>
+              </View>
+              <Ionicons
+                name={showMonthlyHistory ? 'chevron-up' : 'chevron-down'}
+                size={22}
+                color={colors?.textSecondary || '#888'}
+              />
+            </TouchableOpacity>
+            {showMonthlyHistory && (
+              <View style={styles.accordionContent}>
+                <View style={styles.historyChart}>
+                  {predictions.monthlyHistory.map((month, index) => {
+                    const maxTotal = Math.max(...predictions.monthlyHistory.map(m => m.total));
+                    const heightPercent = maxTotal > 0 ? (month.total / maxTotal) * 100 : 0;
+                    return (
+                      <View key={month.key} style={styles.historyBarContainer}>
+                        <Text style={styles.historyBarValue}>
+                          ₱{(month.total / 1000).toFixed(1)}k
+                        </Text>
+                        <View style={styles.historyBarTrack}>
+                          <View
+                            style={[
+                              styles.historyBar,
+                              {
+                                height: `${heightPercent}%`,
+                                backgroundColor: index === predictions.monthlyHistory.length - 1
+                                  ? colors?.primary || '#FF6B00'
+                                  : colors?.textSecondary || '#888'
+                              }
+                            ]}
+                          />
+                        </View>
+                        <Text style={styles.historyBarLabel}>{month.month}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+          </>
         )}
 
-        {/* Algorithm Explanation */}
-        <View style={styles.algorithmSection}>
-          <Text style={styles.sectionTitle}>
-            <Ionicons name="code-slash" size={18} color={colors?.textSecondary || '#888'} /> How We Calculate
-          </Text>
-          <View style={styles.algorithmCard}>
+        {/* ===== ACCORDION: How We Calculate ===== */}
+        <TouchableOpacity
+          style={styles.accordionHeader}
+          onPress={() => toggleSection(setShowHowWeCalculate)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.accordionHeaderLeft}>
+            <Ionicons name="code-slash" size={20} color={colors?.textSecondary || '#888'} />
+            <Text style={styles.accordionTitle}>How We Calculate</Text>
+          </View>
+          <Ionicons
+            name={showHowWeCalculate ? 'chevron-up' : 'chevron-down'}
+            size={22}
+            color={colors?.textSecondary || '#888'}
+          />
+        </TouchableOpacity>
+        {showHowWeCalculate && (
+          <View style={styles.accordionContent}>
             <Text style={styles.algorithmText}>
               Our prediction uses a <Text style={styles.algorithmHighlight}>multi-signal blending algorithm</Text> that combines:{"\n\n"}
               • <Text style={styles.algorithmHighlight}>Weighted Recent History</Text> – Recent months are weighted more heavily (35% for last month){"\n"}
               • <Text style={styles.algorithmHighlight}>Previous Year Same-Month</Text> – Spending from the same month in prior years, adjusted for inflation{"\n"}
               • <Text style={styles.algorithmHighlight}>Inflation Adjustment</Text> – Annual inflation rate applied to account for rising costs{"\n"}
-              • <Text style={styles.algorithmHighlight}>Seasonal Patterns</Text> – Month-specific spending patterns (e.g., December holidays){"\n"}
               • <Text style={styles.algorithmHighlight}>Trend Detection</Text> – Whether your spending is increasing, decreasing, or stable{"\n"}
               • <Text style={styles.algorithmHighlight}>Year-over-Year Growth</Text> – Your personal spending growth rate across years
             </Text>
@@ -1110,49 +1140,61 @@ const DataPredictionScreen = ({ navigation }) => {
               </View>
             </View>
           </View>
-        </View>
+        )}
 
-        {/* AI Powered Insights & Recommendations */}
-        <View style={styles.aiInsightsSection}>
-          <View style={styles.aiInsightsHeader}>
-            <View style={styles.aiTitleContainer}>
-              <Ionicons name="sparkles" size={22} color="#00D4FF" />
-              <Text style={styles.sectionTitle}>AI Powered Insights</Text>
-            </View>
+        {/* ===== ACCORDION: AI Powered Insights ===== */}
+        <TouchableOpacity
+          style={styles.accordionHeader}
+          onPress={() => toggleSection(setShowAiInsights)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.accordionHeaderLeft}>
+            <Ionicons name="sparkles" size={20} color="#00D4FF" />
+            <Text style={styles.accordionTitle}>AI Powered Insights</Text>
+          </View>
+          <View style={styles.accordionHeaderRight}>
             {aiError && (
               <View style={styles.offlineBadge}>
                 <Ionicons name="cloud-offline" size={12} color="#FFCC00" />
                 <Text style={styles.offlineText}>Offline</Text>
               </View>
             )}
+            <Ionicons
+              name={showAiInsights ? 'chevron-up' : 'chevron-down'}
+              size={22}
+              color={colors?.textSecondary || '#888'}
+            />
           </View>
-          
-          {aiLoading ? (
-            <View style={styles.aiLoadingContainer}>
-              <ActivityIndicator size="large" color={colors?.primary || '#FF6B00'} />
-              <Text style={styles.aiLoadingText}>Analyzing your spending patterns...</Text>
-            </View>
-          ) : aiRecommendations.length > 0 ? (
-            <View style={styles.aiRecommendationsList}>
-              {aiRecommendations.map((rec, index) => (
-                <View key={index} style={styles.aiRecommendationCard}>
-                  <View style={[styles.aiRecIconContainer, { backgroundColor: (rec.color || '#00D4FF') + '20' }]}>
-                    <Ionicons name={rec.icon || 'bulb'} size={24} color={rec.color || '#00D4FF'} />
+        </TouchableOpacity>
+        {showAiInsights && (
+          <View style={styles.accordionContent}>
+            {aiLoading ? (
+              <View style={styles.aiLoadingContainer}>
+                <ActivityIndicator size="large" color={colors?.primary || '#FF6B00'} />
+                <Text style={styles.aiLoadingText}>Analyzing your spending patterns...</Text>
+              </View>
+            ) : aiRecommendations.length > 0 ? (
+              <View style={styles.aiRecommendationsList}>
+                {aiRecommendations.map((rec, index) => (
+                  <View key={index} style={styles.aiRecommendationCard}>
+                    <View style={[styles.aiRecIconContainer, { backgroundColor: (rec.color || '#00D4FF') + '20' }]}>
+                      <Ionicons name={rec.icon || 'bulb'} size={24} color={rec.color || '#00D4FF'} />
+                    </View>
+                    <View style={styles.aiRecContent}>
+                      <Text style={styles.aiRecTitle}>{rec.title}</Text>
+                      <Text style={styles.aiRecMessage}>{rec.message}</Text>
+                    </View>
                   </View>
-                  <View style={styles.aiRecContent}>
-                    <Text style={styles.aiRecTitle}>{rec.title}</Text>
-                    <Text style={styles.aiRecMessage}>{rec.message}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          ) : (
-            <View style={styles.noAiDataContainer}>
-              <Ionicons name="analytics-outline" size={48} color={colors?.textSecondary || '#888'} />
-              <Text style={styles.noAiDataText}>Add more expenses to get AI-powered insights</Text>
-            </View>
-          )}
-        </View>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.noAiDataContainer}>
+                <Ionicons name="analytics-outline" size={48} color={colors?.textSecondary || '#888'} />
+                <Text style={styles.noAiDataText}>Add more expenses to get AI-powered insights</Text>
+              </View>
+            )}
+          </View>
+        )}
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -1360,6 +1402,12 @@ const createStyles = (colors, theme) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    flex: 1,
+  },
+  accordionHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   accordionTitle: {
     fontSize: 16,
@@ -1374,19 +1422,20 @@ const createStyles = (colors, theme) => StyleSheet.create({
   },
   // ===== Horizontal bar chart styles =====
   horizontalBarContainer: {
-    gap: 12,
+    gap: 14,
+  },
+  hBarGroup: {
+    gap: 4,
+  },
+  hBarCategoryName: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors?.text || '#FFF',
   },
   hBarRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  hBarLabel: {
-    width: 80,
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors?.text || '#FFF',
-    textAlign: 'right',
   },
   hBarTrack: {
     flex: 1,
@@ -1475,9 +1524,9 @@ const createStyles = (colors, theme) => StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
-  categoryComparisonSource: {
+  categoryHistoricalAvg: {
     fontSize: 10,
-    color: colors?.textSecondary || '#666',
+    color: colors?.textSecondary || '#888',
     marginTop: 1,
     fontStyle: 'italic',
   },
