@@ -5,6 +5,7 @@ import { ThemeContext } from './ThemeContext';
 import { supabase } from '../config/supabase';
 import { analyzeExpenses, getRecommendations } from '../config/nvidia';
 import { BudgetDatabaseService } from '../services/BudgetDatabaseService_NEW';
+import { normalizeCategory } from '../utils/categoryUtils';
 
 export const DataContext = createContext();
 
@@ -337,73 +338,7 @@ export const DataProvider = ({ children }) => {
   };
 
   // Add a new expense
-  // Helper function to normalize category names
-  const normalizeCategory = (category) => {
-    if (!category) return 'other';
-    
-    const normalized = category.toLowerCase().trim();
-    
-    // All allowed categories (matches Notebook EXPENSE_CATEGORIES + legacy names)
-    const allowedCategories = [
-      'food & dining', 'transport', 'shopping', 'groceries',
-      'entertainment', 'electronics', 'school supplies', 'utilities',
-      'health', 'education', 'other', 'no spend day',
-      // Legacy categories (for backward compatibility)
-      'food', 'transportation', 'others'
-    ];
-
-    // If already a valid category, return as-is
-    if (allowedCategories.includes(normalized)) {
-      return normalized;
-    }
-    
-    // Map alternative/shorthand names to standard categories
-    const categoryMap = {
-      'dining': 'food & dining',
-      'restaurant': 'food & dining',
-      'meals': 'food & dining',
-      'takeout': 'food & dining',
-      'snacks': 'food & dining',
-      'coffee': 'food & dining',
-      'cafe': 'food & dining',
-      'fuel': 'transport',
-      'gas': 'transport',
-      'commute': 'transport',
-      'transportation': 'transport',
-      'bus': 'transport',
-      'uber': 'transport',
-      'movies': 'entertainment',
-      'cinema': 'entertainment',
-      'games': 'entertainment',
-      'gaming': 'entertainment',
-      'hobby': 'entertainment',
-      'clothes': 'shopping',
-      'clothing': 'shopping',
-      'shoes': 'shopping',
-      'gadgets': 'electronics',
-      'laptop': 'electronics',
-      'phone': 'electronics',
-      'textbooks': 'school supplies',
-      'supplies': 'school supplies',
-      'stationery': 'school supplies',
-      'books': 'school supplies',
-      'bills': 'utilities',
-      'electricity': 'utilities',
-      'water': 'utilities',
-      'internet': 'utilities',
-      'rent': 'utilities',
-      'medical': 'health',
-      'medicine': 'health',
-      'doctor': 'health',
-      'tuition': 'education',
-      'course': 'education',
-      'miscellaneous': 'other',
-      'misc': 'other',
-      'others': 'other'
-    };
-    
-    return categoryMap[normalized] || 'other';
-  };
+  // normalizeCategory is imported from ../utils/categoryUtils
 
   const addExpense = async (expense) => {
     try {
@@ -778,7 +713,7 @@ export const DataProvider = ({ children }) => {
     // Calculate spending by category for CURRENT MONTH
     const categorySpending = {};
     currentMonthExpenses.forEach(expense => {
-      const category = expense.category.toLowerCase();
+      const category = normalizeCategory(expense.category);
       categorySpending[category] = (categorySpending[category] || 0) + parseFloat(expense.amount);
     });
 
@@ -854,7 +789,7 @@ export const DataProvider = ({ children }) => {
     // Category analysis
     const categorySpending = {};
     expensesData.forEach(expense => {
-      const cat = expense.category.toLowerCase();
+      const cat = normalizeCategory(expense.category);
       categorySpending[cat] = (categorySpending[cat] || 0) + parseFloat(expense.amount);
     });
 

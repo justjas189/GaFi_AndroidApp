@@ -19,6 +19,7 @@ import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
 import { PieChart, BarChart } from 'react-native-chart-kit';
 import { AchievementService } from '../../services/AchievementService';
+import { normalizeCategory } from '../../utils/categoryUtils';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -66,21 +67,32 @@ const ExpenseScreen = ({ navigation, route }) => {
   const [categoryFilter, setCategoryFilter] = useState('all'); // 'all' or specific category
 
   const categories = [
-    'Food',
-    'Transportation',
-    'Entertainment',
+    'Food & Dining',
+    'Transport',
     'Shopping',
+    'Groceries',
+    'Entertainment',
+    'Electronics',
+    'School Supplies',
     'Utilities',
-    'Others'
+    'Health',
+    'Education',
+    'Other',
   ];
 
   const categoryColors = {
-    food: '#FF6B6B',
-    transportation: '#4ECDC4',
-    entertainment: '#45B7D1',
-    shopping: '#96CEB4',
-    utilities: '#FFEAA7',
-    others: '#DDA0DD'
+    'Food & Dining': '#FF9800',
+    'Transport': '#2196F3',
+    'Shopping': '#E91E63',
+    'Groceries': '#8BC34A',
+    'Entertainment': '#9C27B0',
+    'Electronics': '#00BCD4',
+    'School Supplies': '#3F51B5',
+    'Utilities': '#607D8B',
+    'Health': '#4CAF50',
+    'Education': '#673AB7',
+    'Other': '#795548',
+    'No Spend Day': '#2ECC71',
   };
 
   // Check if we should show the form based on navigation params
@@ -101,7 +113,7 @@ const ExpenseScreen = ({ navigation, route }) => {
     let totalExpenses = 0;
 
     categories.forEach(cat => {
-      categoryTotals[cat.toLowerCase()] = 0;
+      categoryTotals[cat] = 0;
     });
 
     let filteredExpenses = [];
@@ -141,7 +153,7 @@ const ExpenseScreen = ({ navigation, route }) => {
     }
 
     filteredExpenses.forEach(expense => {
-      const cat = expense.category.toLowerCase();
+      const cat = normalizeCategory(expense.category);
       categoryTotals[cat] = (categoryTotals[cat] || 0) + expense.amount;
       totalExpenses += expense.amount;
 
@@ -153,10 +165,10 @@ const ExpenseScreen = ({ navigation, route }) => {
       .filter(([_, value]) => value > 0)
       .sort(([_, a], [__, b]) => b - a)
       .map(([category, amount]) => ({
-        name: category.charAt(0).toUpperCase() + category.slice(1),
+        name: category,
         amount,
         percentage: totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0,
-        color: categoryColors[category.toLowerCase()] || categoryColors.others,
+        color: categoryColors[category] || categoryColors['Other'],
         legendFontColor: theme.colors.text,
         legendFontSize: 12,
       }));
@@ -327,7 +339,7 @@ const ExpenseScreen = ({ navigation, route }) => {
 
     // Apply category filter
     if (categoryFilter !== 'all') {
-      filtered = filtered.filter(exp => exp.category.toLowerCase() === categoryFilter.toLowerCase());
+      filtered = filtered.filter(exp => normalizeCategory(exp.category) === categoryFilter);
     }
 
     // Sort by date descending
@@ -381,15 +393,22 @@ const ExpenseScreen = ({ navigation, route }) => {
   };
 
   const getCategoryIcon = (category) => {
+    const canonical = normalizeCategory(category);
     const categoryMap = {
-      food: 'fast-food-outline',
-      transportation: 'bus-outline',
-      entertainment: 'film-outline',
-      shopping: 'cart-outline',
-      utilities: 'build-outline',
-      others: 'apps-outline'
+      'Food & Dining': 'fast-food-outline',
+      'Transport': 'bus-outline',
+      'Shopping': 'cart-outline',
+      'Groceries': 'nutrition-outline',
+      'Entertainment': 'film-outline',
+      'Electronics': 'phone-portrait-outline',
+      'School Supplies': 'book-outline',
+      'Utilities': 'build-outline',
+      'Health': 'medkit-outline',
+      'Education': 'school-outline',
+      'Other': 'apps-outline',
+      'No Spend Day': 'checkmark-circle-outline',
     };
-    return categoryMap[category.toLowerCase()] || 'apps-outline';
+    return categoryMap[canonical] || 'apps-outline';
   };
 
   // ========== PERIOD NAVIGATION ==========
@@ -570,11 +589,11 @@ const ExpenseScreen = ({ navigation, route }) => {
         onLongPress={() => handleDelete(item.id)}
       >
         <View style={styles.expenseLeft}>
-          <View style={[styles.expenseIcon, { backgroundColor: categoryColors[item.category.toLowerCase()] + '20' }]}>
-            <Ionicons name={getCategoryIcon(item.category)} size={20} color={categoryColors[item.category.toLowerCase()]} />
+          <View style={[styles.expenseIcon, { backgroundColor: (categoryColors[normalizeCategory(item.category)] || '#795548') + '20' }]}>
+            <Ionicons name={getCategoryIcon(item.category)} size={20} color={categoryColors[normalizeCategory(item.category)] || '#795548'} />
           </View>
           <View style={styles.expenseInfo}>
-            <Text style={[styles.expenseCategory, { color: theme.colors.text }]}>{item.category}</Text>
+            <Text style={[styles.expenseCategory, { color: theme.colors.text }]}>{normalizeCategory(item.category)}</Text>
             {item.note && (
               <Text style={[styles.expenseNote, { color: theme.colors.text }]} numberOfLines={1}>{item.note}</Text>
             )}
@@ -1125,13 +1144,13 @@ const ExpenseScreen = ({ navigation, route }) => {
                 key={cat}
                 style={[
                   styles.filterChip, 
-                  categoryFilter.toLowerCase() === cat.toLowerCase() && { backgroundColor: categoryColors[cat.toLowerCase()] }
+                  categoryFilter === cat && { backgroundColor: categoryColors[cat] }
                 ]}
                 onPress={() => setCategoryFilter(cat)}
               >
                 <Text style={[
                   styles.filterChipText, 
-                  { color: categoryFilter.toLowerCase() === cat.toLowerCase() ? '#FFF' : theme.colors.text }
+                  { color: categoryFilter === cat ? '#FFF' : theme.colors.text }
                 ]}>
                   {cat}
                 </Text>
