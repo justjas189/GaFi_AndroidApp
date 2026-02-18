@@ -194,13 +194,28 @@ export default function BuildScreen() {
   // Koin Tutorial Guide Image
   const KOIN_TUTORIAL_IMAGE = require('../../../assets/mascot/koin_tutorial.png');
   
-  // Helper: mark a tutorial condition as met
+  // Helper: mark a tutorial condition as met and auto-advance if it matches current step
   const markTutorialCondition = (conditionKey) => {
     setTutorialConditions(prev => {
       const next = new Set(prev);
       next.add(conditionKey);
       return next;
     });
+    // Auto-advance: if this condition matches the current step (and it's not step 0), move forward
+    const currentStep = TUTORIAL_STEPS[tutorialStep];
+    if (currentStep && currentStep.conditionKey === conditionKey && tutorialStep > 0) {
+      // Small delay so the user sees the action complete before the overlay advances
+      setTimeout(() => {
+        setTutorialStep(prev => {
+          const nextIdx = prev + 1;
+          if (nextIdx < TUTORIAL_STEPS.length) {
+            gameDatabaseService.saveTutorialProgress({ currentStep: nextIdx, stepsCompleted: Array.from({ length: nextIdx }, (_, i) => String(i)), tutorialCompleted: false });
+            return nextIdx;
+          }
+          return prev;
+        });
+      }, 600);
+    }
   };
   
   // Helper: check if current tutorial step's condition is met
@@ -235,29 +250,20 @@ export default function BuildScreen() {
     {
       id: 'closet',
       title: "The Closet 👔",
-      message: "Walk to the Closet and change your character's outfit! Tap on the closet area to open it.",
+      message: "Walk to the Closet and check it out! Tap on the closet area to open it.",
       nextAlwaysEnabled: false,
-      conditionKey: 'outfit_changed',
+      conditionKey: 'closet_opened',
       position: 'right',
       highlight: 'closet',
     },
     {
-      id: 'notebook',
+      id: 'notebook_and_log',
       title: "The Notebook 📓",
-      message: "The Notebook lets you quickly log any expense. Walk to it and tap on it!",
-      nextAlwaysEnabled: false,
-      conditionKey: 'notebook_opened',
-      position: 'left',
-      highlight: 'notebook',
-    },
-    {
-      id: 'log_expense',
-      title: "Log an Expense 📝",
-      message: "Enter any amount and description, then tap Save. Don't worry — this is just practice and won't be saved to your records!",
+      message: "Walk to the Notebook, open it, and try logging an expense! Enter any amount and description, then tap Save. Don't worry — this is just practice!",
       nextAlwaysEnabled: false,
       conditionKey: 'notebook_expense_logged',
-      position: 'center',
-      highlight: null,
+      position: 'left',
+      highlight: 'notebook',
     },
     {
       id: 'exit_door',
@@ -641,9 +647,17 @@ export default function BuildScreen() {
         }
 
         // 1b. Check if Custom Mode was previously unlocked
-        const cmUnlocked = await AsyncStorage.getItem(`customModeUnlocked_${user.id}`);
-        if (cmUnlocked === 'true') {
+        // Primary source: Supabase user_levels (survives logout / device switch)
+        if (userLevels?.story_level_3_completed) {
           setCustomModeUnlocked(true);
+          // Keep AsyncStorage in sync for offline/fast access
+          AsyncStorage.setItem(`customModeUnlocked_${user.id}`, 'true').catch(() => {});
+        } else {
+          // Fallback: check AsyncStorage (legacy / offline)
+          const cmUnlocked = await AsyncStorage.getItem(`customModeUnlocked_${user.id}`);
+          if (cmUnlocked === 'true') {
+            setCustomModeUnlocked(true);
+          }
         }
 
         // 1c. Sync intro-seen flags from DB → AsyncStorage (cross-device persistence)
@@ -1313,14 +1327,14 @@ export default function BuildScreen() {
         break;
       case 'closet':
         console.log('👔 Opening closet for character selection');
+        // Tutorial: mark closet opened condition
+        if (tutorialActive && gameMode === 'tutorial') {
+          markTutorialCondition('closet_opened');
+        }
         setShowClosetModal(true);
         break;
       case 'notebook':
         console.log('📓 Opening notebook for quick expense entry');
-        // Tutorial: mark notebook opened condition
-        if (tutorialActive && gameMode === 'tutorial') {
-          markTutorialCondition('notebook_opened');
-        }
         setShowNotebookModal(true);
         break;
       case 'info':
@@ -6819,10 +6833,6 @@ export default function BuildScreen() {
                       onPress={() => {
                         if (isUnlocked) {
                           setSelectedCharacter(key);
-                          // Tutorial: mark outfit changed condition
-                          if (tutorialActive && gameMode === 'tutorial') {
-                            markTutorialCondition('outfit_changed');
-                          }
                           // ── Persist character selection to Supabase ──
                           gameDatabaseService.saveCharacterCustomization({
                             selectedCharacter: key,
