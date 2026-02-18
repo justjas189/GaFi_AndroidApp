@@ -191,6 +191,9 @@ export default function BuildScreen() {
   const [tutorialConditions, setTutorialConditions] = useState(new Set()); // Tracks step completion conditions
   const [tutorialViewedCar, setTutorialViewedCar] = useState(false); // Track if car transport was viewed in tutorial
   
+  // Abandon / End Session modal state
+  const [showAbandonModal, setShowAbandonModal] = useState(false);
+  
   // Koin Tutorial Guide Image
   const KOIN_TUTORIAL_IMAGE = require('../../../assets/mascot/koin_tutorial.png');
   
@@ -2280,7 +2283,22 @@ export default function BuildScreen() {
       backgroundColor: '#E67E22',
       justifyContent: 'center',
       alignItems: 'center',
-      marginRight: 12,
+      marginRight: 8,
+    },
+    giveUpButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#C62828',
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 14,
+      marginRight: 8,
+      gap: 4,
+    },
+    giveUpButtonText: {
+      color: '#FFF',
+      fontSize: 11,
+      fontWeight: 'bold',
     },
     headerLeft: {
       flex: 1,
@@ -3530,7 +3548,7 @@ export default function BuildScreen() {
   };
 
   // Handle menu button press
-  const handleStoryMode = () => {
+  const handleStoryMode = async () => {
     // Gate behind tutorial completion
     if (!tutorialCompleted) {
       Alert.alert(
@@ -3548,8 +3566,63 @@ export default function BuildScreen() {
       setTutorialActive(false);
       setTutorialStep(0);
     }
+
+    // ── Single Active Session: auto-resume if an in-progress session exists ──
+    let activeSession = cachedActiveStoryRef.current;
+    if (!activeSession) {
+      activeSession = await gameDatabaseService.findAnyActiveStorySession();
+    }
+    if (activeSession && activeSession.status === 'in_progress') {
+      // Bypass level selection — go straight to the active level
+      resumeStorySession(activeSession);
+      return;
+    }
+
+    // No active session — show level selection
     setGameMode('story');
-    setShowStoryIntro(true); // Show level selection instead of going directly to game
+    setShowStoryIntro(true);
+  };
+
+  // ── Abandon / End Session ────────────────────────────────
+  const handleAbandonSession = () => {
+    setShowAbandonModal(true);
+  };
+
+  const handleConfirmAbandon = async () => {
+    setShowAbandonModal(false);
+
+    // Mark the active session as 'abandoned' in the database
+    if (activeSessionId) {
+      if (gameMode === 'story') {
+        await gameDatabaseService.abandonStorySession(activeSessionId);
+        gameDatabaseService.logActivity({
+          activityType: 'session_abandoned',
+          sessionId: activeSessionId,
+          details: { level: storyLevel, mode: 'story' },
+        });
+      } else if (gameMode === 'custom') {
+        await gameDatabaseService.abandonCustomSession(activeSessionId);
+        gameDatabaseService.logActivity({
+          activityType: 'session_abandoned',
+          sessionId: activeSessionId,
+          details: { mode: 'custom', modeType: customModeType },
+        });
+      }
+    }
+
+    // Clear cached active sessions
+    if (gameMode === 'story') cachedActiveStoryRef.current = null;
+    if (gameMode === 'custom') cachedActiveCustomRef.current = null;
+
+    // Reset game state and return to main menu
+    setActiveSessionId(null);
+    setWeeklyBudget(0);
+    setWeeklySpending(0);
+    setStoryStartDate(null);
+    setStoryEndDate(null);
+    setLevelResults(null);
+    setGameMode(null);
+    setShowMainMenu(true);
   };
 
   // Open the Pokémon-style pre-level intro for a given level
@@ -6562,6 +6635,16 @@ export default function BuildScreen() {
         >
           <Ionicons name="home" size={20} color="#FFF" />
         </TouchableOpacity>
+        {/* End Session / Give Up Button — story & custom mode only */}
+        {(gameMode === 'story') && (
+          <TouchableOpacity
+            style={styles.giveUpButton}
+            onPress={handleAbandonSession}
+          >
+            <Ionicons name="flag" size={16} color="#FFF" />
+            <Text style={styles.giveUpButtonText}>Give Up</Text>
+          </TouchableOpacity>
+        )}
         <View style={styles.headerLeft}>
           <Text style={styles.headerTitle}>{currentMap.icon} {currentMap.name}</Text>
           <Text style={styles.headerSubtitle}>
@@ -7608,6 +7691,54 @@ export default function BuildScreen() {
                 <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' }}>
                   Back to Menu
                 </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Abandon / End Session Confirmation Modal */}
+      <Modal
+        visible={showAbandonModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowAbandonModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.travelModalContent, { alignItems: 'center', paddingVertical: 30 }]}>
+            <Text style={{ fontSize: 48, marginBottom: 12 }}>⚠️</Text>
+            <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#FFF', marginBottom: 8, textAlign: 'center' }}>
+              End Session?
+            </Text>
+            <Text style={{ fontSize: 14, color: '#BBB', textAlign: 'center', marginBottom: 24, paddingHorizontal: 12 }}>
+              Ending the session will reset your progress for this level. You will need to start over.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 12, width: '100%', paddingHorizontal: 16 }}>
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  backgroundColor: 'rgba(100,100,100,0.6)',
+                  paddingVertical: 14,
+                  borderRadius: 10,
+                  alignItems: 'center',
+                  borderWidth: 1,
+                  borderColor: 'rgba(255,255,255,0.2)',
+                }}
+                onPress={() => setShowAbandonModal(false)}
+              >
+                <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '600' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  backgroundColor: '#E53935',
+                  paddingVertical: 14,
+                  borderRadius: 10,
+                  alignItems: 'center',
+                }}
+                onPress={handleConfirmAbandon}
+              >
+                <Text style={{ color: '#FFF', fontSize: 15, fontWeight: 'bold' }}>Give Up</Text>
               </TouchableOpacity>
             </View>
           </View>

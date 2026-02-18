@@ -766,6 +766,75 @@ class GameDatabaseService {
   }
 
   /**
+   * Find ANY in-progress story session (regardless of level).
+   * Used by the 'Single Active Session' model to auto-resume.
+   */
+  async findAnyActiveStorySession() {
+    try {
+      const userId = await this._getUserId();
+      if (!userId) return null;
+
+      const { data, error } = await supabase
+        .from('story_mode_sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'in_progress')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error('❌ findAnyActiveStorySession error:', err.message);
+      return null;
+    }
+  }
+
+  // ─── 12. Abandon sessions ─────────────────────────────────
+
+  /**
+   * Mark a story session as 'abandoned'.
+   * Resets progress for the level — the user can start fresh.
+   */
+  async abandonStorySession(sessionId) {
+    try {
+      const { error } = await supabase
+        .from('story_mode_sessions')
+        .update({
+          status: 'abandoned',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', sessionId);
+
+      if (error) throw error;
+      console.log(`✅ Story session ${sessionId} abandoned`);
+    } catch (err) {
+      console.error('❌ abandonStorySession error:', err.message);
+    }
+  }
+
+  /**
+   * Mark a custom session as 'abandoned'.
+   */
+  async abandonCustomSession(sessionId) {
+    try {
+      const { error } = await supabase
+        .from('custom_mode_sessions')
+        .update({
+          status: 'abandoned',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', sessionId);
+
+      if (error) throw error;
+      console.log(`✅ Custom session ${sessionId} abandoned`);
+    } catch (err) {
+      console.error('❌ abandonCustomSession error:', err.message);
+    }
+  }
+
+  /**
    * Find an in-progress custom mode session.
    */
   async findActiveCustomSession() {
