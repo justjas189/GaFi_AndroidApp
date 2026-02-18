@@ -84,6 +84,7 @@ class GameDatabaseService {
     categorySpending = null,
     totalAllocated = null,
     actualSavingsPercent = null,
+    goalsData = null,
   }) {
     try {
       const updates = {
@@ -96,6 +97,7 @@ class GameDatabaseService {
       if (categorySpending !== null) updates.category_spending = categorySpending;
       if (totalAllocated !== null) updates.total_allocated = totalAllocated;
       if (actualSavingsPercent !== null) updates.actual_savings_percent = actualSavingsPercent;
+      if (goalsData !== null) updates.goals_data = goalsData;
 
       const { error } = await supabase
         .from('story_mode_sessions')

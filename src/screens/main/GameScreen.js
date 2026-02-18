@@ -10,6 +10,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { collisionSystem } from '../../utils/CollisionSystem';
 import { AchievementService } from '../../services/AchievementService';
 import gameDatabaseService from '../../services/GameDatabaseService';
+import { normalizeCategory } from '../../utils/categoryUtils';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
@@ -361,7 +362,12 @@ export default function BuildScreen() {
     'Electronics': 0,
     'Transport': 0,
     'Entertainment': 0,
-    'Other': 0
+    'Groceries': 0,
+    'School Supplies': 0,
+    'Utilities': 0,
+    'Health': 0,
+    'Education': 0,
+    'Other': 0,
   });
   
   // Level 2 (Goal Setting) - Savings goals tracking
@@ -570,8 +576,12 @@ export default function BuildScreen() {
     'Shopping': 'wants',
     'Electronics': 'wants',
     'Entertainment': 'wants',
-    'Other': 'wants'
+    'Other': 'wants',
+    'Utilities': 'needs',
+    'Health': 'needs',
+    'Education': 'needs',
   };
+    
   
   // Content area dimensions (for accurate bounds detection)
   const [contentSize, setContentSize] = useState({ width: width, height: height });
@@ -783,7 +793,7 @@ export default function BuildScreen() {
       
       const { data, error } = await supabase
         .from('expenses')
-        .select('amount, date')
+        .select('amount, date, category')
         .eq('user_id', user?.id)
         .gte('date', startDateStr)
         .lte('date', endDateStr);
@@ -791,6 +801,36 @@ export default function BuildScreen() {
       if (data) {
         const total = data.reduce((sum, expense) => sum + expense.amount, 0);
         setWeeklySpending(total);
+        
+        // Re-derive per-category spending from actual expense data
+        // This ensures budgetCategories stay accurate after reload.
+        // IMPORTANT: DB may store categories in lowercase (via BudgetDatabaseService),
+        // so we normalise to Title Case before looking up CATEGORY_BUDGET_MAP.
+        const derivedCategorySpending = {};
+        let derivedNeedsSpent = 0;
+        let derivedWantsSpent = 0;
+        data.forEach(expense => {
+          const cat = normalizeCategory(expense.category); // Title-Case normalisation
+          derivedCategorySpending[cat] = (derivedCategorySpending[cat] || 0) + expense.amount;
+          const budgetType = CATEGORY_BUDGET_MAP[cat] || 'wants';
+          if (budgetType === 'needs') derivedNeedsSpent += expense.amount;
+          else if (budgetType === 'wants') derivedWantsSpent += expense.amount;
+        });
+        
+        // Update categorySpending with derived values
+        setCategorySpending(prev => ({ ...prev, ...derivedCategorySpending }));
+        
+        // Update budgetCategories needs/wants spent (preserves budget limits)
+        const isLevelBudgeting =
+          (gameMode === 'story' && STORY_LEVELS[storyLevel]?.type === 'budgeting') ||
+          (gameMode === 'custom' && customModeType === 'budgeting');
+        if (isLevelBudgeting) {
+          setBudgetCategories(prev => ({
+            needs:   { ...prev.needs,   spent: derivedNeedsSpent },
+            wants:   { ...prev.wants,   spent: derivedWantsSpent },
+            savings: { ...prev.savings, spent: prev.savings.spent },
+          }));
+        }
         
         // Check if week is complete and evaluate level
         const now = new Date();
@@ -1922,6 +1962,42 @@ export default function BuildScreen() {
     
     // NOTE: Level completion is only checked when the week ends (in useEffect),
     // NOT after each allocation. This allows players to keep allocating throughout the week.
+
+    // ── Persist goal allocations to DB ──
+    if (activeSessionId && (gameMode === 'story' || gameMode === 'custom')) {
+      // Build updated allocations map (with this new allocation included)
+      const updatedAllocations = { ...goalAllocations, [goalId]: (goalAllocations[goalId] || 0) + amount };
+      const totalAllocatedNow = Object.values(updatedAllocations).reduce((sum, val) => sum + val, 0);
+
+      if (gameMode === 'story') {
+        // Build goals_data with per-goal allocated amounts for hydration
+        const updatedGoalsData = savingsGoals.map(g => ({
+          id: g.id,
+          name: g.name,
+          icon: g.icon,
+          target: g.target,
+          allocated: updatedAllocations[g.id] || 0,
+        }));
+        gameDatabaseService.updateStorySessionSpending(activeSessionId, {
+          weeklySpending: weeklySpending + amount,
+          totalAllocated: totalAllocatedNow,
+          goalsData: updatedGoalsData,
+          savingsAmount: weeklyBudget - (weeklySpending + amount),
+        });
+      } else {
+        // Custom mode: save goals_progress array for hydration
+        const goalsProgressArr = savingsGoals.map(g => ({
+          name: g.name,
+          target: g.target,
+          allocated: updatedAllocations[g.id] || 0,
+        }));
+        gameDatabaseService.updateCustomSessionSpending(activeSessionId, {
+          weeklySpending: weeklySpending + amount,
+          goalsProgress: goalsProgressArr,
+          savingsAmount: weeklyBudget - (weeklySpending + amount),
+        });
+      }
+    }
   };
 
   const handleSubmitExpense = async () => {
@@ -2003,7 +2079,8 @@ export default function BuildScreen() {
         }));
         
         // Level 1 (Budgeting): Update 50/30/20 category budgets
-        if (gameMode === 'story' && STORY_LEVELS[storyLevel]?.type === 'budgeting') {
+        if ((gameMode === 'story' || gameMode === 'custom') &&
+            (STORY_LEVELS[storyLevel]?.type === 'budgeting' || customModeType === 'budgeting')) {
           const budgetType = CATEGORY_BUDGET_MAP[savedCategory] || 'wants';
           setBudgetCategories(prev => ({
             ...prev,
@@ -3298,6 +3375,8 @@ export default function BuildScreen() {
           id: `custom_${i}`, name: g.name, icon: ['🎯','💎','🌟','🎁','✨'][i % 5], target: g.target || 0
         }));
         setSavingsGoals(goals);
+        // Restore customGoals form state so Settings modal shows correct data
+        setCustomGoals(session.custom_goals.map(g => ({ name: g.name, target: String(g.target || '') })));
         const allocs = {};
         goals.forEach(g => { allocs[g.id] = 0; });
         if (session.goals_progress) {
@@ -3673,6 +3752,30 @@ export default function BuildScreen() {
 
     setShowCustomSettingsModal(false);
     console.log(`⚙️ Custom settings applied: mode=${newModeType}`);
+
+    // ── Persist updated custom settings to DB ──
+    if (activeSessionId) {
+      const updatedGoalsForDB = (newModeType === 'goals')
+        ? customGoals.filter(g => g.name.trim() && parseFloat(g.target) > 0).map(g => ({ name: g.name.trim(), target: parseFloat(g.target) || 0 }))
+        : null;
+      gameDatabaseService.updateCustomSessionSpending(activeSessionId, {
+        weeklySpending,
+        needsSpent: budgetCategories.needs?.spent || 0,
+        wantsSpent: budgetCategories.wants?.spent || 0,
+        savingsAmount: weeklyBudget - weeklySpending,
+        goalsProgress: updatedGoalsForDB
+          ? updatedGoalsForDB.map(g => ({ name: g.name, target: g.target, allocated: goalAllocations[`custom_${updatedGoalsForDB.indexOf(g)}`] || 0 }))
+          : null,
+      });
+      // Also update the session row metadata (custom_rules, custom_goals, custom_savings_target)
+      // via a direct Supabase update for the fields createCustomSession originally set
+      const metadataUpdates = { updated_at: new Date().toISOString() };
+      if (newModeType === 'budgeting') metadataUpdates.custom_rules = customBudgetRules;
+      if (newModeType === 'goals' && updatedGoalsForDB) metadataUpdates.custom_goals = updatedGoalsForDB;
+      if (newModeType === 'saving') metadataUpdates.custom_savings_target = parseFloat(customSavingsTarget);
+      metadataUpdates.mode_type = newModeType;
+      supabase.from('custom_mode_sessions').update(metadataUpdates).eq('id', activeSessionId).then(() => {});
+    }
   };
 
   // Render Custom Settings Modal (in-game settings for Custom Mode)
@@ -5799,10 +5902,10 @@ export default function BuildScreen() {
             </View>
             <View style={menuStyles.menuButtonContent}>
               <Text style={[menuStyles.menuButtonText, !tutorialCompleted && { color: '#888' }]}>Story Mode</Text>
-              {!tutorialCompleted && (
+              {/* {!tutorialCompleted && (
                 <Text style={{ fontSize: 11, color: '#666', marginTop: 2 }}>Complete Tutorial first</Text>
-              )}
-            </View>
+              )}*/}
+            </View> 
           </TouchableOpacity>
 
           {/* Custom Mode Button */}

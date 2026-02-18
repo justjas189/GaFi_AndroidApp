@@ -421,7 +421,7 @@ Focus on: spending patterns, budget adherence, category-specific tips, and Filip
 
     const response = await getChatCompletion(messages, {
       temperature: 0.3,
-      max_tokens: 1200, // Increased from 800 to allow complete responses
+      max_tokens: 4096, // Increased to prevent truncated JSON responses
       frequency_penalty: 0.3,
       presence_penalty: 0.2
     });
@@ -576,7 +576,7 @@ Focus on: Filipino student context, practical savings tips, budget optimization,
 
     const response = await getChatCompletion(messages, {
       temperature: 0.3,
-      max_tokens: 1500, // Increased from 800 to allow complete responses
+      max_tokens: 4096, // Increased to prevent truncated JSON responses
       frequency_penalty: 0.5,
       presence_penalty: 0.3
     });
@@ -679,14 +679,16 @@ const extractJSON = (response) => {
     // Sanitize: strip comments and invalid characters BEFORE any parsing
     responseStr = sanitizeJSONString(responseStr);
     
-    // Check for truncated response first
+    // Check for truncated response — log warning but don't throw yet;
+    // let the repair logic below attempt to salvage partial JSON.
     if (responseStr.trim().endsWith(',') || 
         responseStr.trim().endsWith('"') || 
         (!responseStr.trim().endsWith(']') && !responseStr.trim().endsWith('}'))) {
-      DebugUtils.warn('NVIDIA_AI', 'Response appears to be truncated', { 
+      DebugUtils.warn('NVIDIA_AI', 'Response appears to be truncated, attempting repair', { 
         responseEnd: responseStr.slice(-50) 
       });
-      throw new Error('Response is truncated - insufficient tokens');
+      // fall through to repair logic
+      throw new Error('Response is truncated - attempting repair');
     }
     
     // First, try to parse as-is
@@ -719,10 +721,31 @@ const extractJSON = (response) => {
         incomplete: incomplete.substring(0, 100) 
       });
       
-      // Try to complete the JSON by adding missing properties and closing brackets
-      let completed = incomplete;
+      // Strategy: extract all fully-formed objects from the truncated array,
+      // discard the last partial object, and close the array.
+      const fullObjectsMatch = incomplete.match(/\{[^{}]*\}/g);
+      if (fullObjectsMatch && fullObjectsMatch.length > 0) {
+        // Validate each extracted object and keep only parseable ones
+        const validObjects = fullObjectsMatch.filter(obj => {
+          try { JSON.parse(obj); return true; } catch { return false; }
+        });
+        if (validObjects.length > 0) {
+          const repaired = '[' + validObjects.join(',') + ']';
+          try {
+            JSON.parse(repaired);
+            DebugUtils.log('NVIDIA_AI', 'Successfully repaired truncated JSON', {
+              objectsRecovered: validObjects.length,
+              objectsDiscarded: fullObjectsMatch.length - validObjects.length
+            });
+            return repaired;
+          } catch (e) {
+            DebugUtils.warn('NVIDIA_AI', 'Repaired JSON still invalid', { error: e.message });
+          }
+        }
+      }
       
-      // If it ends with a comma or quote, try to complete the object
+      // Fallback: try to complete the JSON by adding missing properties and closing brackets
+      let completed = incomplete;
       if (completed.trim().endsWith(',') || completed.trim().endsWith('"')) {
         // Add missing icon and color if not present
         if (!completed.includes('"icon"')) {
@@ -735,7 +758,7 @@ const extractJSON = (response) => {
         
         try {
           JSON.parse(completed);
-          DebugUtils.log('NVIDIA_AI', 'Successfully completed truncated JSON');
+          DebugUtils.log('NVIDIA_AI', 'Successfully completed truncated JSON with field repair');
           return completed;
         } catch (e) {
           DebugUtils.warn('NVIDIA_AI', 'Failed to complete JSON', { error: e.message });
