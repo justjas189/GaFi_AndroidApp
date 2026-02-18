@@ -19,6 +19,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { AchievementService } from '../../services/AchievementService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import gameDatabaseService from '../../services/GameDatabaseService';
 
 const { width } = Dimensions.get('window');
 
@@ -67,6 +68,94 @@ const STORE_ITEMS = {
       color: '#8E44AD',
       sprite: require('../../../assets/Game_Graphics/Character_Animation/Businesswoman.png'),
       characterKey: 'businesswoman',
+      isDefault: false,
+    },
+    {
+      id: 'skin_ash_ketchum',
+      name: 'Ash Ketchum',
+      description: 'Gotta save \'em all! A trainer of budgets',
+      price: 200,
+      icon: '🧢',
+      color: '#E53935',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Ash Ketchum.png'),
+      characterKey: 'ash_ketchum',
+      isDefault: false,
+    },
+    {
+      id: 'skin_bruce_lee',
+      name: 'Bruce Lee',
+      description: 'Disciplined finances, disciplined life',
+      price: 200,
+      icon: '🥋',
+      color: '#FFC107',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Bruce Lee.png'),
+      characterKey: 'bruce_lee',
+      isDefault: false,
+    },
+    {
+      id: 'skin_chef_stephen',
+      name: 'Chef Stephen',
+      description: 'Cooking up smart savings recipes',
+      price: 175,
+      icon: '👨‍🍳',
+      color: '#FF7043',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Chef Stephen.png'),
+      characterKey: 'chef_stephen',
+      isDefault: false,
+    },
+    {
+      id: 'skin_detective_carol',
+      name: 'Detective Carol',
+      description: 'Investigating every peso spent',
+      price: 175,
+      icon: '🕵️',
+      color: '#5C6BC0',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Detective Carol.png'),
+      characterKey: 'detective_carol',
+      isDefault: false,
+    },
+    {
+      id: 'skin_lily',
+      name: 'Lily',
+      description: 'A cheerful saver with a green thumb',
+      price: 150,
+      icon: '🌸',
+      color: '#66BB6A',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Lily.png'),
+      characterKey: 'lily',
+      isDefault: false,
+    },
+    {
+      id: 'skin_mira',
+      name: 'Mira',
+      description: 'A tech-savvy student tracking every cent',
+      price: 150,
+      icon: '💜',
+      color: '#AB47BC',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Mira.png'),
+      characterKey: 'mira',
+      isDefault: false,
+    },
+    {
+      id: 'skin_nurse_joy',
+      name: 'Nurse Joy',
+      description: 'Healing your finances back to health',
+      price: 200,
+      icon: '👩‍⚕️',
+      color: '#EC407A',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Nurse Joy.png'),
+      characterKey: 'nurse_joy',
+      isDefault: false,
+    },
+    {
+      id: 'skin_policeman',
+      name: 'Officer Dan',
+      description: 'Keeping your spending in check',
+      price: 175,
+      icon: '👮',
+      color: '#1565C0',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Policeman.png'),
+      characterKey: 'policeman',
       isDefault: false,
     },
   ],
@@ -326,29 +415,87 @@ const AchievementDashboard = () => {
     }
   };
 
-  // Load store data (purchased items and spent XP)
+  // Load store data — Supabase first, AsyncStorage fallback
+  // Also cross-references unlocked_characters column to catch skins unlocked
+  // before purchase tracking was added to the database.
   const loadStoreData = async () => {
     try {
       if (!user?.id) return;
-      
+
+      // Default owned items
+      const defaultOwned = STORE_ITEMS.skins
+        .filter(item => item.isDefault)
+        .map(item => item.id);
+
+      // Helper: derive purchased item IDs from an unlocked_characters array
+      // e.g. ['girl','jasper','mira'] → ['skin_girl','skin_jasper','skin_mira']
+      const derivePurchasedFromUnlocked = (unlockedChars) => {
+        if (!unlockedChars || !Array.isArray(unlockedChars)) return [];
+        return STORE_ITEMS.skins
+          .filter(item => unlockedChars.includes(item.characterKey))
+          .map(item => item.id);
+      };
+
+      // 1. Try loading from Supabase (source of truth)
+      const dbData = await gameDatabaseService.loadStorePurchases();
+
+      if (dbData) {
+        // Merge: defaults + purchasedItems from JSONB + skins derived from unlocked_characters
+        const fromJsonb = dbData.purchasedItems || [];
+        const fromUnlocked = derivePurchasedFromUnlocked(dbData.unlockedCharacters);
+        const merged = Array.from(new Set([...defaultOwned, ...fromJsonb, ...fromUnlocked]));
+        setPurchasedItems(merged);
+        setSpentXP(dbData.spentXP || 0);
+
+        // If there were unlocked characters missing from purchasedItems, persist the fix
+        if (merged.length > new Set([...defaultOwned, ...fromJsonb]).size) {
+          await gameDatabaseService.saveStorePurchases({
+            purchasedItems: merged,
+            spentXP: dbData.spentXP || 0,
+            unlockedCharacters: dbData.unlockedCharacters || ['girl', 'jasper'],
+          });
+        }
+
+        // Sync to AsyncStorage for offline/fast access
+        const purchasedKey = `purchased_items_${user.id}`;
+        const spentXPKey = `spent_xp_${user.id}`;
+        const unlockedSkinsKey = `unlocked_skins_${user.id}`;
+        await AsyncStorage.setItem(purchasedKey, JSON.stringify(merged));
+        await AsyncStorage.setItem(spentXPKey, (dbData.spentXP || 0).toString());
+        if (dbData.unlockedCharacters && dbData.unlockedCharacters.length > 0) {
+          await AsyncStorage.setItem(unlockedSkinsKey, JSON.stringify(dbData.unlockedCharacters));
+        }
+        return;
+      }
+
+      // 2. Fallback: load from AsyncStorage (legacy/offline)
       const purchasedKey = `purchased_items_${user.id}`;
       const spentXPKey = `spent_xp_${user.id}`;
-      
       const [purchasedData, spentXPData] = await Promise.all([
         AsyncStorage.getItem(purchasedKey),
         AsyncStorage.getItem(spentXPKey),
       ]);
-      
+
       if (purchasedData) {
-        setPurchasedItems(JSON.parse(purchasedData));
+        const parsed = JSON.parse(purchasedData);
+        const merged = Array.from(new Set([...defaultOwned, ...parsed]));
+        setPurchasedItems(merged);
+
+        // Migrate AsyncStorage data → Supabase so it persists across logins
+        const unlockedSkinsKey = `unlocked_skins_${user.id}`;
+        const savedSkins = await AsyncStorage.getItem(unlockedSkinsKey);
+        const unlockedChars = savedSkins ? JSON.parse(savedSkins) : ['girl', 'jasper'];
+        const spentVal = spentXPData ? parseInt(spentXPData, 10) : 0;
+        setSpentXP(spentVal);
+        await gameDatabaseService.saveStorePurchases({
+          purchasedItems: merged,
+          spentXP: spentVal,
+          unlockedCharacters: unlockedChars,
+        });
       } else {
-        // Default items are free and already owned
-        const defaultOwned = STORE_ITEMS.skins
-          .filter(item => item.isDefault)
-          .map(item => item.id);
         setPurchasedItems(defaultOwned);
       }
-      
+
       if (spentXPData) {
         setSpentXP(parseInt(spentXPData, 10));
       }
@@ -357,18 +504,26 @@ const AchievementDashboard = () => {
     }
   };
 
-  // Save store data
-  const saveStoreData = async (newPurchasedItems, newSpentXP) => {
+  // Save store data — write to both Supabase and AsyncStorage
+  const saveStoreData = async (newPurchasedItems, newSpentXP, newUnlockedCharacters) => {
     try {
       if (!user?.id) return;
-      
+
       const purchasedKey = `purchased_items_${user.id}`;
       const spentXPKey = `spent_xp_${user.id}`;
-      
+
+      // Save to AsyncStorage (fast local cache)
       await Promise.all([
         AsyncStorage.setItem(purchasedKey, JSON.stringify(newPurchasedItems)),
         AsyncStorage.setItem(spentXPKey, newSpentXP.toString()),
       ]);
+
+      // Save to Supabase (persistent across devices/logins)
+      await gameDatabaseService.saveStorePurchases({
+        purchasedItems: newPurchasedItems,
+        spentXP: newSpentXP,
+        unlockedCharacters: newUnlockedCharacters || ['girl', 'jasper'],
+      });
     } catch (error) {
       console.error('Error saving store data:', error);
     }
@@ -418,22 +573,29 @@ const AchievementDashboard = () => {
     setPurchasedItems(newPurchasedItems);
     setSpentXP(newSpentXP);
     
-    // Save to AsyncStorage
-    await saveStoreData(newPurchasedItems, newSpentXP);
-    
-    // Also save the unlocked skin to the character skins storage for GameScreen
+    // Build updated unlocked characters list
+    let updatedUnlockedSkins = ['girl', 'jasper'];
     try {
       const unlockedSkinsKey = `unlocked_skins_${user.id}`;
       const existingUnlocked = await AsyncStorage.getItem(unlockedSkinsKey);
-      const unlockedSkins = existingUnlocked ? JSON.parse(existingUnlocked) : ['girl', 'jasper'];
+      updatedUnlockedSkins = existingUnlocked ? JSON.parse(existingUnlocked) : ['girl', 'jasper'];
       
-      if (!unlockedSkins.includes(item.characterKey)) {
-        unlockedSkins.push(item.characterKey);
-        await AsyncStorage.setItem(unlockedSkinsKey, JSON.stringify(unlockedSkins));
+      if (!updatedUnlockedSkins.includes(item.characterKey)) {
+        updatedUnlockedSkins.push(item.characterKey);
       }
+      await AsyncStorage.setItem(unlockedSkinsKey, JSON.stringify(updatedUnlockedSkins));
     } catch (error) {
       console.error('Error saving unlocked skin:', error);
     }
+    
+    // Save to both AsyncStorage AND Supabase (persistent)
+    await saveStoreData(newPurchasedItems, newSpentXP, updatedUnlockedSkins);
+
+    // Also update the character_customizations unlocked_characters column directly
+    await gameDatabaseService.saveCharacterCustomization({
+      selectedCharacter: undefined, // don't change selection
+      unlockedCharacters: updatedUnlockedSkins,
+    });
     
     setShowPurchaseConfirm(false);
     setSelectedStoreItem(null);

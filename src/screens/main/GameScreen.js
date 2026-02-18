@@ -507,6 +507,62 @@ export default function BuildScreen() {
       icon: '👩‍💼',
       color: '#8E44AD',
     },
+    ash_ketchum: {
+      name: 'Ash Ketchum',
+      description: 'Gotta save \'em all! A trainer of budgets',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Ash Ketchum.png'),
+      icon: '🧢',
+      color: '#E53935',
+    },
+    bruce_lee: {
+      name: 'Bruce Lee',
+      description: 'Disciplined finances, disciplined life',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Bruce Lee.png'),
+      icon: '🥋',
+      color: '#FFC107',
+    },
+    chef_stephen: {
+      name: 'Chef Stephen',
+      description: 'Cooking up smart savings recipes',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Chef Stephen.png'),
+      icon: '👨‍🍳',
+      color: '#FF7043',
+    },
+    detective_carol: {
+      name: 'Detective Carol',
+      description: 'Investigating every peso spent',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Detective Carol.png'),
+      icon: '🕵️',
+      color: '#5C6BC0',
+    },
+    lily: {
+      name: 'Lily',
+      description: 'A cheerful saver with a green thumb',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Lily.png'),
+      icon: '🌸',
+      color: '#66BB6A',
+    },
+    mira: {
+      name: 'Mira',
+      description: 'A tech-savvy student tracking every cent',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Mira.png'),
+      icon: '💜',
+      color: '#AB47BC',
+    },
+    nurse_joy: {
+      name: 'Nurse Joy',
+      description: 'Healing your finances back to health',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Nurse Joy.png'),
+      icon: '👩‍⚕️',
+      color: '#EC407A',
+    },
+    policeman: {
+      name: 'Officer Dan',
+      description: 'Keeping your spending in check',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Policeman.png'),
+      icon: '👮',
+      color: '#1565C0',
+    },
   };
   
   // Sprite frame configuration (24 frames total: 6 per direction)
@@ -712,14 +768,38 @@ export default function BuildScreen() {
   }, [user?.id]);
 
   // Load unlocked skins from store purchases - runs when screen is focused
+  // Merges Supabase (source of truth) + AsyncStorage (local cache)
   const loadUnlockedSkins = useCallback(async () => {
     try {
       if (!user?.id) return;
+
+      const defaults = ['girl', 'jasper'];
+      let dbSkins = [];
+      let localSkins = [];
+
+      // 1. Load from Supabase (source of truth)
+      try {
+        const dbData = await gameDatabaseService.loadStorePurchases();
+        if (dbData?.unlockedCharacters && dbData.unlockedCharacters.length > 0) {
+          dbSkins = dbData.unlockedCharacters;
+        }
+      } catch (e) {
+        console.warn('⚠️ Could not load skins from Supabase:', e.message);
+      }
+
+      // 2. Load from AsyncStorage (local cache / legacy)
       const unlockedSkinsKey = `unlocked_skins_${user.id}`;
       const savedSkins = await AsyncStorage.getItem(unlockedSkinsKey);
       if (savedSkins) {
-        setUnlockedSkins(JSON.parse(savedSkins));
+        localSkins = JSON.parse(savedSkins);
       }
+
+      // 3. Merge all sources
+      const merged = Array.from(new Set([...defaults, ...dbSkins, ...localSkins]));
+      setUnlockedSkins(merged);
+
+      // 4. Keep AsyncStorage in sync with the merged result
+      await AsyncStorage.setItem(unlockedSkinsKey, JSON.stringify(merged));
     } catch (error) {
       console.error('Error loading unlocked skins:', error);
     }

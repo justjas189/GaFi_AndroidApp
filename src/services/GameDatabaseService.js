@@ -323,6 +323,7 @@ class GameDatabaseService {
 
   /**
    * Upsert character selection and unlocked items.
+   * If selectedCharacter is undefined, only unlocked_characters is updated.
    */
   async saveCharacterCustomization({
     selectedCharacter,
@@ -333,18 +334,24 @@ class GameDatabaseService {
       const userId = await this._getUserId();
       if (!userId) throw new Error('Not authenticated');
 
+      const upsertData = {
+        user_id: userId,
+        unlocked_characters: unlockedCharacters,
+        equipped_outfit: equippedOutfit,
+        updated_at: new Date().toISOString(),
+      };
+
+      // Only set selected_character if explicitly provided
+      if (selectedCharacter !== undefined) {
+        upsertData.selected_character = selectedCharacter;
+      }
+
       const { error } = await supabase
         .from('character_customizations')
-        .upsert({
-          user_id: userId,
-          selected_character: selectedCharacter,
-          unlocked_characters: unlockedCharacters,
-          equipped_outfit: equippedOutfit,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id' });
+        .upsert(upsertData, { onConflict: 'user_id' });
 
       if (error) throw error;
-      console.log(`✅ Character customization saved (selected=${selectedCharacter})`);
+      console.log(`✅ Character customization saved (selected=${selectedCharacter || 'unchanged'}, unlocked=${unlockedCharacters.length})`);
     } catch (err) {
       console.error('❌ saveCharacterCustomization error:', err.message);
     }
@@ -368,6 +375,66 @@ class GameDatabaseService {
       return data;
     } catch (err) {
       console.error('❌ loadCharacterCustomization error:', err.message);
+      return null;
+    }
+  }
+
+  // ─── 5b. Store purchases (persisted in customization_data JSONB) ──
+
+  /**
+   * Save store purchase data (purchased item IDs + spent XP) to Supabase.
+   * Uses the customization_data JSONB column on character_customizations.
+   */
+  async saveStorePurchases({ purchasedItems, spentXP, unlockedCharacters }) {
+    try {
+      const userId = await this._getUserId();
+      if (!userId) throw new Error('Not authenticated');
+
+      const { error } = await supabase
+        .from('character_customizations')
+        .upsert({
+          user_id: userId,
+          unlocked_characters: unlockedCharacters,
+          customization_data: {
+            purchased_items: purchasedItems,
+            spent_xp: spentXP,
+          },
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+
+      if (error) throw error;
+      console.log(`✅ Store purchases saved to Supabase (${purchasedItems.length} items, ${spentXP} XP spent)`);
+    } catch (err) {
+      console.error('❌ saveStorePurchases error:', err.message);
+    }
+  }
+
+  /**
+   * Load store purchase data from Supabase.
+   * Returns { purchasedItems, spentXP, unlockedCharacters } or null.
+   */
+  async loadStorePurchases() {
+    try {
+      const userId = await this._getUserId();
+      if (!userId) return null;
+
+      const { data, error } = await supabase
+        .from('character_customizations')
+        .select('unlocked_characters, customization_data')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) return null;
+
+      const customData = data.customization_data || {};
+      return {
+        purchasedItems: customData.purchased_items || [],
+        spentXP: customData.spent_xp || 0,
+        unlockedCharacters: data.unlocked_characters || ['girl', 'jasper'],
+      };
+    } catch (err) {
+      console.error('❌ loadStorePurchases error:', err.message);
       return null;
     }
   }
