@@ -286,7 +286,6 @@ export const AuthProvider = ({ children }) => {
             k.startsWith('onboardingComplete') ||
             k.startsWith('isFirstLogin') ||
             k.startsWith('hasOnboarded_') ||
-            k.startsWith('customModeUnlocked_') ||
             k.startsWith('unlocked_skins_') ||
             k.startsWith('chat_') ||
             k.startsWith('game_')
