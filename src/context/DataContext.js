@@ -216,11 +216,13 @@ export const DataProvider = ({ children }) => {
       }
 
       // Load expenses with explicit user scoping
+      // NOTE: Supabase defaults to 1000 rows max. Use .range() to fetch all historical data.
       const { data: expensesData, error: expensesError } = await supabase
         .from('expenses')
         .select('*')
         .eq('user_id', userId)
-        .order('date', { ascending: false });
+        .order('date', { ascending: false })
+        .range(0, 9999);
 
       if (expensesError) {
         console.error('Expenses load error:', expensesError);

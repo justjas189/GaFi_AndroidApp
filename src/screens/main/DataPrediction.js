@@ -18,8 +18,10 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 import { DataContext } from '../../context/DataContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import { analyzeExpenses, getRecommendations } from '../../config/nvidia';
 import { normalizeCategory } from '../../utils/categoryUtils';
+import PredictionEngine from '../../services/PredictionEngine';
 
 // Category colors for charts - matching GameScreen.js EXPENSE_CATEGORIES (canonical names)
 const CATEGORY_COLORS = {
@@ -383,21 +385,12 @@ const computePredictionForMonth = (expenses, targetMonthIdx, targetYear, current
     totalPredicted *= (1 + inflationRate / 12);
   }
 
-  // For current month: blend model prediction with actual pace
-  let projectedRemaining = 0;
+  // For current month: simple tally (projected remaining = predicted - spent)
   const daysInMonth = new Date(targetYear, targetMonthIdx + 1, 0).getDate();
   const daysElapsed = isCurrentMonth ? currentDate.getDate() : 0;
-
-  if (isCurrentMonth && daysElapsed > 0 && spentSoFar > 0) {
-    // Pace-based projection: (daily avg so far) * remaining days
-    const dailyRate = spentSoFar / daysElapsed;
-    const daysRemaining = daysInMonth - daysElapsed;
-    const paceProjection = spentSoFar + (dailyRate * daysRemaining);
-    projectedRemaining = dailyRate * daysRemaining;
-
-    // Blend: 55% pace-based (actual data), 45% model prediction
-    totalPredicted = paceProjection * 0.55 + totalPredicted * 0.45;
-  }
+  const projectedRemaining = isCurrentMonth && spentSoFar > 0
+    ? Math.max(0, totalPredicted - spentSoFar)
+    : 0;
 
   // Category Predictions
   const totalSpent = Object.values(categoryTotals).reduce((sum, val) => sum + val, 0);
@@ -550,6 +543,8 @@ const computePredictionForMonth = (expenses, targetMonthIdx, targetYear, current
 const DataPredictionScreen = ({ navigation }) => {
   const { expenses } = useContext(DataContext);
   const { theme, colors } = useTheme();
+  const { user } = useAuth();
+  const userId = user?.id || null;
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedPeriod, setSelectedPeriod] = useState('current'); // 'current' or 'next'
@@ -579,25 +574,63 @@ const DataPredictionScreen = ({ navigation }) => {
   const nextMonthName = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1)
     .toLocaleString('default', { month: 'long' });
 
-  // Compute predictions for current month
-  const currentMonthPredictions = useMemo(() => {
-    return computePredictionForMonth(
-      expenses,
-      currentDate.getMonth(),
-      currentDate.getFullYear(),
-      currentDate
-    );
+  // ── ML-Powered Predictions (replaces formula-based useMemo) ──────
+  const [currentMonthPredictions, setCurrentMonthPredictions] = useState(null);
+  const [nextMonthPredictions, setNextMonthPredictions] = useState(null);
+  const [isPredicting, setIsPredicting] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const runPredictions = async () => {
+      if (!expenses || expenses.length === 0) {
+        setCurrentMonthPredictions(computePredictionForMonth(expenses, currentDate.getMonth(), currentDate.getFullYear(), currentDate));
+        setNextMonthPredictions(computePredictionForMonth(expenses, currentDate.getMonth() + 1 > 11 ? 0 : currentDate.getMonth() + 1, currentDate.getMonth() + 1 > 11 ? currentDate.getFullYear() + 1 : currentDate.getFullYear(), currentDate));
+        setIsPredicting(false);
+        return;
+      }
+
+      setIsPredicting(true);
+      try {
+        // Step 1: Check if Prophet ML API is available
+        await PredictionEngine.trainModel(expenses);
+        console.log('[DataPrediction] API available:', PredictionEngine.apiAvailable);
+
+        if (cancelled) return;
+
+        // Step 2: Generate predictions (API if available, heuristic fallback)
+        const [curPred, nextPred] = await Promise.all([
+          PredictionEngine.predictCurrentMonth(expenses, 10000, userId),
+          PredictionEngine.predictNextMonth(expenses, 10000, userId),
+        ]);
+
+        if (!cancelled) {
+          setCurrentMonthPredictions(curPred);
+          setNextMonthPredictions(nextPred);
+        }
+      } catch (err) {
+        console.warn('[DataPrediction] ML prediction failed, using heuristic fallback:', err.message);
+        if (!cancelled) {
+          // Fallback to formula-based predictions
+          setCurrentMonthPredictions(computePredictionForMonth(expenses, currentDate.getMonth(), currentDate.getFullYear(), currentDate));
+          const nmi = currentDate.getMonth() + 1 > 11 ? 0 : currentDate.getMonth() + 1;
+          const ny = nmi === 0 ? currentDate.getFullYear() + 1 : currentDate.getFullYear();
+          setNextMonthPredictions(computePredictionForMonth(expenses, nmi, ny, currentDate));
+        }
+      } finally {
+        if (!cancelled) setIsPredicting(false);
+      }
+    };
+
+    runPredictions();
+    return () => { cancelled = true; };
   }, [expenses]);
 
-  // Compute predictions for next month
-  const nextMonthPredictions = useMemo(() => {
-    const nextMonthIdx = currentDate.getMonth() + 1 > 11 ? 0 : currentDate.getMonth() + 1;
-    const nextYear = nextMonthIdx === 0 ? currentDate.getFullYear() + 1 : currentDate.getFullYear();
-    return computePredictionForMonth(expenses, nextMonthIdx, nextYear, currentDate);
-  }, [expenses]);
-
-  // Active predictions based on toggle
-  const predictions = selectedPeriod === 'current' ? currentMonthPredictions : nextMonthPredictions;
+  // Active predictions based on toggle (with safe fallback while loading)
+  const defaultPrediction = { totalPredicted: 0, categoryBreakdown: [], insights: [], confidence: 0, historicalAverage: 0, trend: 'stable', monthlyHistory: [], sameMonthLastYear: 0, hasYearOverYearData: false, yoyGrowthRate: 0, inflationRate: 0.035, seasonalMultiplier: 1, targetMonth: '', yearsOfData: 0, sameMonthYears: [], predictionMethod: 'none', isCurrentMonth: false, spentSoFar: 0, projectedRemaining: 0, daysElapsed: 0, daysInMonth: 0, currentMonthCategorySpent: {} };
+  const predictions = selectedPeriod === 'current'
+    ? (currentMonthPredictions || defaultPrediction)
+    : (nextMonthPredictions || defaultPrediction);
   const displayMonth = selectedPeriod === 'current' ? currentMonth : nextMonthName;
   const displayYear = selectedPeriod === 'current' ? currentYear
     : (currentDate.getMonth() + 1 > 11 ? currentYear + 1 : currentYear);
@@ -636,7 +669,7 @@ const DataPredictionScreen = ({ navigation }) => {
     };
 
     fetchAIRecommendations();
-  }, [expenses, predictions, selectedPeriod]);
+  }, [expenses, currentMonthPredictions, nextMonthPredictions, selectedPeriod]);
 
   // Generate fallback recommendations when AI is unavailable
   const generateFallbackRecommendations = (predictionsData) => {
@@ -795,8 +828,16 @@ const DataPredictionScreen = ({ navigation }) => {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
+        {/* Loading State */}
+        {isPredicting && (
+          <View style={[styles.summaryCard, { alignItems: 'center', paddingVertical: 40 }]}>
+            <ActivityIndicator size="large" color={colors?.primary || '#FF6B00'} />
+            <Text style={[styles.summaryLabel, { marginTop: 16 }]}>Training ML model on your data...</Text>
+          </View>
+        )}
+
         {/* Prediction Summary Card */}
-        <View style={styles.summaryCard}>
+        {!isPredicting && <View style={styles.summaryCard}>
           <View style={styles.summaryHeader}>
             <Text style={styles.summaryLabel}>
               Projected Spending for {displayMonth}
@@ -811,7 +852,7 @@ const DataPredictionScreen = ({ navigation }) => {
             })()}
           </View>
           
-          <Text style={styles.predictedAmount}>₱{predictions.totalPredicted.toLocaleString()}</Text>
+          <Text style={styles.predictedAmount}>₱{(isNaN(predictions.totalPredicted) ? 0 : predictions.totalPredicted).toLocaleString()}</Text>
 
           {/* Current month: spent so far + remaining */}
           {predictions.isCurrentMonth && predictions.spentSoFar > 0 && (
@@ -820,7 +861,7 @@ const DataPredictionScreen = ({ navigation }) => {
                 <View
                   style={[
                     styles.progressBarFill,
-                    { width: `${Math.min(100, Math.round((predictions.spentSoFar / predictions.totalPredicted) * 100))}%` },
+                    { width: `${Math.min(100, Math.round((predictions.spentSoFar / (predictions.totalPredicted || 1)) * 100))}%` },
                   ]}
                 />
               </View>
@@ -889,8 +930,17 @@ const DataPredictionScreen = ({ navigation }) => {
                 {predictions.yearsOfData || 1} year{(predictions.yearsOfData || 1) !== 1 ? 's' : ''}
               </Text>
             </View>
+            {/* Prediction Method Badge */}
+            <View style={styles.factorRow}>
+              <Ionicons name="hardware-chip-outline" size={16} color={predictions.predictionMethod === 'Prophet ML Model' ? '#4CD964' : '#888'} />
+              <Text style={styles.factorLabel}>Prediction Engine:</Text>
+              <Text style={[styles.factorValue, { color: predictions.predictionMethod === 'Prophet ML Model' ? '#4CD964' : colors?.text || '#FFF' }]}>
+                {predictions.predictionMethod === 'Prophet ML Model' ? 'Prophet ML Model'
+                  : 'Heuristic (Server Offline)'}
+              </Text>
+            </View>
           </View>
-        </View>
+        </View>}
 
         {/* ===== ACCORDION: Category Breakdown (Horizontal Bar Chart) ===== */}
         <TouchableOpacity
@@ -1113,12 +1163,13 @@ const DataPredictionScreen = ({ navigation }) => {
         {showHowWeCalculate && (
           <View style={styles.accordionContent}>
             <Text style={styles.algorithmText}>
-              Our prediction uses a <Text style={styles.algorithmHighlight}>multi-signal blending algorithm</Text> that combines:{"\n\n"}
-              • <Text style={styles.algorithmHighlight}>Weighted Recent History</Text> – Recent months are weighted more heavily (35% for last month){"\n"}
-              • <Text style={styles.algorithmHighlight}>Previous Year Same-Month</Text> – Spending from the same month in prior years, adjusted for inflation{"\n"}
-              • <Text style={styles.algorithmHighlight}>Inflation Adjustment</Text> – Annual inflation rate applied to account for rising costs{"\n"}
-              • <Text style={styles.algorithmHighlight}>Trend Detection</Text> – Whether your spending is increasing, decreasing, or stable{"\n"}
-              • <Text style={styles.algorithmHighlight}>Year-over-Year Growth</Text> – Your personal spending growth rate across years
+              Our prediction uses a <Text style={styles.algorithmHighlight}>Facebook Prophet ML Model</Text> served via a FastAPI backend:{"\n\n"}
+              • <Text style={styles.algorithmHighlight}>Prophet Model</Text> – A time-series forecasting model trained on your historical spending patterns with Philippine seasonal priors{"\n"}
+              • <Text style={styles.algorithmHighlight}>Seasonal Decomposition</Text> – Automatically captures yearly patterns (Christmas spike, back-to-school, etc.){"\n"}
+              • <Text style={styles.algorithmHighlight}>Philippine Holidays</Text> – Models the spending impact of PH holidays (Christmas, Holy Week, Undas, etc.){"\n"}
+              • <Text style={styles.algorithmHighlight}>Same-Month Year-over-Year</Text> – Spending from the same calendar month in prior years, adjusted for inflation{"\n"}
+              • <Text style={styles.algorithmHighlight}>Category Models</Text> – Individual Prophet models for each spending category{"\n"}
+              • <Text style={styles.algorithmHighlight}>Offline Fallback</Text> – If the ML server is offline, uses weighted-average heuristic with inflation adjustment
             </Text>
             <View style={styles.algorithmDivider} />
             <View style={styles.algorithmStats}>

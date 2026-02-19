@@ -1,0 +1,98 @@
+{
+  "model_type": "Facebook Prophet",
+  "trained_at": "2026-02-19T17:15:46.748337",
+  "methodology": {
+    "approach": "Per-user time-series model (not global multi-user)",
+    "train_test_split": "Temporal split (never random \u2014 mandatory for time series)",
+    "train_period": "Jan 2024 \u2013 Sep 2025",
+    "test_period": "Oct 2025 \u2013 Feb 2026",
+    "final_model": "Retrained on all 26 months for deployment",
+    "cross_validation": "Rolling-origin CV (12-month initial, 1-month period, 3-month horizon)",
+    "yoy_seasonality": "Enabled \u2014 yearly_seasonality=True (Fourier terms, period=365.25 days)"
+  },
+  "user_id": "7c5f754b-12c0-4361-82dd-bd5a126df798",
+  "training_months": 26,
+  "date_range": {
+    "start": "2024-01-01T00:00:00",
+    "end": "2026-02-01T00:00:00"
+  },
+  "test_set_metrics": {
+    "mae": 2484.6164709300265,
+    "rmse": 2673.330045759057,
+    "mape": 28.894695348672588,
+    "r2": -3.4027446000200356
+  },
+  "train_set_metrics": {
+    "mae": 0.00031536194871608004,
+    "rmse": 0.0003495115175491845,
+    "mape": 3.607455782993278e-06,
+    "r2": 0.9999999999998703
+  },
+  "cross_validation_mape": 25.196537441028234,
+  "category_models": {
+    "Entertainment": {
+      "mae": 2573.7700513020823,
+      "r2": -28.158468525488278,
+      "train_months": 21,
+      "test_months": 5
+    },
+    "Food & Dining": {
+      "mae": 327.1430154018529,
+      "r2": -5.871178583525791,
+      "train_months": 21,
+      "test_months": 5
+    },
+    "Groceries": {
+      "mae": 1879.5862788781033,
+      "r2": -674.8044646228743,
+      "train_months": 20,
+      "test_months": 5
+    },
+    "Health": {
+      "mae": 1363.104665718699,
+      "r2": 0.0,
+      "train_months": 8,
+      "test_months": 2
+    },
+    "Other": {
+      "mae": 639.0544843255071,
+      "r2": -2.27847672135565,
+      "train_months": 5,
+      "test_months": 2
+    },
+    "School Supplies": {
+      "mae": 164.13805585536613,
+      "r2": -100.98629024998397,
+      "train_months": 15,
+      "test_months": 4
+    },
+    "Transport": {
+      "mae": 1540.3900019303878,
+      "r2": -5.458723651836483,
+      "train_months": 21,
+      "test_months": 5
+    },
+    "Utilities": {
+      "mae": 0.0,
+      "r2": 1.0,
+      "train_months": 21,
+      "test_months": 5
+    }
+  },
+  "categories": [
+    "Entertainment",
+    "Food & Dining",
+    "Groceries",
+    "Health",
+    "Other",
+    "School Supplies",
+    "Transport",
+    "Utilities"
+  ],
+  "features": {
+    "is_school_regressor": true,
+    "country_holidays": "PH",
+    "seasonality_mode": "multiplicative",
+    "yearly_seasonality": true
+  }
+}

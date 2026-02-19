@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+supabase
+python-dotenv
+pandas
+numpy
+scikit-learn
+prophet
+joblib
+pydantic
+httpx
+matplotlib
+seaborn
+jupyter
+ipykernel

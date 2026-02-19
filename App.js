@@ -21,6 +21,9 @@ import SecurityManager from './src/utils/SecurityManager';
 // NVIDIA API Reset (Temporary fix)
 import { resetCircuitBreaker } from './src/config/nvidia';
 
+// ML Predictions are now served by the FastAPI + Prophet backend
+// (see GaFi_Prediction/ folder for the ML server)
+
 // Navigation
 import AuthNavigator from './src/navigation/AuthNavigator';
 import MainNavigator from './src/navigation/MainNavigator';
