@@ -8,6 +8,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { View, Text, ActivityIndicator } from 'react-native';
+import { LogLevel, OneSignal } from 'react-native-onesignal';
+import Constants from 'expo-constants';
 
 // Enhanced Components & Utilities
 import ErrorBoundary from './src/components/ErrorBoundary';
@@ -197,6 +199,17 @@ export default function App() {
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
+    // 1. Initialize OneSignal
+    OneSignal.Debug.setLogLevel(LogLevel.Verbose); // Remove this before production
+    OneSignal.initialize(Constants.expoConfig.extra.oneSignalAppId);
+
+    // 2. Request Permission (Required for iOS)
+    OneSignal.Notifications.requestPermission(true);
+
+    // 3. Listen for Notifications (Optional: Handle what happens when clicked)
+    OneSignal.Notifications.addEventListener('click', (event) => {
+      console.log('OneSignal: notification clicked:', event);
+    });
     initializeApp();
   }, []);
 

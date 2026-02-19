@@ -37,12 +37,41 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/notification-icon.png",
+          "icon": "./assets/icon.png",
           "color": "#FF6B00"
+        }
+      ],
+      [
+        "onesignal-expo-plugin",
+        {
+          "mode": "development"
         }
       ],
       "@react-native-community/datetimepicker"
     ],
+    "extra": {
+      "oneSignalAppId": "2f15e79a-b878-4ac7-a918-9d6d8bc28d60",
+      "eas": {
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "targetName": "OneSignalNotificationServiceExtension",
+                  "bundleIdentifier": "com.gafi.app.OneSignalNotificationServiceExtension",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.gafi.app.onesignal"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "projectId": "21f4a1dd-8488-4e52-a716-84e9c4d0d3d5"
+      }
+    },
     "sdkVersion": "54.0.0"
   }
 }
