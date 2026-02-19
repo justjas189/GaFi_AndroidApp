@@ -42,7 +42,7 @@ const MAPS = {
         icon: '🚪',
         bounds: { left: 0.10, right: 0.20, top: 0.65, bottom: 0.75 },
         action: 'travel',
-        destinations: ['dorm', 'mall'],
+        destinations: ['dorm', 'mall_1f'],
         exitSpawnPoint: { x: 0.15, y: 0.70 }, // Spawn point for arriving at this exit
       },
       {
@@ -68,7 +68,7 @@ const MAPS = {
         icon: '🚪',
         bounds: { left: 0.35, right: 0.65, top: 0.92, bottom: 1 },
         action: 'travel',
-        destinations: ['school', 'mall'],
+        destinations: ['school', 'mall_1f'],
         exitSpawnPoint: { x: 0.50, y: 0.88 }, // Spawn point for arriving at this exit
       },
       {
@@ -87,21 +87,22 @@ const MAPS = {
       }
     ],
   },
-  mall: {
-    id: 'mall',
-    name: 'Shopping Mall',
+  // Mall 1st Floor (Map006) - stores + exit + escalator up
+  mall_1f: {
+    id: 'mall_1f',
+    name: 'Mall - 1F',
     icon: '🏬',
-    image: require('../../../assets/Game_Graphics/maps/Map003.png'),
+    image: require('../../../assets/Game_Graphics/maps/Mall/Map006.png'),
     spawnPoint: { x: width / 2, y: height * 0.5 },
     locations: [
       {
         id: 'entrance',
         name: 'Mall Exit',
         icon: '🚪',
-        bounds: { left: 0.10, right: 0.35, top: 0.75, bottom: 0.85 },
+        bounds: { left: 0.70, right: 1.0, top: 0.82, bottom: 1.0 },
         action: 'travel',
         destinations: ['school', 'dorm'],
-        exitSpawnPoint: { x: 0.22, y: 0.78 }, // Spawn point for arriving at this exit
+        exitSpawnPoint: { x: 0.82, y: 0.88 },
       },
       {
         id: 'clothing_store',
@@ -120,25 +121,101 @@ const MAPS = {
         category: 'Electronics',
       },
       {
+        id: 'grocery_store',
+        name: 'Grocery Store',
+        icon: '🛒',
+        bounds: { left: 0.73, right: 0.88, top: 0.20, bottom: 0.35 },
+        action: 'expense',
+        category: 'Groceries',
+      },
+      {
+        id: 'escalator_2f',
+        name: 'Escalator to 2F',
+        icon: '⬆️',
+        bounds: { left: 0.18, right: 0.39, top: 0.75, bottom: 0.92 },
+        action: 'floor_change',
+        targetFloor: 'mall_2f',
+        exitSpawnPoint: { x: 0.15, y: 0.92 },
+      },
+    ],
+  },
+  // Mall 2nd Floor (Map007) - food court, cafe, escalators up/down
+  mall_2f: {
+    id: 'mall_2f',
+    name: 'Mall - 2F',
+    icon: '🏬',
+    image: require('../../../assets/Game_Graphics/maps/Mall/Map007.png'),
+    spawnPoint: { x: width / 2, y: height * 0.5 },
+    locations: [
+      {
+        id: 'escalator_down_1f',
+        name: 'Escalator to 1F',
+        icon: '⬇️',
+        bounds: { left: 0.18, right: 0.40, top: 0.80, bottom: 1.0 },
+        action: 'floor_change',
+        targetFloor: 'mall_1f',
+        exitSpawnPoint: { x: 0.18, y: 0.96 },
+      },
+      {
         id: 'food_court',
         name: 'Food Court',
         icon: '🍕',
-        bounds: { left: 0.63, right: 0.85, top: 0.75, bottom: 1
-          
-         },
+        bounds: { left: 0.45, right: 0.85, top: 0.13, bottom: 0.30 },
         action: 'expense',
         category: 'Food & Dining',
       },
       {
-        id: 'grocery_store',
-        name: 'Grocery Store',
-        icon: '🛒',
-        bounds: { left: 0.73, right: 0.88, top: 0.20, bottom: 0.35
-          
-         },
+        id: 'cafe',
+        name: 'Cafe',
+        icon: '☕',
+        bounds: { left: 0.45, right: 0.75, top: 0.78, bottom: 1.0 },
         action: 'expense',
-        category: 'Groceries',
-      }
+        category: 'Food & Dining',
+      },
+      {
+        id: 'escalator_up_3f',
+        name: 'Escalator to 3F',
+        icon: '⬆️',
+        bounds: { left: 0.18, right: 0.39, top: 0.05, bottom: 0.20 },
+        action: 'floor_change',
+        targetFloor: 'mall_3f',
+        exitSpawnPoint: { x: 0.15, y: 0.22 },
+      },
+    ],
+  },
+  // Mall 3rd Floor (Map008) - gym, entertainment hub, escalator down
+  mall_3f: {
+    id: 'mall_3f',
+    name: 'Mall - 3F',
+    icon: '🏬',
+    image: require('../../../assets/Game_Graphics/maps/Mall/Map008.png'),
+    spawnPoint: { x: width * 0.32, y: height * 0.5 },
+    locations: [
+      {
+        id: 'escalator_down_2f',
+        name: 'Escalator to 2F',
+        icon: '⬇️',
+        bounds: { left: 0.10, right: 0.40, top: 0.82, bottom: 1.0 },
+        action: 'floor_change',
+        targetFloor: 'mall_2f',
+        exitSpawnPoint: { x: 0.18, y: 0.96 },
+      },
+      {
+        id: 'gym',
+        name: 'Gym',
+        icon: '💪',
+        bounds: { left: 0.57, right: 0.89, top: 0.55, bottom: 1.0 },
+        action: 'expense',
+        category: 'Health',
+      },
+      {
+        id: 'entertainment_hub',
+        name: 'Entertainment Hub',
+        icon: '🎮',
+        bounds: { left: 0.15, right: 0.85, top: 0.10, bottom: 0.48 },
+        action: 'expense',
+        category: 'Entertainment',
+      },
     ],
   },
 };
@@ -662,7 +739,7 @@ export default function BuildScreen() {
   useEffect(() => {
     console.log('🗺️ Initializing collision system for map:', currentMapId);
     collisionSystem.initialize(currentMapId);
-    if ((currentMapId === 'dorm' || currentMapId === 'mall' || currentMapId === 'school') && collisionSystem.initialized) {
+    if (collisionSystem.initialized) {
       console.log(`✅ Collision system ready for ${currentMapId} map`);
       // Debug: print passability map to console
       collisionSystem.debugPrintPassabilityMap();
@@ -671,8 +748,9 @@ export default function BuildScreen() {
     // Reset character to spawn point when map changes
     const newMap = MAPS[currentMapId];
     if (newMap) {
-      const spawnX = newMap.spawnPoint.x - CHARACTER_SIZE / 2;
-      const spawnY = newMap.spawnPoint.y - CHARACTER_SIZE / 2;
+      const halfChar = getCharSize() / 2;
+      const spawnX = newMap.spawnPoint.x - halfChar;
+      const spawnY = newMap.spawnPoint.y - halfChar;
       console.log('📍 Resetting character to spawn point:', spawnX, spawnY);
       animatedX.setValue(spawnX);
       animatedY.setValue(spawnY);
@@ -680,6 +758,17 @@ export default function BuildScreen() {
       setCurrentLocation('Hallway 🚶');
     }
   }, [currentMapId]);
+
+  // Get the on-screen character size that matches the displayed tile size.
+  // Uses the same "contain" scale math as the ImageBackground.
+  const getCharSize = () => {
+    if (!collisionSystem.initialized) return CHARACTER_SIZE;
+    const mapPixelW = collisionSystem.mapWidth * collisionSystem.tileSize;
+    const mapPixelH = collisionSystem.mapHeight * collisionSystem.tileSize;
+    const scale = Math.min(contentSize.width / mapPixelW, contentSize.height / mapPixelH);
+    const size = collisionSystem.tileSize * scale;
+    return size > 0 ? size : CHARACTER_SIZE;
+  };
 
   // Fetch today's spending — re-runs whenever DataContext expenses change
   useEffect(() => {
@@ -1423,6 +1512,10 @@ export default function BuildScreen() {
       case 'info':
         Alert.alert(`${location.name} ${location.icon}`, location.message || 'Nothing here.');
         break;
+      case 'floor_change':
+        console.log(`🔄 Floor change triggered: going to ${location.targetFloor}`);
+        changeFloor(location.targetFloor);
+        break;
       default:
         console.log('⚠️ Unknown action:', location.action);
         break;
@@ -1493,7 +1586,7 @@ export default function BuildScreen() {
     if (tutorialActive && gameMode === 'tutorial') {
       // Mark arrival conditions
       if (savedDestination === 'school') markTutorialCondition('arrived_at_school');
-      if (savedDestination === 'mall') markTutorialCondition('arrived_at_mall');
+      if (savedDestination === 'mall_1f' || savedDestination.startsWith('mall')) markTutorialCondition('arrived_at_mall');
       console.log('🎓 Tutorial: Skipped transport expense save (practice mode)');
       return;
     }
@@ -1629,8 +1722,9 @@ export default function BuildScreen() {
     
     const spawn = { x: spawnX, y: spawnY };
     setCharacterPosition(spawn);
-    animatedX.setValue(spawn.x - CHARACTER_SIZE / 2);
-    animatedY.setValue(spawn.y - CHARACTER_SIZE / 2);
+    const halfChar = getCharSize() / 2;
+    animatedX.setValue(spawn.x - halfChar);
+    animatedY.setValue(spawn.y - halfChar);
     setCharacterDirection('down'); // Face down when arriving
     setCurrentLocation(`${newMap.name} ${newMap.icon}`);
     
@@ -1675,6 +1769,51 @@ export default function BuildScreen() {
     setFareAmount('');
     setDidBuyFuel(null);
     setFuelAmount('');
+  };
+
+  // Change floor within the mall (no transport cost)
+  const changeFloor = (floorId) => {
+    const newMap = MAPS[floorId];
+    if (!newMap) return;
+
+    const previousMapId = currentMapId;
+    setCurrentMapId(floorId);
+
+    // Find the escalator on the destination floor that leads back to where we came from
+    const arrivalEscalator = newMap.locations.find(loc =>
+      loc.action === 'floor_change' && loc.targetFloor === previousMapId
+    );
+
+    let spawnX, spawnY;
+    if (arrivalEscalator && arrivalEscalator.exitSpawnPoint) {
+      spawnX = width * arrivalEscalator.exitSpawnPoint.x;
+      spawnY = height * arrivalEscalator.exitSpawnPoint.y;
+    } else {
+      spawnX = newMap.spawnPoint.x;
+      spawnY = newMap.spawnPoint.y;
+    }
+
+    const spawn = { x: spawnX, y: spawnY };
+    setCharacterPosition(spawn);
+    const halfChar = getCharSize() / 2;
+    animatedX.setValue(spawn.x - halfChar);
+    animatedY.setValue(spawn.y - halfChar);
+    setCharacterDirection('down');
+    setCurrentLocation(`${newMap.name} ${newMap.icon}`);
+
+    // Log floor change activity (fire-and-forget)
+    gameDatabaseService.logActivity({
+      activityType: 'floor_change',
+      mapId: floorId,
+      details: { from: previousMapId, to: floorId },
+      sessionId: activeSessionId,
+    });
+
+    Alert.alert(
+      `📍 ${newMap.name}`,
+      `You took the escalator to ${newMap.name}!`,
+      [{ text: 'OK' }]
+    );
   };
 
   // Reference to store the current movement path
@@ -1762,13 +1901,14 @@ export default function BuildScreen() {
 
   // Move one tile along the path
   const moveOneStep = (targetPixelX, targetPixelY, onComplete) => {
-    const targetX = targetPixelX - CHARACTER_SIZE / 2;
-    const targetY = targetPixelY - CHARACTER_SIZE / 2;
+    const halfChar = getCharSize() / 2;
+    const targetX = targetPixelX - halfChar;
+    const targetY = targetPixelY - halfChar;
     
     // Get current position from the animated value's current value
     // Using __getValue() to get current value without stopping animation
-    const currentX = animatedX.__getValue() + CHARACTER_SIZE / 2;
-    const currentY = animatedY.__getValue() + CHARACTER_SIZE / 2;
+    const currentX = animatedX.__getValue() + halfChar;
+    const currentY = animatedY.__getValue() + halfChar;
     
     // Calculate direction based on movement
     const deltaX = targetPixelX - currentX;
@@ -1825,8 +1965,9 @@ export default function BuildScreen() {
     
     // Get current animated position values
     let currentX, currentY;
-    animatedX.stopAnimation(value => { currentX = value + CHARACTER_SIZE / 2; });
-    animatedY.stopAnimation(value => { currentY = value + CHARACTER_SIZE / 2; });
+    const halfChar = getCharSize() / 2;
+    animatedX.stopAnimation(value => { currentX = value + halfChar; });
+    animatedY.stopAnimation(value => { currentY = value + halfChar; });
     
     // Update character position to current location
     setCharacterPosition({ x: currentX, y: currentY });
@@ -1897,8 +2038,8 @@ export default function BuildScreen() {
       startPosition = stopCurrentMovement();
     }
 
-    // For maps with collision (dorm, mall, school), use tile-by-tile movement
-    if (collisionSystem.initialized && (currentMapId === 'dorm' || currentMapId === 'mall' || currentMapId === 'school')) {
+    // For maps with collision, use tile-by-tile movement
+    if (collisionSystem.initialized) {
       // Get tile info for debugging
       const tileCoords = collisionSystem.pixelsToTiles(
         locationX, 
@@ -1973,8 +2114,9 @@ export default function BuildScreen() {
       setIsWalking(true);
       setCurrentLocation(getLocationName(locationX, locationY));
       
-      const targetX = locationX - CHARACTER_SIZE / 2;
-      const targetY = locationY - CHARACTER_SIZE / 2;
+      const halfChar = getCharSize() / 2;
+      const targetX = locationX - halfChar;
+      const targetY = locationY - halfChar;
       
       const currentX = startPosition.x;
       const currentY = startPosition.y;
@@ -2134,7 +2276,7 @@ export default function BuildScreen() {
       );
       // Mark tutorial conditions based on current map
       if (currentMapId === 'school') markTutorialCondition('canteen_expense_logged');
-      if (currentMapId === 'mall') markTutorialCondition('mall_expense_logged');
+      if (currentMapId.startsWith('mall')) markTutorialCondition('mall_expense_logged');
       console.log('🎓 Tutorial: Skipped expense save (practice mode)');
       return;
     }
@@ -2674,11 +2816,11 @@ export default function BuildScreen() {
     // Sprite-based character styles
     characterContainer: {
       position: 'absolute',
-      width: CHARACTER_SIZE,
-      height: CHARACTER_SIZE, // Keep within tile bounds
-      justifyContent: 'center',
+      // width and height set dynamically in renderCharacter to match on-screen tile size
+      justifyContent: 'flex-end', // Anchor sprite at bottom — feet align with tile edge
       alignItems: 'center',
-      zIndex: 999,
+      overflow: 'visible', // Allow sprite to extend above tile bounds
+      zIndex: 1000,
       elevation: 100,
     },
     spriteContainer: {
@@ -3293,10 +3435,13 @@ export default function BuildScreen() {
         if (tileX < 0 || tileX >= collisionSystem.mapWidth ||
             tileY < 0 || tileY >= collisionSystem.mapHeight) continue;
 
-        // Only render overlay for actual wall tiles (A3/A4 autotiles)
-        // Skip passable tiles and non-wall collision objects (furniture, desks, etc.)
+        // Skip passable tiles — overlay all non-passable tiles (walls, tables, furniture)
         if (collisionSystem.isPassable(tileX, tileY)) continue;
-        if (!collisionSystem.isWallTile(tileX, tileY)) continue;
+
+        // Depth-based z-ordering (standard top-down RPG):
+        //   Tiles BELOW character (higher Y) → render IN FRONT  → covers any foot overlap
+        //   Tiles ABOVE/same as character    → render BEHIND    → character shows through
+        const inFront = tileY > charTile.y;
 
         // Calculate screen position for this tile
         const screenX = Math.round(dims.offsetX + tileX * dims.tileDisplaySize);
@@ -3314,8 +3459,8 @@ export default function BuildScreen() {
               width: tileSize,
               height: tileSize,
               overflow: 'hidden',
-              zIndex: 1000,
-              elevation: 101,
+              zIndex: inFront ? 1001 : 999,
+              elevation: inFront ? 101 : 99,
             }}
           >
             <Image
@@ -3347,31 +3492,44 @@ export default function BuildScreen() {
     
     const characterSprite = CHARACTER_SPRITES[selectedCharacter];
     
-    const renderCharacter = () => (
-      <Animated.View
-        style={[
-          styles.characterContainer,
-          {
-            left: animatedX,
-            top: animatedY,
-            transform: [{ scale: walkingPulse }],
-          },
-        ]}
-      >
-        <View style={styles.spriteContainer}>
-          <Image
-            source={characterSprite.sprite}
-            style={[
-              styles.characterSprite,
-              {
-                transform: [{ translateX: spriteX }],
-              },
-            ]}
-            resizeMode="cover"
-          />
-        </View>
-      </Animated.View>
-    );
+    const renderCharacter = () => {
+      const charSize = getCharSize();
+      const FRAME_W = 48;  // Sprite frame width in source image
+      const FRAME_H = 90;  // Sprite frame height in source image
+      const TOTAL_FRAMES = 24;
+      const spriteScale = charSize / FRAME_W; // Scale sprite to fit one tile width
+
+      return (
+        <Animated.View
+          style={[
+            styles.characterContainer,
+            {
+              width: charSize,
+              height: charSize,
+              left: animatedX,
+              top: animatedY,
+              transform: [{ scale: walkingPulse }],
+            },
+          ]}
+        >
+          <View style={{
+            width: charSize,
+            height: FRAME_H * spriteScale,
+            overflow: 'hidden',
+          }}>
+            <Image
+              source={characterSprite.sprite}
+              style={{
+                width: FRAME_W * TOTAL_FRAMES * spriteScale,
+                height: FRAME_H * spriteScale,
+                transform: [{ translateX: spriteX * spriteScale }],
+              }}
+              resizeMode="cover"
+            />
+          </View>
+        </Animated.View>
+      );
+    };
     
     if (currentMap.image) {
       return (

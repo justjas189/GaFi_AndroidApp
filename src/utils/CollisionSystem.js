@@ -14,8 +14,12 @@
 import Map002Data from '../../assets/Game_Graphics/maps/Map002.json';
 import Map003Data from '../../assets/Game_Graphics/maps/Map003.json';
 import Map004Data from '../../assets/Game_Graphics/maps/Map004.json';
+import Map006Data from '../../assets/Game_Graphics/maps/Mall/Map006.json';
+import Map007Data from '../../assets/Game_Graphics/maps/Mall/Map007.json';
+import Map008Data from '../../assets/Game_Graphics/maps/Mall/Map008.json';
 import TilesetsData from '../../assets/Game_Graphics/maps/Tilesets.json';
 import MallTilesetsData from '../../assets/Game_Graphics/maps/Mall_Tilesets.json';
+import MallFloorTilesetsData from '../../assets/Game_Graphics/maps/Mall/Tilesets.json';
 import SchoolTilesetsData from '../../assets/Game_Graphics/maps/School_Tilesets.json';
 
 class CollisionSystem {
@@ -57,7 +61,7 @@ class CollisionSystem {
         return true;
       }
       
-      // Mall map (Map003)
+      // Mall map (legacy Map003 - kept for backward compatibility)
       if (mapId === 'mall') {
         this.mapData = Map003Data.data;
         this.mapWidth = Map003Data.width; // 11 tiles
@@ -73,6 +77,66 @@ class CollisionSystem {
         }
 
         console.log(`✅ Collision system initialized for MALL: ${this.mapWidth}x${this.mapHeight} tiles`);
+        console.log(`   Loaded ${this.tilesetFlags.length} tile flags`);
+        this.initialized = true;
+        return true;
+      }
+
+      // Mall 1st Floor (Map006)
+      if (mapId === 'mall_1f') {
+        this.mapData = Map006Data.data;
+        this.mapWidth = Map006Data.width;
+        this.mapHeight = Map006Data.height;
+
+        const mall1fTileset = MallFloorTilesetsData.find(t => t && t.id === 5);
+        if (mall1fTileset) {
+          this.tilesetFlags = mall1fTileset.flags;
+        } else {
+          console.error('Tileset ID 5 (Mall 1st Floor) not found');
+          this.tilesetFlags = [];
+        }
+
+        console.log(`✅ Collision system initialized for MALL 1F: ${this.mapWidth}x${this.mapHeight} tiles`);
+        console.log(`   Loaded ${this.tilesetFlags.length} tile flags`);
+        this.initialized = true;
+        return true;
+      }
+
+      // Mall 2nd Floor (Map007)
+      if (mapId === 'mall_2f') {
+        this.mapData = Map007Data.data;
+        this.mapWidth = Map007Data.width;
+        this.mapHeight = Map007Data.height;
+
+        const mall2fTileset = MallFloorTilesetsData.find(t => t && t.id === 6);
+        if (mall2fTileset) {
+          this.tilesetFlags = mall2fTileset.flags;
+        } else {
+          console.error('Tileset ID 6 (Mall 2nd Floor) not found');
+          this.tilesetFlags = [];
+        }
+
+        console.log(`✅ Collision system initialized for MALL 2F: ${this.mapWidth}x${this.mapHeight} tiles`);
+        console.log(`   Loaded ${this.tilesetFlags.length} tile flags`);
+        this.initialized = true;
+        return true;
+      }
+
+      // Mall 3rd Floor (Map008)
+      if (mapId === 'mall_3f') {
+        this.mapData = Map008Data.data;
+        this.mapWidth = Map008Data.width;
+        this.mapHeight = Map008Data.height;
+
+        const mall3fTileset = MallFloorTilesetsData.find(t => t && t.id === 7);
+        if (mall3fTileset) {
+          this.tilesetFlags = mall3fTileset.flags;
+        } else {
+          console.error('Tileset ID 7 (Mall 3rd Floor) not found');
+          this.tilesetFlags = [];
+        }
+
+        console.log(`✅ Collision system initialized for MALL 3F: ${this.mapWidth}x${this.mapHeight} tiles`);
         console.log(`   Loaded ${this.tilesetFlags.length} tile flags`);
         this.initialized = true;
         return true;
@@ -209,6 +273,31 @@ class CollisionSystem {
   }
 
   /**
+   * Get all tile IDs at the specified tile coordinates across all layers
+   */
+  getAllTileIds(x, y) {
+    const tileIds = [];
+
+    if (x < 0 || x >= this.mapWidth || y < 0 || y >= this.mapHeight) {
+      return tileIds;
+    }
+
+    const baseIndex = this.coordsToIndex(x, y);
+    const layerSize = this.mapWidth * this.mapHeight;
+    const numLayers = Math.floor(this.mapData.length / layerSize);
+
+    for (let layer = 0; layer < numLayers; layer++) {
+      const index = baseIndex + (layer * layerSize);
+      const tileId = this.mapData[index];
+      if (tileId && tileId > 0) {
+        tileIds.push(tileId);
+      }
+    }
+
+    return tileIds;
+  }
+
+  /**
    * Get the collision flag for a specific tile
    */
   getTileFlag(tileId) {
@@ -221,7 +310,9 @@ class CollisionSystem {
   /**
    * Check if a tile is passable (RPG Maker MZ logic)
    * 
-   * A tile is passable if the lower nibble (directional bits) is 0
+   * RPG Maker MZ checks ALL layers - if ANY layer has a non-passable tile,
+   * the position is blocked. This matches RPG Maker MZ's actual behavior
+   * where placing an impassable tile on any layer blocks the tile.
    */
   isPassable(x, y) {
     // Out of bounds = not passable
@@ -229,19 +320,25 @@ class CollisionSystem {
       return false;
     }
 
-    const tileId = this.getTileId(x, y);
-    
-    // Empty tile = passable
-    if (tileId === 0) {
-      return true;
+    const baseIndex = this.coordsToIndex(x, y);
+    const layerSize = this.mapWidth * this.mapHeight;
+    const numLayers = Math.floor(this.mapData.length / layerSize);
+
+    // Check ALL layers - if any layer has a blocking tile, it's not passable
+    for (let layer = 0; layer < numLayers; layer++) {
+      const index = baseIndex + (layer * layerSize);
+      const tileId = this.mapData[index];
+
+      if (tileId && tileId > 0) {
+        const flag = this.getTileFlag(tileId);
+        // If this layer's tile has directional blocking bits set, block movement
+        if ((flag & 0x000F) !== 0) {
+          return false;
+        }
+      }
     }
-    
-    const flag = this.getTileFlag(tileId);
 
-    // A tile is passable if the lower nibble (directional bits) is 0
-    const passable = (flag & 0x000F) === 0;
-
-    return passable;
+    return true;
   }
 
   /**
@@ -269,10 +366,13 @@ class CollisionSystem {
   /**
    * Check if movement in a specific direction is blocked
    * direction: 'down', 'left', 'right', 'up'
+   *
+   * Checks ALL layers - if any layer blocks the direction, it's blocked.
    */
   isDirectionBlocked(x, y, direction) {
-    const tileId = this.getTileId(x, y);
-    const flag = this.getTileFlag(tileId);
+    if (x < 0 || x >= this.mapWidth || y < 0 || y >= this.mapHeight) {
+      return true;
+    }
 
     const directionBits = {
       'down': 0x0001,  // Bit 0
@@ -281,7 +381,23 @@ class CollisionSystem {
       'up': 0x0008     // Bit 3
     };
 
-    return (flag & directionBits[direction]) !== 0;
+    const baseIndex = this.coordsToIndex(x, y);
+    const layerSize = this.mapWidth * this.mapHeight;
+    const numLayers = Math.floor(this.mapData.length / layerSize);
+
+    for (let layer = 0; layer < numLayers; layer++) {
+      const index = baseIndex + (layer * layerSize);
+      const tileId = this.mapData[index];
+
+      if (tileId && tileId > 0) {
+        const flag = this.getTileFlag(tileId);
+        if ((flag & directionBits[direction]) !== 0) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   /**
@@ -368,20 +484,34 @@ class CollisionSystem {
    * Get collision info for debugging
    */
   getTileInfo(x, y) {
-    const tileId = this.getTileId(x, y);
-    const flag = this.getTileFlag(tileId);
-    
+    const tileIds = this.getAllTileIds(x, y);
+    const topTileId = this.getTileId(x, y);
+    const topFlag = this.getTileFlag(topTileId);
+
+    // Build per-layer info
+    const layerInfo = tileIds.map(tileId => {
+      const flag = this.getTileFlag(tileId);
+      return {
+        tileId,
+        flag,
+        flagBinary: flag.toString(2).padStart(16, '0'),
+        blocking: (flag & 0x000F) !== 0
+      };
+    });
+
     return {
       x,
       y,
-      tileId,
-      flag,
-      flagBinary: flag.toString(2).padStart(16, '0'),
+      tileId: topTileId,
+      allTileIds: tileIds,
+      flag: topFlag,
+      flagBinary: topFlag.toString(2).padStart(16, '0'),
       passable: this.isPassable(x, y),
-      blockedDown: (flag & 0x0001) !== 0,
-      blockedLeft: (flag & 0x0002) !== 0,
-      blockedRight: (flag & 0x0004) !== 0,
-      blockedUp: (flag & 0x0008) !== 0,
+      blockedDown: this.isDirectionBlocked(x, y, 'down'),
+      blockedLeft: this.isDirectionBlocked(x, y, 'left'),
+      blockedRight: this.isDirectionBlocked(x, y, 'right'),
+      blockedUp: this.isDirectionBlocked(x, y, 'up'),
+      layerInfo
     };
   }
 

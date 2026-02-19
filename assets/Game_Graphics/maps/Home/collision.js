@@ -133,6 +133,32 @@ class CollisionSystem {
     }
 
     /**
+     * Get all tile IDs at the specified tile coordinates across all layers
+     */
+    getAllTileIds(x, y) {
+        const tileIds = [];
+
+        // Check bounds
+        if (x < 0 || x >= this.mapWidth || y < 0 || y >= this.mapHeight) {
+            return tileIds;
+        }
+
+        const baseIndex = this.coordsToIndex(x, y);
+        const layerSize = this.mapWidth * this.mapHeight;
+        const numLayers = Math.floor(this.mapData.length / layerSize);
+
+        for (let layer = 0; layer < numLayers; layer++) {
+            const index = baseIndex + (layer * layerSize);
+            const tileId = this.mapData[index];
+            if (tileId && tileId > 0) {
+                tileIds.push(tileId);
+            }
+        }
+
+        return tileIds;
+    }
+
+    /**
      * Get the collision flag for a specific tile
      */
     getTileFlag(tileId) {
@@ -145,11 +171,9 @@ class CollisionSystem {
     /**
      * Check if a tile is passable (RPG Maker MZ logic)
      * 
-     * RPG Maker MZ flag system:
-     * - Lower nibble (bits 0-3, mask 0x000F) = directional blocking
-     *   - If all 4 bits are 0, tile is passable in all directions
-     *   - If any bits are set, those directions are blocked
-     * - Higher bits are for rendering/layer options
+     * RPG Maker MZ checks ALL layers - if ANY layer has a non-passable tile,
+     * the position is blocked. This matches RPG Maker MZ's actual behavior
+     * where placing an impassable tile on any layer blocks the tile.
      */
     isPassable(x, y) {
         // Out of bounds = not passable
@@ -157,28 +181,37 @@ class CollisionSystem {
             return false;
         }
 
-        const tileId = this.getTileId(x, y);
-        
-        // Empty tile = passable
-        if (tileId === 0) {
-            return true;
+        const baseIndex = this.coordsToIndex(x, y);
+        const layerSize = this.mapWidth * this.mapHeight;
+        const numLayers = Math.floor(this.mapData.length / layerSize);
+
+        // Check ALL layers - if any layer has a blocking tile, it's not passable
+        for (let layer = 0; layer < numLayers; layer++) {
+            const index = baseIndex + (layer * layerSize);
+            const tileId = this.mapData[index];
+
+            if (tileId && tileId > 0) {
+                const flag = this.getTileFlag(tileId);
+                // If this layer's tile has directional blocking bits set, block movement
+                if ((flag & 0x000F) !== 0) {
+                    return false;
+                }
+            }
         }
-        
-        const flag = this.getTileFlag(tileId);
 
-        // A tile is passable if the lower nibble (directional bits) is 0
-        const isPassable = (flag & 0x000F) === 0;
-
-        return isPassable;
+        return true;
     }
 
     /**
      * Check if movement in a specific direction is blocked
      * direction: 'down', 'left', 'right', 'up'
+     *
+     * Checks ALL layers - if any layer blocks the direction, it's blocked.
      */
     isDirectionBlocked(x, y, direction) {
-        const tileId = this.getTileId(x, y);
-        const flag = this.getTileFlag(tileId);
+        if (x < 0 || x >= this.mapWidth || y < 0 || y >= this.mapHeight) {
+            return true;
+        }
 
         const directionBits = {
             'down': 0x0001,  // Bit 0
@@ -187,7 +220,23 @@ class CollisionSystem {
             'up': 0x0008     // Bit 3
         };
 
-        return (flag & directionBits[direction]) !== 0;
+        const baseIndex = this.coordsToIndex(x, y);
+        const layerSize = this.mapWidth * this.mapHeight;
+        const numLayers = Math.floor(this.mapData.length / layerSize);
+
+        for (let layer = 0; layer < numLayers; layer++) {
+            const index = baseIndex + (layer * layerSize);
+            const tileId = this.mapData[index];
+
+            if (tileId && tileId > 0) {
+                const flag = this.getTileFlag(tileId);
+                if ((flag & directionBits[direction]) !== 0) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -222,21 +271,35 @@ class CollisionSystem {
      * Get collision info for debugging
      */
     getTileInfo(x, y) {
-        const tileId = this.getTileId(x, y);
-        const flag = this.getTileFlag(tileId);
-        
+        const tileIds = this.getAllTileIds(x, y);
+        const topTileId = this.getTileId(x, y);
+        const topFlag = this.getTileFlag(topTileId);
+
+        // Build per-layer info
+        const layerInfo = tileIds.map(tileId => {
+            const flag = this.getTileFlag(tileId);
+            return {
+                tileId,
+                flag,
+                flagBinary: flag.toString(2).padStart(8, '0'),
+                blocking: (flag & 0x000F) !== 0
+            };
+        });
+
         return {
             x,
             y,
-            tileId,
-            flag,
-            flagBinary: flag.toString(2).padStart(8, '0'),
+            tileId: topTileId,
+            allTileIds: tileIds,
+            flag: topFlag,
+            flagBinary: topFlag.toString(2).padStart(8, '0'),
             passable: this.isPassable(x, y),
-            blockedDown: (flag & 0x0001) !== 0,
-            blockedLeft: (flag & 0x0002) !== 0,
-            blockedRight: (flag & 0x0004) !== 0,
-            blockedUp: (flag & 0x0008) !== 0,
-            hasPassableBit: (flag & 0x0010) !== 0
+            blockedDown: this.isDirectionBlocked(x, y, 'down'),
+            blockedLeft: this.isDirectionBlocked(x, y, 'left'),
+            blockedRight: this.isDirectionBlocked(x, y, 'right'),
+            blockedUp: this.isDirectionBlocked(x, y, 'up'),
+            hasPassableBit: (topFlag & 0x0010) !== 0,
+            layerInfo
         };
     }
 }
