@@ -11,10 +11,10 @@ const NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1";
 
 // Ordered list of models to try — if the primary is DEGRADED, fall back to the next
 const NVIDIA_MODELS = [
-  "deepseek-ai/deepseek-v3.2",              // Primary: strong reasoning + thinking mode
-  "nvidia/llama-3.1-nemotron-ultra-253b-v1", // Fallback 1
-  "meta/llama-3.3-70b-instruct",             // Fallback 2
-  "meta/llama-3.1-8b-instruct",              // Fallback 3: lightweight
+  "meta/llama-3.3-70b-instruct",             // Primary model: powerful but may be less available
+  "nvidia/llama-3.1-nemotron-ultra-253b-v1", // Fallback 1: very powerful, may have better availability than the primary
+  "meta/llama-3.1-8b-instruct",           // Fallback 2: smaller, more available model
+  "deepseek-ai/deepseek-v3.2",           // Fallback 3: supports thinking mode, may be more robust
 ];
 const NVIDIA_MODEL = NVIDIA_MODELS[0];
 

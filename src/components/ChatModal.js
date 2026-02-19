@@ -1,24 +1,27 @@
 // Modal Chat Interface for Global MonT Bubble
-// Enhanced with NVIDIA AI, Screen Context Awareness, and Modern UI
+// Built on @gorhom/bottom-sheet for reliable layout, gestures, and keyboard handling.
 
-import React, { useState, useEffect, useRef, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useContext, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TouchableOpacity,
-  TextInput,
-  FlatList,
-  KeyboardAvoidingView,
   Platform,
-  Animated,
   Dimensions,
   ActivityIndicator,
   Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Markdown from 'react-native-markdown-display';
+import BottomSheet, {
+  BottomSheetModal,
+  BottomSheetFlatList,
+  BottomSheetTextInput,
+  BottomSheetBackdrop,
+  BottomSheetFooter,
+  BottomSheetView,
+} from '@gorhom/bottom-sheet';
 import { useTheme } from '../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
 import { DataContext } from '../context/DataContext';
@@ -28,6 +31,85 @@ import DebugUtils from '../utils/DebugUtils';
 import MascotImage from './MascotImage';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+
+// ──────────────────────────────────────────────
+// Module-level bridge — avoids the React Portal context boundary.
+// @gorhom/bottom-sheet renders footerComponent in a Portal that sits
+// OUTSIDE any Provider wrapping <BottomSheetModal>, so Context can't
+// reach the footer. Using plain refs + a tiny listener set instead.
+// ──────────────────────────────────────────────
+
+// Always points to the latest sendMessage callback (updated every render)
+const _sendMessageRef = { current: null };
+
+// Lets ChatFooterComponent subscribe to isTyping changes from ChatModal
+const _isTypingListeners = new Set();
+const _notifyIsTyping = (val) => _isTypingListeners.forEach(fn => fn(val));
+
+// ──────────────────────────────────────────────
+// Standalone footer component — defined OUTSIDE ChatModal so its
+// identity (and thus the footerComponent prop) never changes,
+// preventing the unmount/remount that kills TextInput focus.
+// ──────────────────────────────────────────────
+const ChatFooterComponent = (props) => {
+  const { colors } = useTheme(); // works — ThemeProvider is above BottomSheetModalProvider
+  const [inputText, setInputText] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+
+  // Subscribe to isTyping changes pushed from ChatModal
+  useEffect(() => {
+    const listener = (val) => setIsTyping(val);
+    _isTypingListeners.add(listener);
+    return () => _isTypingListeners.delete(listener);
+  }, []);
+
+  const handleSend = useCallback(() => {
+    const trimmed = inputText.trim();
+    if (!trimmed || isTyping) return;
+    _sendMessageRef.current?.(trimmed);
+    setInputText('');
+  }, [inputText, isTyping]);
+
+  return (
+    <BottomSheetFooter {...props} bottomInset={0}>
+      <View style={[styles.inputArea, { backgroundColor: colors.background, borderTopColor: colors.border || '#3C3C3C' }]}>
+        <View style={[styles.inputContainer, { backgroundColor: colors.card }]}>
+          <BottomSheetTextInput
+            style={[styles.textInput, { color: colors.text }]}
+            placeholder="Ask Koin anything..."
+            placeholderTextColor={colors.textSecondary || colors.text + '60'}
+            value={inputText}
+            onChangeText={setInputText}
+            multiline
+            maxLength={500}
+            returnKeyType="send"
+            blurOnSubmit={false}
+            onSubmitEditing={handleSend}
+          />
+
+          <TouchableOpacity
+            style={[
+              styles.sendBtn,
+              { backgroundColor: inputText.trim() ? colors.primary : (colors.border || '#3C3C3C') }
+            ]}
+            onPress={handleSend}
+            disabled={!inputText.trim() || isTyping}
+          >
+            <Ionicons
+              name="arrow-up"
+              size={20}
+              color={inputText.trim() ? '#FFF' : (colors.textSecondary || colors.text + '60')}
+            />
+          </TouchableOpacity>
+        </View>
+
+        <Text style={[styles.poweredBy, { color: colors.textSecondary || colors.text + '60' }]}>
+          Powered by NVIDIA AI
+        </Text>
+      </View>
+    </BottomSheetFooter>
+  );
+};
 
 // Screen context descriptions for AI awareness
 // NOTE: 'Game' = GameScreen.js (interactive map game tab)
@@ -119,199 +201,148 @@ const SCREEN_CONTEXTS = {
   },
 };
 
-const ChatModal = ({ visible, onClose }) => {
+const ChatModal = forwardRef(({ visible, onClose }, ref) => {
   const { colors, theme } = useTheme();
   const navigation = useNavigation();
   const { expenses, budget, calculateTotalExpenses } = useContext(DataContext);
   const { userInfo } = useContext(AuthContext);
-  
+
+  // Bottom sheet ref
+  const bottomSheetRef = useRef(null);
+  const flatListRef = useRef(null);
+
+  // Snap points: 88% of screen height
+  const snapPoints = useMemo(() => ['88%'], []);
+
   // Chat state
   const [messages, setMessages] = useState([]);
-  const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [currentScreen, setCurrentScreen] = useState('Home');
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [conversationHistory, setConversationHistory] = useState([]);
-  
-  // Animation values
-  const slideAnim = useRef(new Animated.Value(screenHeight)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const flatListRef = useRef(null);
-  
-  // Keyboard listeners for proper avoidance
+
+  // Expose present/dismiss via ref so the parent can call them directly
+  useImperativeHandle(ref, () => ({
+    present: () => bottomSheetRef.current?.present(),
+    dismiss: () => bottomSheetRef.current?.dismiss(),
+  }));
+
+  // Present / dismiss the sheet when `visible` changes
   useEffect(() => {
-    const keyboardWillShow = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
+    if (visible) {
+      // Detect screen and prepare welcome message before presenting
+      let screenName = 'Home';
+      try {
+        const navState = navigation.getState();
+        screenName = getActiveRouteName(navState) || 'Home';
+        console.log('[ChatModal] Detected screen:', screenName);
+      } catch (error) {
+        console.log('Navigation state error:', error);
       }
-    );
-    
-    const keyboardWillHide = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => {
-        setKeyboardHeight(0);
-      }
-    );
-    
-    return () => {
-      keyboardWillShow.remove();
-      keyboardWillHide.remove();
-    };
-  }, []);
-  
+      setCurrentScreen(screenName);
+
+      // Set welcome message
+      const welcomeMessage = getContextualWelcome(screenName);
+      setMessages([{
+        id: Date.now().toString(),
+        text: welcomeMessage,
+        sender: 'koin',
+        timestamp: new Date(),
+        type: 'welcome'
+      }]);
+      setConversationHistory([]);
+
+      bottomSheetRef.current?.present();
+    } else {
+      bottomSheetRef.current?.dismiss();
+    }
+  }, [visible]);
+
+  // When the sheet is dismissed via swipe-down, notify the parent
+  const handleSheetChanges = useCallback((index) => {
+    if (index === -1) {
+      // Sheet was dismissed
+      Keyboard.dismiss();
+      onClose();
+    }
+  }, [onClose]);
+
+  // ──────────────────────────────────────────────
   // Helper function to get the deepest focused route name
+  // ──────────────────────────────────────────────
   const getActiveRouteName = (state) => {
     if (!state || !state.routes) return null;
-    
     const route = state.routes[state.index ?? 0];
-    
-    // If the route has nested state, recursively get the active route
     if (route.state) {
       return getActiveRouteName(route.state);
     }
-    
     return route.name;
   };
-  
-  // Get current screen context - improved detection for nested navigators
-  useEffect(() => {
-    if (visible) {
-      try {
-        const navState = navigation.getState();
-        
-        // Use recursive helper to find the deepest active screen
-        let screenName = getActiveRouteName(navState) || 'Home';
-        
-        // Log for debugging
-        console.log('[ChatModal] Navigation state:', JSON.stringify(navState, null, 2));
-        console.log('[ChatModal] Detected screen:', screenName);
-        
-        setCurrentScreen(screenName);
-        
-        // Add contextual welcome message
-        const welcomeMessage = getContextualWelcome(screenName);
-        setMessages([{
-          id: Date.now().toString(),
-          text: welcomeMessage,
-          sender: 'koin',
-          timestamp: new Date(),
-          type: 'welcome'
-        }]);
-        
-        // Reset conversation history for new session
-        setConversationHistory([]);
-      } catch (error) {
-        console.log('Navigation state error:', error);
-        setCurrentScreen('Home');
-      }
-    }
-  }, [visible]);
-  
-  // Animation when modal opens/closes
-  useEffect(() => {
-    if (visible) {
-      Animated.parallel([
-        Animated.spring(slideAnim, {
-          toValue: 0,
-          tension: 65,
-          friction: 11,
-          useNativeDriver: true,
-        }),
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    } else {
-      Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: screenHeight,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  }, [visible]);
-  
-  // Get user's financial data summary
+
+  // ──────────────────────────────────────────────
+  // Financial context
+  // ──────────────────────────────────────────────
   const getFinancialContext = useCallback(() => {
     const totalSpent = calculateTotalExpenses(expenses);
-    const budgetRemaining = budget?.monthly ? budget.monthly - totalSpent : 0;
-    const budgetPercentage = budget?.monthly ? (totalSpent / budget.monthly * 100).toFixed(1) : 0;
-    
-    // Time-based calculations
+
     const now = new Date();
     const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday
+    startOfWeek.setDate(now.getDate() - now.getDay());
     startOfWeek.setHours(0, 0, 0, 0);
-    
+
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    
-    // Filter expenses by time period
+
     const thisWeekExpenses = expenses.filter(e => {
       const expDate = new Date(e.date || e.created_at);
       return expDate >= startOfWeek;
     });
-    
+
     const thisMonthExpenses = expenses.filter(e => {
       const expDate = new Date(e.date || e.created_at);
       return expDate >= startOfMonth;
     });
-    
+
     const todayExpenses = expenses.filter(e => {
       const expDate = new Date(e.date || e.created_at);
       return expDate >= today;
     });
-    
-    // Calculate totals
+
     const weeklySpent = thisWeekExpenses.reduce((sum, e) => sum + parseFloat(e.amount || 0), 0);
     const monthlySpent = thisMonthExpenses.reduce((sum, e) => sum + parseFloat(e.amount || 0), 0);
     const todaySpent = todayExpenses.reduce((sum, e) => sum + parseFloat(e.amount || 0), 0);
-    
-    // Category breakdown
+
+    const budgetRemaining = budget?.monthly ? budget.monthly - monthlySpent : 0;
+    const budgetPercentage = budget?.monthly ? (monthlySpent / budget.monthly * 100).toFixed(1) : 0;
+
     const categorySpending = {};
     expenses.forEach(expense => {
       const cat = (expense.category || 'others').toLowerCase();
       categorySpending[cat] = (categorySpending[cat] || 0) + parseFloat(expense.amount || 0);
     });
-    
-    // Weekly category breakdown
+
     const weeklyCategorySpending = {};
     thisWeekExpenses.forEach(expense => {
       const cat = (expense.category || 'others').toLowerCase();
       weeklyCategorySpending[cat] = (weeklyCategorySpending[cat] || 0) + parseFloat(expense.amount || 0);
     });
-    
-    const sortedCategories = Object.entries(categorySpending)
-      .sort(([,a], [,b]) => b - a);
-    
-    const sortedWeeklyCategories = Object.entries(weeklyCategorySpending)
-      .sort(([,a], [,b]) => b - a);
-    
-    // Recent expenses (last 5)
+
+    const sortedCategories = Object.entries(categorySpending).sort(([,a], [,b]) => b - a);
+    const sortedWeeklyCategories = Object.entries(weeklyCategorySpending).sort(([,a], [,b]) => b - a);
+
     const recentExpenses = expenses.slice(-5).map(e => ({
       amount: e.amount,
       category: e.category,
       note: e.note || 'No note',
       date: new Date(e.date || e.created_at).toLocaleDateString()
     }));
-    
-    // This week's expenses list
+
     const weekExpensesList = thisWeekExpenses.map(e => ({
       amount: e.amount,
       category: e.category,
       note: e.note || 'No note',
       date: new Date(e.date || e.created_at).toLocaleDateString()
     }));
-    
+
     return {
       totalSpent,
       budgetRemaining,
@@ -322,7 +353,6 @@ const ChatModal = ({ visible, onClose }) => {
       categoryBreakdown: sortedCategories.slice(0, 5),
       recentExpenses,
       userName: userInfo?.full_name?.split(' ')[0] || userInfo?.email?.split('@')[0] || 'there',
-      // Time-based data for better context
       weeklySpent,
       weeklyExpenseCount: thisWeekExpenses.length,
       weeklyTopCategory: sortedWeeklyCategories[0] || null,
@@ -334,14 +364,16 @@ const ChatModal = ({ visible, onClose }) => {
       todayExpenseCount: todayExpenses.length,
     };
   }, [expenses, budget, userInfo, calculateTotalExpenses]);
-  
-  // Get contextual welcome based on current screen
+
+  // ──────────────────────────────────────────────
+  // Welcome messages
+  // ──────────────────────────────────────────────
   const getContextualWelcome = (screenName) => {
     const financial = getFinancialContext();
     const screenContext = SCREEN_CONTEXTS[screenName] || SCREEN_CONTEXTS['Home'];
-    
+
     const welcomeTemplates = {
-      'Home': `Hey ${financial.userName}! 👋 You're on the Home tab. You've spent ₱${financial.totalSpent.toLocaleString()} of your ₱${financial.monthlyBudget.toLocaleString()} budget (${financial.budgetPercentage}%). How can I help?`,
+      'Home': `Hey ${financial.userName}! 👋 You're on the Home tab. You've spent ₱${financial.monthlySpent.toLocaleString()} of your ₱${financial.monthlyBudget.toLocaleString()} budget (${financial.budgetPercentage}%). How can I help?`,
       'Budget': `Hi! You're managing your budget. Current limit: ₱${financial.monthlyBudget.toLocaleString()}. Need help adjusting categories?`,
       'Expenses': `You're on the Expenses tab! 📊 You have ${financial.expenseCount} transactions totaling ₱${financial.totalSpent.toLocaleString()}. Ask me about your spending - like "What did I spend this week?" or "Show my top category"!`,
       'Explore': `Welcome to the Explore tab! 🧭 Navigate to Budget tools, Predictions, Leaderboard, Achievements, or Gamification challenges from here. What interests you?`,
@@ -354,19 +386,20 @@ const ChatModal = ({ visible, onClose }) => {
       'Learn': `Great choice! 📚 The Learn section has financial tips and education. What topic interests you?`,
       'Settings': `In Settings! I can help you customize your GaFI experience. What would you like to adjust?`,
     };
-    
+
     return welcomeTemplates[screenName] || `Hi ${financial.userName}! I'm Koin, your AI finance buddy. You're on the ${screenContext.name}. How can I help? 💰`;
   };
-  
-  // Build comprehensive system prompt with screen context
+
+  // ──────────────────────────────────────────────
+  // System prompt
+  // ──────────────────────────────────────────────
   const buildSystemPrompt = (screenName) => {
     const financial = getFinancialContext();
     const screenContext = SCREEN_CONTEXTS[screenName] || SCREEN_CONTEXTS['Home'];
-    
-    // Determine which tab the user is on
+
     const isTabScreen = ['Home', 'Expenses', 'Game', 'Explore'].includes(screenName);
     const tabInfo = isTabScreen ? `\n⚠️ USER IS ON THE "${screenName.toUpperCase()}" TAB (one of 4 main tabs: Game, Home, Expenses, Explore)` : '';
-    
+
     return `You are Koin, GaFi's friendly AI financial assistant for Filipino college students. You are CONTEXT-AWARE and currently helping the user on the "${screenContext.name}" screen.
 ${tabInfo}
 
@@ -472,58 +505,57 @@ YOUR PERSONALITY:
 - Gives actionable, practical advice
 - NEVER answers off-topic questions`;
   };
-  
+
+  // ──────────────────────────────────────────────
   // Send message with NVIDIA AI
-  const sendMessage = async () => {
-    if (!inputText.trim() || isTyping) return;
-    
+  // ──────────────────────────────────────────────
+  const sendMessage = useCallback(async (messageText) => {
+    if (!messageText || isTyping) return;
+
     const userMessage = {
       id: Date.now().toString(),
-      text: inputText.trim(),
+      text: messageText,
       sender: 'user',
       timestamp: new Date()
     };
-    
-    const userQuestion = inputText.trim();
+
+    const userQuestion = messageText;
     setMessages(prev => [...prev, userMessage]);
-    setInputText('');
     setIsTyping(true);
-    
-    // Scroll to bottom
+    _notifyIsTyping(true);
+
     setTimeout(() => {
       flatListRef.current?.scrollToEnd({ animated: true });
     }, 100);
-    
+
     try {
-      // Build messages array with conversation history
       const systemPrompt = buildSystemPrompt(currentScreen);
-      
+
       const apiMessages = [
         { role: 'system', content: systemPrompt },
-        ...conversationHistory.slice(-6), // Keep last 3 exchanges for context
+        ...conversationHistory.slice(-6),
         { role: 'user', content: userQuestion }
       ];
-      
+
       DebugUtils.log('KOIN_CHAT', 'Sending to NVIDIA API', {
         screen: currentScreen,
         questionLength: userQuestion.length,
         historyLength: conversationHistory.length
       });
-      
+
       const response = await getChatCompletion(apiMessages, {
         temperature: 0.7,
         max_tokens: 400,
         frequency_penalty: 0.5,
         presence_penalty: 0.3
       });
-      
-      // Update conversation history
+
       setConversationHistory(prev => [
         ...prev,
         { role: 'user', content: userQuestion },
         { role: 'assistant', content: response }
       ]);
-      
+
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         text: response,
@@ -531,11 +563,10 @@ YOUR PERSONALITY:
         timestamp: new Date(),
         type: 'ai'
       }]);
-      
+
     } catch (error) {
       DebugUtils.error('KOIN_CHAT', 'AI response failed', error);
-      
-      // Fallback response
+
       const fallbackResponse = generateSmartFallback(userQuestion, currentScreen);
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
@@ -546,60 +577,62 @@ YOUR PERSONALITY:
       }]);
     } finally {
       setIsTyping(false);
+      _notifyIsTyping(false);
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
-  };
-  
+  }, [isTyping, currentScreen, conversationHistory]);
+
+  // Always keep the bridge ref up-to-date so ChatFooterComponent calls the latest version
+  _sendMessageRef.current = sendMessage;
+
+  // ──────────────────────────────────────────────
   // Smart fallback when AI fails
+  // ──────────────────────────────────────────────
   const generateSmartFallback = (question, screen) => {
     const q = question.toLowerCase();
     const financial = getFinancialContext();
     const screenContext = SCREEN_CONTEXTS[screen] || SCREEN_CONTEXTS['Home'];
-    
-    // Screen-specific questions
+
     if (q.includes('what can i do') || q.includes('help') || q.includes('this screen')) {
       return `On the ${screenContext.name}, you can: ${screenContext.actions.slice(0, 3).join(', ')}. 💡 Tip: ${screenContext.tips[0]}`;
     }
-    
-    // Weekly spending questions
+
     if (q.includes('week') || q.includes('this week')) {
       if (financial.weeklyExpenseCount > 0) {
         return `This week, you've spent ₱${financial.weeklySpent.toLocaleString()} across ${financial.weeklyExpenseCount} transactions. ${financial.weeklyTopCategory ? `Top category: ${financial.weeklyTopCategory[0]} (₱${financial.weeklyTopCategory[1].toLocaleString()})` : ''} 📅`;
       }
       return `No expenses recorded this week yet! Start tracking to see your weekly spending patterns. 📊`;
     }
-    
-    // Today spending questions
+
     if (q.includes('today')) {
       if (financial.todayExpenseCount > 0) {
         return `Today you've spent ₱${financial.todaySpent.toLocaleString()} across ${financial.todayExpenseCount} transactions. Keep tracking! 📝`;
       }
       return `No expenses logged today yet. Tap + to add your first expense of the day! ✨`;
     }
-    
-    // Budget questions
+
     if (q.includes('budget') || q.includes('spend')) {
       return `You've spent ₱${financial.totalSpent.toLocaleString()} of your ₱${financial.monthlyBudget.toLocaleString()} budget (${financial.budgetPercentage}%). ${parseFloat(financial.budgetPercentage) < 80 ? 'You\'re on track! 👍' : 'Watch your spending! ⚠️'}`;
     }
-    
-    // Category questions
+
     if (q.includes('category') || q.includes('where') || q.includes('most')) {
       if (financial.topCategory) {
         return `Your top spending category is ${financial.topCategory[0]} at ₱${financial.topCategory[1].toLocaleString()}. Consider setting a stricter limit there! 📊`;
       }
     }
-    
-    // Savings questions
+
     if (q.includes('save') || q.includes('tip')) {
       return `Here's a tip: Try the 50/30/20 rule - 50% needs, 30% wants, 20% savings. With your current spending, you could save ₱${Math.round(financial.monthlyBudget * 0.2).toLocaleString()} monthly! 💰`;
     }
-    
+
     return `I understand you're asking about "${question.substring(0, 30)}...". Currently on ${screenContext.name}, I can help with: ${screenContext.actions[0]}. What would you like to do?`;
   };
-  
-  // Quick actions based on current screen
+
+  // ──────────────────────────────────────────────
+  // Quick actions
+  // ──────────────────────────────────────────────
   const getQuickActions = () => {
     const screenActions = {
       'Home': ['Budget status', 'Spending tips'],
@@ -615,14 +648,16 @@ YOUR PERSONALITY:
       'Learn': ['Quick tip', 'Best topics'],
       'Settings': ['Customize app', 'Reset data'],
     };
-    
+
     return ['What can I do here?', ...(screenActions[currentScreen] || ['Budget summary']), 'Help me save'];
   };
-  
-  // Render message item
-  const renderMessage = ({ item }) => {
+
+  // ──────────────────────────────────────────────
+  // Render helpers
+  // ──────────────────────────────────────────────
+  const renderMessage = useCallback(({ item }) => {
     const isUser = item.sender === 'user';
-    
+
     return (
       <View style={[
         styles.messageRow,
@@ -633,18 +668,15 @@ YOUR PERSONALITY:
             <MascotImage size={36} />
           </View>
         )}
-        
+
         <View style={[
           styles.messageBubble,
-          isUser 
+          isUser
             ? [styles.userBubble, { backgroundColor: colors.primary }]
             : [styles.koinBubble, { backgroundColor: colors.card }]
         ]}>
           {isUser ? (
-            <Text style={[
-              styles.messageText,
-              { color: '#FFFFFF' }
-            ]}>
+            <Text style={[styles.messageText, { color: '#FFFFFF' }]}>
               {item.text}
             </Text>
           ) : (
@@ -672,21 +704,21 @@ YOUR PERSONALITY:
               {item.text}
             </Markdown>
           )}
-          
+
           {item.type === 'ai' && (
             <View style={styles.aiBadge}>
               <Ionicons name="flash" size={10} color="#00D4FF" />
               <Text style={styles.badgeText}>AI Powered</Text>
             </View>
           )}
-          
+
           {item.type === 'fallback' && (
             <View style={styles.fallbackBadge}>
               <Ionicons name="shield-checkmark" size={10} color="#FFCC00" />
               <Text style={[styles.badgeText, { color: '#FFCC00' }]}>Offline Mode</Text>
             </View>
           )}
-          
+
           {item.type === 'welcome' && (
             <View style={styles.welcomeBadge}>
               <Ionicons name="location" size={10} color={colors.primary} />
@@ -696,9 +728,8 @@ YOUR PERSONALITY:
         </View>
       </View>
     );
-  };
-  
-  // Render typing indicator
+  }, [colors, currentScreen]);
+
   const renderTypingIndicator = () => (
     <View style={[styles.messageRow, styles.koinMessageRow]}>
       <View style={styles.avatarContainer}>
@@ -714,170 +745,141 @@ YOUR PERSONALITY:
       </View>
     </View>
   );
-  
-  if (!visible) return null;
-  
-  const modalHeight = screenHeight * 0.88;
-  const contentHeight = modalHeight - (keyboardHeight > 0 ? keyboardHeight - 20 : 0);
-  
-  return (
-    <Modal
-      visible={visible}
-      animationType="none"
-      transparent={true}
-      statusBarTranslucent={true}
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalContainer}>
-        {/* Backdrop */}
-        <Animated.View 
-          style={[styles.backdrop, { opacity: fadeAnim }]}
-        >
-          <TouchableOpacity 
-            style={StyleSheet.absoluteFill} 
-            activeOpacity={1}
-            onPress={onClose}
-          />
-        </Animated.View>
-        
-        {/* Chat Panel */}
-        <Animated.View
-          style={[
-            styles.chatPanel,
-            { 
-              height: contentHeight,
-              backgroundColor: colors.background,
-              transform: [{ translateY: slideAnim }]
-            }
-          ]}
-        >
-          {/* Handle Bar */}
-          <View style={styles.handleBar}>
-            <View style={[styles.handle, { backgroundColor: colors.border || '#3C3C3C' }]} />
+
+  const renderListFooter = useCallback(() => {
+    if (isTyping) return renderTypingIndicator();
+    if (messages.length <= 1) {
+      return (
+        <View style={styles.quickActionsContainer}>
+          <Text style={[styles.quickActionsLabel, { color: colors.textSecondary || colors.text + '80' }]}>
+            Suggested questions:
+          </Text>
+          <View style={styles.quickActionsRow}>
+            {getQuickActions().map((action, index) => (
+              <TouchableOpacity
+                key={index}
+                style={[styles.quickActionChip, { backgroundColor: colors.card, borderColor: colors.border || '#3C3C3C' }]}
+                onPress={() => sendMessage(action)}
+              >
+                <Text style={[styles.quickActionText, { color: colors.text }]}>{action}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
-          
-          {/* Header */}
-          <View style={[styles.header, { borderBottomColor: colors.border || '#3C3C3C' }]}>
-            <View style={styles.headerLeft}>
-              <View style={[styles.headerAvatar, { backgroundColor: colors.primary + '20' }]}>
-                <MascotImage size={40} />
-              </View>
-              <View style={styles.headerInfo}>
-                <Text style={[styles.headerTitle, { color: colors.text }]}>Koin</Text>
-                <View style={styles.screenBadge}>
-                  <View style={[styles.screenDot, { backgroundColor: '#4CAF50' }]} />
-                  <Text style={[styles.screenText, { color: colors.textSecondary || colors.text + '80' }]}>
-                    {SCREEN_CONTEXTS[currentScreen]?.name || currentScreen}
-                  </Text>
-                </View>
-              </View>
-            </View>
-            
-            <TouchableOpacity
-              style={[styles.closeBtn, { backgroundColor: colors.card }]}
-              onPress={onClose}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name="close" size={22} color={colors.text} />
-            </TouchableOpacity>
-          </View>
-          
-          {/* Messages */}
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            renderItem={renderMessage}
-            keyExtractor={item => item.id}
-            contentContainerStyle={styles.messagesList}
-            showsVerticalScrollIndicator={false}
-            ListFooterComponent={isTyping ? renderTypingIndicator : null}
-            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-            keyboardShouldPersistTaps="handled"
-          />
-          
-          {/* Quick Actions */}
-          {messages.length <= 1 && !isTyping && (
-            <View style={styles.quickActionsContainer}>
-              <Text style={[styles.quickActionsLabel, { color: colors.textSecondary || colors.text + '80' }]}>
-                Suggested questions:
-              </Text>
-              <View style={styles.quickActionsRow}>
-                {getQuickActions().map((action, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={[styles.quickActionChip, { backgroundColor: colors.card, borderColor: colors.border || '#3C3C3C' }]}
-                    onPress={() => {
-                      setInputText(action);
-                      setTimeout(() => sendMessage(), 100);
-                    }}
-                  >
-                    <Text style={[styles.quickActionText, { color: colors.text }]}>{action}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          )}
-          
-          {/* Input Area */}
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
-          >
-            <View style={[styles.inputArea, { backgroundColor: colors.background, borderTopColor: colors.border || '#3C3C3C' }]}>
-              <View style={[styles.inputContainer, { backgroundColor: colors.card }]}>
-                <TextInput
-                  style={[styles.textInput, { color: colors.text }]}
-                  placeholder="Ask Koin anything..."
-                  placeholderTextColor={colors.textSecondary || colors.text + '60'}
-                  value={inputText}
-                  onChangeText={setInputText}
-                  multiline
-                  maxLength={500}
-                  returnKeyType="send"
-                  blurOnSubmit={false}
-                  onSubmitEditing={sendMessage}
-                />
-                
-                <TouchableOpacity
-                  style={[
-                    styles.sendBtn,
-                    { backgroundColor: inputText.trim() ? colors.primary : (colors.border || '#3C3C3C') }
-                  ]}
-                  onPress={sendMessage}
-                  disabled={!inputText.trim() || isTyping}
-                >
-                  <Ionicons 
-                    name="arrow-up" 
-                    size={20} 
-                    color={inputText.trim() ? '#FFF' : (colors.textSecondary || colors.text + '60')}
-                  />
-                </TouchableOpacity>
-              </View>
-              
-              <Text style={[styles.poweredBy, { color: colors.textSecondary || colors.text + '60' }]}>
-                Powered by NVIDIA AI
-              </Text>
-            </View>
-          </KeyboardAvoidingView>
-        </Animated.View>
-      </View>
-    </Modal>
+        </View>
+      );
+    }
+    return null;
+  }, [isTyping, messages.length, colors, currentScreen]);
+
+  // ──────────────────────────────────────────────
+  // Custom backdrop
+  // ──────────────────────────────────────────────
+  const renderBackdrop = useCallback(
+    (props) => (
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+        opacity={0.5}
+        pressBehavior="close"
+      />
+    ),
+    []
   );
-};
+
+  // ──────────────────────────────────────────────
+  // Context value for the standalone footer component
+  // ──────────────────────────────────────────────
+  const chatInputContextValue = useMemo(() => ({
+    colors,
+    onSendMessage: sendMessage,
+    isTyping,
+  }), [colors, sendMessage, isTyping]);
+
+  // ──────────────────────────────────────────────
+  // Sheet content handle (the drag bar + header)
+  // ──────────────────────────────────────────────
+  const renderHandle = useCallback(() => (
+    <View style={[styles.handleWrapper, { backgroundColor: colors.background }]}>
+      {/* Drag Handle */}
+      <View style={styles.handleBar}>
+        <View style={[styles.handle, { backgroundColor: colors.border || '#3C3C3C' }]} />
+      </View>
+
+      {/* Fixed Header */}
+      <View style={[styles.header, { borderBottomColor: colors.border || '#3C3C3C' }]}>
+        <View style={styles.headerLeft}>
+          <View style={[styles.headerAvatar, { backgroundColor: colors.primary + '20' }]}>
+            <MascotImage size={40} />
+          </View>
+          <View style={styles.headerInfo}>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>Koin</Text>
+            <View style={styles.screenBadge}>
+              <View style={[styles.screenDot, { backgroundColor: '#4CAF50' }]} />
+              <Text style={[styles.screenText, { color: colors.textSecondary || colors.text + '80' }]}>
+                {SCREEN_CONTEXTS[currentScreen]?.name || currentScreen}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <TouchableOpacity
+          style={[styles.closeBtn, { backgroundColor: colors.card }]}
+          onPress={() => {
+            bottomSheetRef.current?.dismiss();
+          }}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="close" size={22} color={colors.text} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  ), [colors, currentScreen]);
+
+  // ──────────────────────────────────────────────
+  // Render
+  // ──────────────────────────────────────────────
+  return (
+    <BottomSheetModal
+      ref={bottomSheetRef}
+      index={0}
+      snapPoints={snapPoints}
+      onChange={handleSheetChanges}
+      enablePanDownToClose={true}
+      enableDynamicSizing={false}
+      backdropComponent={renderBackdrop}
+      handleComponent={renderHandle}
+      footerComponent={ChatFooterComponent}
+      keyboardBehavior="interactive"
+      keyboardBlurBehavior="restore"
+      android_keyboardInputMode="adjustResize"
+      backgroundStyle={{ backgroundColor: colors.background }}
+      style={styles.sheetContainer}
+    >
+      <BottomSheetFlatList
+        ref={flatListRef}
+        data={messages}
+        renderItem={renderMessage}
+        keyExtractor={item => item.id}
+        contentContainerStyle={styles.messagesList}
+        showsVerticalScrollIndicator={false}
+        ListFooterComponent={renderListFooter}
+        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      />
+    </BottomSheetModal>
+  );
+});
 
 const styles = StyleSheet.create({
-  modalContainer: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  chatPanel: {
+  sheetContainer: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    overflow: 'hidden',
+  },
+  handleWrapper: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
   },
   handleBar: {
     alignItems: 'center',
@@ -938,7 +940,8 @@ const styles = StyleSheet.create({
   messagesList: {
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 8,
+    // Extra bottom padding so messages don't hide behind the fixed footer
+    paddingBottom: 100,
   },
   messageRow: {
     marginBottom: 16,
@@ -956,7 +959,7 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   messageBubble: {
-    maxWidth: '80%',
+    maxWidth: '83%',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 20,
@@ -1013,8 +1016,9 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   quickActionsContainer: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 0,
     paddingBottom: 12,
+    paddingTop: 8,
   },
   quickActionsLabel: {
     fontSize: 12,

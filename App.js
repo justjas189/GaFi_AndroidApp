@@ -5,6 +5,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { View, Text, ActivityIndicator } from 'react-native';
@@ -252,6 +253,7 @@ export default function App() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
           <ThemeProvider>
+            <BottomSheetModalProvider>
             <ThemedNavigationContainer>
               <AuthProvider>
                 <DataProvider>
@@ -263,7 +265,9 @@ export default function App() {
                 </DataProvider>
               </AuthProvider>
             </ThemedNavigationContainer>
-          </ThemeProvider>        </SafeAreaProvider>
+            </BottomSheetModalProvider>
+          </ThemeProvider>
+        </SafeAreaProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>
   );
