@@ -3494,10 +3494,13 @@ export default function BuildScreen() {
     
     const renderCharacter = () => {
       const charSize = getCharSize();
+      const CHAR_VISUAL_SCALE = 0.8; // Visual scale: <1 = smaller, 1 = full tile size
       const FRAME_W = 48;  // Sprite frame width in source image
       const FRAME_H = 90;  // Sprite frame height in source image
       const TOTAL_FRAMES = 24;
-      const spriteScale = charSize / FRAME_W; // Scale sprite to fit one tile width
+      const spriteScale = (charSize * CHAR_VISUAL_SCALE) / FRAME_W;
+      const scaledFrameW = FRAME_W * spriteScale;
+      const scaledFrameH = FRAME_H * spriteScale;
 
       return (
         <Animated.View
@@ -3513,8 +3516,8 @@ export default function BuildScreen() {
           ]}
         >
           <View style={{
-            width: charSize,
-            height: FRAME_H * spriteScale,
+            width: scaledFrameW,
+            height: scaledFrameH,
             overflow: 'hidden',
           }}>
             <Image
