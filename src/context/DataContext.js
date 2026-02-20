@@ -220,7 +220,8 @@ export const DataProvider = ({ children }) => {
         .from('expenses')
         .select('*')
         .eq('user_id', userId)
-        .order('date', { ascending: false });
+        .order('date', { ascending: false })
+        .range(0, 9999);
 
       if (expensesError) {
         console.error('Expenses load error:', expensesError);
