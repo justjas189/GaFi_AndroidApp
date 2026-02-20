@@ -26,13 +26,13 @@ const MAPS = {
     name: 'School Campus',
     icon: '🏫',
     image: require('../../../assets/Game_Graphics/maps/Map004.png'),
-    spawnPoint: { x: width / 2, y: height * 0.5 },
+    spawnPoint: { x: width * 0.30, y: height * 0.55 },
     locations: [
       {
         id: 'canteen',
         name: 'Canteen',
         icon: '🍔',
-        bounds: { left: 0.35, right: 0.90, top: 0.85, bottom: 0.90 },
+        bounds: { left: 0.65, right: 0.90, top: 0.85, bottom: 0.92 },
         action: 'expense',
         category: 'Food & Dining',
       },
@@ -49,7 +49,7 @@ const MAPS = {
         id: 'library',
         name: 'Library',
         icon: '📚',
-        bounds: { left: 0.48, right: 0.88, top: 0.48, bottom: 0.65 },
+        bounds: { left: 0.68, right: 0.88, top: 0.48, bottom: 0.69 },
         action: 'expense',
         category: 'School Supplies',
       },
@@ -108,7 +108,7 @@ const MAPS = {
         id: 'clothing_store',
         name: 'Clothing Store',
         icon: '👕',
-        bounds: { left: 0.10, right: 0.32, top: 0.37, bottom: 0.72 },
+        bounds: { left: 0.10, right: 0.32, top: 0.37, bottom: 0.55 },
         action: 'expense',
         category: 'Shopping',
       },
@@ -116,7 +116,7 @@ const MAPS = {
         id: 'electronics',
         name: 'Electronics',
         icon: '📱',
-        bounds: { left: 0.68, right: 0.90, top: 0.37, bottom: 0.72 },
+        bounds: { left: 0.68, right: 0.90, top: 0.58, bottom: 0.71 },
         action: 'expense',
         category: 'Electronics',
       },
@@ -160,7 +160,7 @@ const MAPS = {
         id: 'food_court',
         name: 'Food Court',
         icon: '🍕',
-        bounds: { left: 0.45, right: 0.85, top: 0.13, bottom: 0.30 },
+        bounds: { left: 0.45, right: 0.85, top: 0.13, bottom: 0.27 },
         action: 'expense',
         category: 'Food & Dining',
       },
@@ -168,7 +168,7 @@ const MAPS = {
         id: 'cafe',
         name: 'Cafe',
         icon: '☕',
-        bounds: { left: 0.45, right: 0.75, top: 0.78, bottom: 1.0 },
+        bounds: { left: 0.45, right: 0.71, top: 0.83, bottom: 0.95 },
         action: 'expense',
         category: 'Food & Dining',
       },
@@ -204,7 +204,7 @@ const MAPS = {
         id: 'gym',
         name: 'Gym',
         icon: '💪',
-        bounds: { left: 0.57, right: 0.89, top: 0.55, bottom: 1.0 },
+        bounds: { left: 0.72, right: 0.88, top: 0.59, bottom: 0.75 },
         action: 'expense',
         category: 'Health',
       },
@@ -212,12 +212,46 @@ const MAPS = {
         id: 'entertainment_hub',
         name: 'Entertainment Hub',
         icon: '🎮',
-        bounds: { left: 0.15, right: 0.85, top: 0.10, bottom: 0.48 },
+        bounds: { left: 0.35, right: 0.65, top: 0.10, bottom: 0.18 },
         action: 'expense',
         category: 'Entertainment',
       },
     ],
   },
+};
+
+// ─── NPC Sprite Assets ───────────────────────────────────────────────────────
+const NPC_SPRITES = {
+  Library_Worker: require('../../../assets/Game_Graphics/Character_Animation/Workers/Library_Worker.png'),
+  Food_Worker:    require('../../../assets/Game_Graphics/Character_Animation/Workers/Food_Worker.png'),
+  Clothing_Worker:require('../../../assets/Game_Graphics/Character_Animation/Workers/Clothing_Worker.png'),
+  Grocery_Worker: require('../../../assets/Game_Graphics/Character_Animation/Workers/Grocery_Worker.png'),
+  Cafe_Worker:    require('../../../assets/Game_Graphics/Character_Animation/Workers/Cafe_Worker.png'),
+  Games_Worker:   require('../../../assets/Game_Graphics/Character_Animation/Workers/Games_Worker.png'),
+  Gym_Worker:     require('../../../assets/Game_Graphics/Character_Animation/Workers/Gym_Worker.png'),
+};
+
+// ─── NPC Placement Config ────────────────────────────────────────────────────
+// To reposition an NPC, simply change its tileX / tileY values.
+// Directions: 'right' | 'up' | 'left' | 'down'
+// All maps are 11 tiles wide × 24 tiles tall (48 px per tile).
+const NPC_POSITIONS = {
+  school: [
+    { id: 'library_worker',  sprite: 'Library_Worker',  tileX: 10, tileY: 15, direction: 'left'  },
+    { id: 'canteen_worker',  sprite: 'Food_Worker',     tileX: 10, tileY: 21, direction: 'left'  },
+  ],
+  mall_1f: [
+    { id: 'clothing_worker', sprite: 'Clothing_Worker', tileX: 1, tileY: 12, direction: 'right' },
+    { id: 'grocery_worker',  sprite: 'Grocery_Worker',  tileX: 10, tileY: 5,  direction: 'left'  },
+  ],
+  mall_2f: [
+    { id: 'foodcourt_worker',sprite: 'Food_Worker',     tileX: 7, tileY: 4,  direction: 'down'  },
+    { id: 'cafe_worker',     sprite: 'Cafe_Worker',     tileX: 6, tileY: 21, direction: 'right' },
+  ],
+  mall_3f: [
+    { id: 'games_worker',    sprite: 'Games_Worker',    tileX: 5, tileY: 3,  direction: 'down'  },
+    { id: 'gym_worker',      sprite: 'Gym_Worker',      tileX: 10, tileY: 16, direction: 'left'  },
+  ],
 };
 
 export default function BuildScreen() {
@@ -339,7 +373,7 @@ export default function BuildScreen() {
     {
       id: 'notebook_and_log',
       title: "The Notebook 📓",
-      message: "Walk to the Notebook, open it, and try logging an expense! Enter any amount and description, then tap Save. Don't worry — this is just practice!",
+      message: "Walk to the Notebook, open it, and try logging an expense! Enter any amount and description, then tap Log. Don't worry — this is just practice!",
       nextAlwaysEnabled: false,
       conditionKey: 'notebook_expense_logged',
       position: 'left',
@@ -355,36 +389,81 @@ export default function BuildScreen() {
       highlight: 'door',
     },
     {
-      id: 'school_canteen',
-      title: "Interactable Rooms 🏫",
-      message: "Schools and malls have rooms where you can log expenses! Walk to the Canteen and try logging a food expense. This is just practice!",
+      id: 'school_intro',
+      title: "Welcome to School! 🏫",
+      message: "This is the School Campus! See the NPCs here? You can approach the Librarian to buy school supplies, or the Canteen staff to buy food. Walk to either one and log an expense — this is just practice!",
       nextAlwaysEnabled: false,
-      conditionKey: 'canteen_expense_logged',
+      conditionKey: 'school_expense_logged',
       position: 'top',
       highlight: null,
     },
     {
       id: 'go_to_mall',
       title: "The Mall 🏬",
-      message: "Let's visit the Mall! Walk to the School Exit and travel there.",
+      message: "Great job! Now let's visit the Mall! Walk to the School Exit and travel there.",
       nextAlwaysEnabled: false,
       conditionKey: 'arrived_at_mall',
       position: 'center',
       highlight: null,
     },
     {
-      id: 'mall_expense',
-      title: "Mall Shopping 🛍️",
-      message: "Walk to any store and log an expense! This is still practice — nothing will be saved.",
+      id: 'mall_1f_intro',
+      title: "Mall - 1st Floor 🏬",
+      message: "Welcome to the Mall! On the 1st floor, you'll find the Clothing Store 👕, Electronics 📱, and Grocery Store 🛒. Feel free to approach any NPC to log a practice expense, or just look around!",
+      nextAlwaysEnabled: true,
+      conditionKey: null,
+      position: 'top',
+      highlight: null,
+    },
+    {
+      id: 'go_to_2f',
+      title: "Go to 2nd Floor ⬆️",
+      message: "Now let's explore more! Walk to the Escalator to go up to the 2nd floor.",
       nextAlwaysEnabled: false,
-      conditionKey: 'mall_expense_logged',
-      position: 'center',
+      conditionKey: 'arrived_at_mall_2f',
+      position: 'bottom',
+      highlight: null,
+    },
+    {
+      id: 'mall_2f_intro',
+      title: "Mall - 2nd Floor 🍕",
+      message: "The 2nd floor has the Food Court 🍕 and a Cafe ☕. You can approach the NPCs to log practice expenses if you'd like!",
+      nextAlwaysEnabled: true,
+      conditionKey: null,
+      position: 'top',
+      highlight: null,
+    },
+    {
+      id: 'go_to_3f',
+      title: "Go to 3rd Floor ⬆️",
+      message: "One more floor to go! Walk to the Escalator to reach the 3rd floor.",
+      nextAlwaysEnabled: false,
+      conditionKey: 'arrived_at_mall_3f',
+      position: 'bottom',
+      highlight: null,
+    },
+    {
+      id: 'mall_3f_intro',
+      title: "Mall - 3rd Floor 🎮",
+      message: "The 3rd floor has the Entertainment Hub 🎮 and the Gym 💪. Feel free to log a practice expense or just explore!",
+      nextAlwaysEnabled: true,
+      conditionKey: null,
+      position: 'top',
+      highlight: null,
+    },
+    {
+      id: 'go_down_escalator',
+      title: "Going Down ⬇️",
+      message: "You can also go back down! Walk to the Escalator to go down to the 2nd floor. Use escalators anytime to move between mall floors.",
+      nextAlwaysEnabled: false,
+      conditionKey: 'went_down_escalator',
+      position: 'bottom',
       highlight: null,
     },
     {
       id: 'tutorial_done',
       title: "You're All Set! 🌟",
-      message: "Amazing job! You've learned all the basics — budgeting, traveling, and logging expenses. Now go start Story Mode and become a financial master!",
+      message: "Amazing job! You've learned all the basics — budgeting, traveling, logging expenses, and navigating mall floors. Now go start Story Mode and become a financial master!",
       nextAlwaysEnabled: true,
       conditionKey: null,
       position: 'center',
@@ -658,6 +737,39 @@ export default function BuildScreen() {
     },
   };
 
+  // Content area dimensions (for accurate bounds detection)
+  const [contentSize, setContentSize] = useState({ width: width, height: height });
+
+  // ─── NPC helpers ────────────────────────────────────────────────────
+  // Returns true if the tile at (tileX, tileY) is occupied by an NPC on the current map
+  const isNPCTile = useCallback((tileX, tileY) => {
+    const npcs = NPC_POSITIONS[currentMapId];
+    if (!npcs) return false;
+    return npcs.some(n => n.tileX === tileX && n.tileY === tileY);
+  }, [currentMapId]);
+
+  // Like collisionSystem.findNearestPassablePosition but also excludes NPC tiles
+  const findNearestPassableExcludingNPCs = useCallback((targetX, targetY) => {
+    if (!collisionSystem.initialized) return { x: targetX, y: targetY };
+    const targetTile = collisionSystem.pixelsToTiles(targetX, targetY, contentSize.width, contentSize.height);
+    if (collisionSystem.isPassable(targetTile.x, targetTile.y) && !isNPCTile(targetTile.x, targetTile.y)) {
+      return { x: targetX, y: targetY };
+    }
+    for (let radius = 1; radius <= 5; radius++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        for (let dy = -radius; dy <= radius; dy++) {
+          if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue;
+          const cx = targetTile.x + dx;
+          const cy = targetTile.y + dy;
+          if (collisionSystem.isPassable(cx, cy) && !isNPCTile(cx, cy)) {
+            return collisionSystem.tilesToPixels(cx, cy, contentSize.width, contentSize.height);
+          }
+        }
+      }
+    }
+    return { x: targetX, y: targetY };
+  }, [contentSize.width, contentSize.height, isNPCTile]);
+
   // Achievement tracking state
   const [showAchievementModal, setShowAchievementModal] = useState(false);
   const [newAchievement, setNewAchievement] = useState(null);
@@ -725,9 +837,6 @@ export default function BuildScreen() {
   };
     
   
-  // Content area dimensions (for accurate bounds detection)
-  const [contentSize, setContentSize] = useState({ width: width, height: height });
-
   // Handle layout to get actual content dimensions
   const handleContentLayout = (event) => {
     const { width: w, height: h } = event.nativeEvent.layout;
@@ -1471,26 +1580,11 @@ export default function BuildScreen() {
     switch (location.action) {
       case 'expense':
         setExpenseCategory(location.category || 'Other');
-        // Tutorial: different prompt
+        // Directly open the expense modal without an alert prompt
         if (tutorialActive && gameMode === 'tutorial') {
-          Alert.alert(
-            `Welcome to ${location.name}! ${location.icon}`,
-            'Let\'s practice logging an expense here! (This won\'t be saved)',
-            [
-              { text: 'Let\'s Go!', onPress: () => setShowExpenseModal(true) },
-              { text: 'Not now', style: 'cancel' },
-            ]
-          );
-        } else {
-          Alert.alert(
-            `Welcome to ${location.name}! ${location.icon}`,
-            'Ready to record your purchase?',
-            [
-              { text: 'Yes', onPress: () => setShowExpenseModal(true) },
-              { text: 'Not now', style: 'cancel' },
-            ]
-          );
+          markTutorialCondition('expense_opened');
         }
+        setShowExpenseModal(true);
         break;
       case 'travel':
         console.log('🚪 Opening travel modal with destinations:', location.destinations);
@@ -1752,16 +1846,7 @@ export default function BuildScreen() {
     });
     gameDatabaseService.incrementUserLevelStats({ mapsTraveled: 1 });
     
-    // Show arrival message with transport info
-    const transportInfo = transportMode === 'commute' 
-      ? (parseFloat(fareAmount) > 0 ? ` (Fare: ₱${fareAmount})` : '')
-      : (didBuyFuel ? ` (Fuel: ₱${fuelAmount})` : '');
-    
-    Alert.alert(
-      `📍 ${newMap.name}`,
-      `You arrived at the ${newMap.name.toLowerCase()}!${transportInfo}`,
-      [{ text: 'OK' }]
-    );
+    // Arrival message removed - no alert needed
     
     // Reset transport state
     setSelectedDestination(null);
@@ -1809,11 +1894,16 @@ export default function BuildScreen() {
       sessionId: activeSessionId,
     });
 
-    Alert.alert(
-      `📍 ${newMap.name}`,
-      `You took the escalator to ${newMap.name}!`,
-      [{ text: 'OK' }]
-    );
+    // Tutorial: mark floor change conditions
+    if (tutorialActive && gameMode === 'tutorial') {
+      if (floorId === 'mall_2f') markTutorialCondition('arrived_at_mall_2f');
+      if (floorId === 'mall_3f') markTutorialCondition('arrived_at_mall_3f');
+      // Track going down an escalator (from higher to lower floor)
+      if ((previousMapId === 'mall_3f' && floorId === 'mall_2f') ||
+          (previousMapId === 'mall_2f' && floorId === 'mall_1f')) {
+        markTutorialCondition('went_down_escalator');
+      }
+    }
   };
 
   // Reference to store the current movement path
@@ -1872,8 +1962,8 @@ export default function BuildScreen() {
         const nextX = currentX + dir.x;
         const nextY = currentY + dir.y;
         
-        // Check if the next tile is passable
-        if (collisionSystem.isPassable(nextX, nextY)) {
+        // Check if the next tile is passable (also block NPC tiles)
+        if (collisionSystem.isPassable(nextX, nextY) && !isNPCTile(nextX, nextY)) {
           // Check directional blocking from current tile
           if (!collisionSystem.isDirectionBlocked(currentX, currentY, dir.name)) {
             currentX = nextX;
@@ -2050,15 +2140,13 @@ export default function BuildScreen() {
       const tileInfo = collisionSystem.getTileInfo(tileCoords.x, tileCoords.y);
       console.log('🧱 Target tile info:', JSON.stringify(tileInfo));
       
-      // Check if destination tile is passable
-      if (!tileInfo.passable) {
-        console.log('🚫 Destination tile is not passable!');
-        // Find nearest passable position
-        const nearestPassable = collisionSystem.findNearestPassablePosition(
+      // Check if destination tile is passable (also treat NPC tiles as blocked)
+      if (!tileInfo.passable || isNPCTile(tileCoords.x, tileCoords.y)) {
+        console.log('🚫 Destination tile is not passable (or occupied by NPC)!');
+        // Find nearest passable position (excluding NPC tiles)
+        const nearestPassable = findNearestPassableExcludingNPCs(
           locationX, 
-          locationY, 
-          contentSize.width, 
-          contentSize.height
+          locationY
         );
         
         // Store the original tap destination (for event checking)
@@ -2275,7 +2363,7 @@ export default function BuildScreen() {
         [{ text: 'OK' }]
       );
       // Mark tutorial conditions based on current map
-      if (currentMapId === 'school') markTutorialCondition('canteen_expense_logged');
+      if (currentMapId === 'school') markTutorialCondition('school_expense_logged');
       if (currentMapId.startsWith('mall')) markTutorialCondition('mall_expense_logged');
       console.log('🎓 Tutorial: Skipped expense save (practice mode)');
       return;
@@ -3435,18 +3523,20 @@ export default function BuildScreen() {
         if (tileX < 0 || tileX >= collisionSystem.mapWidth ||
             tileY < 0 || tileY >= collisionSystem.mapHeight) continue;
 
-        // Skip passable tiles — overlay all non-passable tiles (walls, tables, furniture)
+        // Skip passable tiles — only overlay non-passable tiles (walls, tables, furniture)
         if (collisionSystem.isPassable(tileX, tileY)) continue;
 
-        // Depth-based z-ordering (standard top-down RPG):
-        //   Tiles BELOW character (higher Y) → render IN FRONT  → covers any foot overlap
-        //   Tiles ABOVE/same as character    → render BEHIND    → character shows through
-        const inFront = tileY > charTile.y;
+        // Only render overlays for tiles that need to appear IN FRONT of the character.
+        // Tiles above/same Y don't need overlays — the character naturally renders on top
+        // of the background there. Rendering unnecessary overlays caused visible
+        // distortion because the overlay image couldn't align pixel-perfectly with the
+        // background (different resizeMode pipelines, rounding, etc.).
+        if (tileY <= charTile.y) continue;
 
-        // Calculate screen position for this tile
-        const screenX = Math.round(dims.offsetX + tileX * dims.tileDisplaySize);
-        const screenY = Math.round(dims.offsetY + tileY * dims.tileDisplaySize);
-        const tileSize = Math.ceil(dims.tileDisplaySize) + 1; // +1 to cover subpixel rounding gaps
+        // Calculate screen position for this tile — no rounding so the fractional
+        // position matches the native "contain" layout of the background image.
+        const screenX = dims.offsetX + tileX * dims.tileDisplaySize;
+        const screenY = dims.offsetY + tileY * dims.tileDisplaySize;
 
         overlays.push(
           <View
@@ -3456,23 +3546,26 @@ export default function BuildScreen() {
               position: 'absolute',
               left: screenX,
               top: screenY,
-              width: tileSize,
-              height: tileSize,
+              width: dims.tileDisplaySize,
+              height: dims.tileDisplaySize,
               overflow: 'hidden',
-              zIndex: inFront ? 1001 : 999,
-              elevation: inFront ? 101 : 99,
+              zIndex: 1001,
+              elevation: 101,
             }}
           >
+            {/* Use the full container size + resizeMode="contain" so the image goes
+                through the exact same native scaling pipeline as the ImageBackground,
+                guaranteeing pixel-perfect alignment. */}
             <Image
               source={currentMap.image}
               style={{
                 position: 'absolute',
-                left: -(tileX * dims.tileDisplaySize),
-                top: -(tileY * dims.tileDisplaySize),
-                width: dims.displayedWidth,
-                height: dims.displayedHeight,
+                left: -screenX,
+                top: -screenY,
+                width: contentSize.width,
+                height: contentSize.height,
               }}
-              resizeMode="stretch"
+              resizeMode="contain"
             />
           </View>
         );
@@ -3480,6 +3573,83 @@ export default function BuildScreen() {
     }
 
     return overlays;
+  };
+
+  // ─── Render NPCs (static workers) on the current map ──────────────
+  const renderNPCs = () => {
+    const npcs = NPC_POSITIONS[currentMapId];
+    if (!npcs || npcs.length === 0 || !collisionSystem.initialized) return null;
+
+    const dims = getMapDisplayDimensions();
+    if (!dims || dims.tileDisplaySize <= 0) return null;
+
+    const charSize = getCharSize();
+    const CHAR_VISUAL_SCALE = 0.9; // Same scale as the player character
+    const FRAME_W = 48;
+    const FRAME_H = 90;
+    const TOTAL_FRAMES = 24;
+    const spriteScale = (charSize * CHAR_VISUAL_SCALE) / FRAME_W;
+    const scaledFrameW = FRAME_W * spriteScale;
+    const scaledFrameH = FRAME_H * spriteScale;
+    const halfChar = charSize / 2;
+
+    // Get character tile for depth sorting
+    const charTile = collisionSystem.pixelsToTiles(
+      characterPosition.x, characterPosition.y,
+      contentSize.width, contentSize.height
+    );
+
+    return npcs.map((npc) => {
+      const spriteSource = NPC_SPRITES[npc.sprite];
+      if (!spriteSource) return null;
+
+      // Idle frame (frame 0) for the NPC's facing direction
+      const dirOffset = SPRITE_CONFIG.directions[npc.direction] ?? SPRITE_CONFIG.directions.down;
+      const npcSpriteX = -(dirOffset * FRAME_W);
+
+      // Convert tile position → screen pixel position (center of tile)
+      const pixelPos = collisionSystem.tilesToPixels(
+        npc.tileX, npc.tileY,
+        contentSize.width, contentSize.height
+      );
+      const npcLeft = pixelPos.x - halfChar;
+      const npcTop  = pixelPos.y - halfChar;
+
+      // Depth: NPC below player → in front; NPC above/same → behind
+      const inFront = npc.tileY > charTile.y;
+      const npcZ = inFront ? 1001 : 999;
+
+      return (
+        <View
+          key={`npc-${npc.id}`}
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            width: charSize,
+            height: charSize,
+            left: npcLeft,
+            top: npcTop,
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            overflow: 'visible',
+            zIndex: npcZ,
+            elevation: inFront ? 101 : 99,
+          }}
+        >
+          <View style={{ width: scaledFrameW, height: scaledFrameH, overflow: 'hidden' }}>
+            <Image
+              source={spriteSource}
+              style={{
+                width: FRAME_W * TOTAL_FRAMES * spriteScale,
+                height: FRAME_H * spriteScale,
+                transform: [{ translateX: npcSpriteX * spriteScale }],
+              }}
+              resizeMode="cover"
+            />
+          </View>
+        </View>
+      );
+    });
   };
 
   // Render map content based on current map
@@ -3494,7 +3664,7 @@ export default function BuildScreen() {
     
     const renderCharacter = () => {
       const charSize = getCharSize();
-      const CHAR_VISUAL_SCALE = 0.8; // Visual scale: <1 = smaller, 1 = full tile size
+      const CHAR_VISUAL_SCALE = 0.9; // Visual scale: <1 = smaller, 1 = full tile size
       const FRAME_W = 48;  // Sprite frame width in source image
       const FRAME_H = 90;  // Sprite frame height in source image
       const TOTAL_FRAMES = 24;
@@ -3546,6 +3716,9 @@ export default function BuildScreen() {
               {/* Location Collision Overlays - Debug visualization */}
               {renderLocationOverlays()}
 
+              {/* NPC Workers */}
+              {renderNPCs()}
+
               {/* Character with Sprite Animation */}
               {renderCharacter()}
 
@@ -3570,6 +3743,9 @@ export default function BuildScreen() {
                 <Text style={styles.placeholderMapTitle}>{currentMap.name}</Text>
                 <Text style={styles.placeholderMapHint}>Tap to move around</Text>
               </View>
+
+              {/* NPC Workers */}
+              {renderNPCs()}
 
               {/* Character with Sprite Animation */}
               {renderCharacter()}
@@ -7262,7 +7438,7 @@ export default function BuildScreen() {
             {tutorialActive && gameMode === 'tutorial' && (
               <View style={{ backgroundColor: '#FFF3E0', borderRadius: 10, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#FF9800' }}>
                 <Text style={{ fontSize: 13, color: '#E65100', textAlign: 'center', fontWeight: '600' }}>
-                  🎓 Practice logging! Enter any amount and tap Save. This won't be saved to your records.
+                  🎓 Practice logging! Enter any amount and tap Log. This won't be saved to your records.
                 </Text>
               </View>
             )}
@@ -7585,7 +7761,7 @@ export default function BuildScreen() {
                   disabled={isSubmitting}
                 >
                   <Text style={[styles.buttonText, styles.submitButtonText]}>
-                    {isSubmitting ? 'Saving...' : `Save Expense ₱${expenseAmount || '0'}`}
+                    {isSubmitting ? 'Logging...' : `Log Expense ₱${expenseAmount || '0'}`}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -8338,7 +8514,7 @@ export default function BuildScreen() {
                   disabled={isSubmitting}
                 >
                   <Text style={[styles.buttonText, styles.submitButtonText]}>
-                    {isSubmitting ? 'Saving...' : 'Save ₱' + (expenseAmount || '0')}
+                    {isSubmitting ? 'Logging...' : 'Log ₱' + (expenseAmount || '0')}
                   </Text>
                 </TouchableOpacity>
               </View>
