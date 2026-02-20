@@ -1,13 +1,9 @@
 // NVIDIA API configuration for Llama model
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DebugUtils from '../utils/DebugUtils';
-import { ChatMemoryManager } from '../services/ChatMemoryManager';
-import { ErrorRecoveryManager } from '../services/ErrorRecoveryManager';
 import { BudgetAlertManager } from '../services/BudgetAlertManager';
 
 // Initialize service instances
-const chatMemoryManager = new ChatMemoryManager();
-const errorRecoveryManager = new ErrorRecoveryManager();
 const budgetAlertManager = new BudgetAlertManager();
 
 // NVIDIA API configuration
@@ -15,10 +11,10 @@ const NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1";
 
 // Ordered list of models to try — if the primary is DEGRADED, fall back to the next
 const NVIDIA_MODELS = [
-  "deepseek-ai/deepseek-v3.2",              // Primary: strong reasoning + thinking mode
-  "nvidia/llama-3.1-nemotron-ultra-253b-v1", // Fallback 1
-  "meta/llama-3.3-70b-instruct",             // Fallback 2
-  "meta/llama-3.1-8b-instruct",              // Fallback 3: lightweight
+  "meta/llama-3.3-70b-instruct",             // Primary model: powerful but may be less available
+  "nvidia/llama-3.1-nemotron-ultra-253b-v1", // Fallback 1: very powerful, may have better availability than the primary
+  "meta/llama-3.1-8b-instruct",           // Fallback 2: smaller, more available model
+  "deepseek-ai/deepseek-v3.2",           // Fallback 3: supports thinking mode, may be more robust
 ];
 const NVIDIA_MODEL = NVIDIA_MODELS[0];
 
@@ -186,19 +182,11 @@ export const getChatCompletion = async (messages, options = {}) => {
       responseTime
     });
     
-    // Use error recovery system
-    const recovery = await errorRecoveryManager.handleError('nvidia_api_error', {
-      error: error.message,
-      responseTime,
-      messageCount: messages.length
-    }, { messages });
+    // Log error for debugging
+    DebugUtils.warn('NVIDIA_API', 'API error, returning fallback response');
     
-    if (recovery.success && recovery.type === 'local_fallback') {
-      // Return a basic fallback response
-      return "I'm having trouble connecting to my AI services, but I can still help with basic expense tracking. Please try again or use simpler commands.";
-    }
-    
-    throw error;
+    // Return a basic fallback response
+    return "I'm having trouble connecting to my AI services, but I can still help with basic expense tracking. Please try again or use simpler commands.";
   }
 };
 
@@ -433,7 +421,7 @@ Focus on: spending patterns, budget adherence, category-specific tips, and Filip
 
     const response = await getChatCompletion(messages, {
       temperature: 0.3,
-      max_tokens: 1200, // Increased from 800 to allow complete responses
+      max_tokens: 4096, // Increased to prevent truncated JSON responses
       frequency_penalty: 0.3,
       presence_penalty: 0.2
     });
@@ -469,12 +457,6 @@ Focus on: spending patterns, budget adherence, category-specific tips, and Filip
       DebugUtils.error('NVIDIA_AI', 'AI response parsing failed', parseError);
       DebugUtils.log('NVIDIA_AI', 'Raw response that failed to parse', { response: response.substring(0, 200) });
       
-      // Use error recovery for parsing failures
-      const recovery = await errorRecoveryManager.handleError('ai_parsing_error', {
-        response,
-        parseError: parseError.message
-      }, {});
-      
       // Fallback to manual insights
       insights = generateFallbackInsights(expenses, budget);
     }
@@ -487,12 +469,6 @@ Focus on: spending patterns, budget adherence, category-specific tips, and Filip
 
   } catch (error) {
     DebugUtils.error('NVIDIA_AI', 'Error analyzing expenses with AI', error);
-    
-    // Use error recovery system
-    await errorRecoveryManager.handleError('ai_analysis_error', {
-      error: error.message,
-      expenseCount: expenses.length
-    }, {});
     
     return generateFallbackInsights(expenses, budget);
   }
@@ -600,7 +576,7 @@ Focus on: Filipino student context, practical savings tips, budget optimization,
 
     const response = await getChatCompletion(messages, {
       temperature: 0.3,
-      max_tokens: 1500, // Increased from 800 to allow complete responses
+      max_tokens: 4096, // Increased to prevent truncated JSON responses
       frequency_penalty: 0.5,
       presence_penalty: 0.3
     });
@@ -637,12 +613,6 @@ Focus on: Filipino student context, practical savings tips, budget optimization,
       DebugUtils.error('NVIDIA_AI', 'Recommendation parsing failed', parseError);
       DebugUtils.log('NVIDIA_AI', 'Raw response that failed to parse', { response: response.substring(0, 200) });
       
-      // Use error recovery
-      await errorRecoveryManager.handleError('ai_parsing_error', {
-        response,
-        parseError: parseError.message
-      }, {});
-      
       recommendations = generateFallbackRecommendations(expenses, budget);
     }
 
@@ -653,12 +623,6 @@ Focus on: Filipino student context, practical savings tips, budget optimization,
 
   } catch (error) {
     DebugUtils.error('NVIDIA_AI', 'Error getting AI recommendations', error);
-    
-    // Use error recovery system
-    await errorRecoveryManager.handleError('ai_recommendation_error', {
-      error: error.message,
-      expenseCount: expenses.length
-    }, {});
     
     return generateFallbackRecommendations(expenses, budget);
   }
@@ -715,14 +679,16 @@ const extractJSON = (response) => {
     // Sanitize: strip comments and invalid characters BEFORE any parsing
     responseStr = sanitizeJSONString(responseStr);
     
-    // Check for truncated response first
+    // Check for truncated response — log warning but don't throw yet;
+    // let the repair logic below attempt to salvage partial JSON.
     if (responseStr.trim().endsWith(',') || 
         responseStr.trim().endsWith('"') || 
         (!responseStr.trim().endsWith(']') && !responseStr.trim().endsWith('}'))) {
-      DebugUtils.warn('NVIDIA_AI', 'Response appears to be truncated', { 
+      DebugUtils.warn('NVIDIA_AI', 'Response appears to be truncated, attempting repair', { 
         responseEnd: responseStr.slice(-50) 
       });
-      throw new Error('Response is truncated - insufficient tokens');
+      // fall through to repair logic
+      throw new Error('Response is truncated - attempting repair');
     }
     
     // First, try to parse as-is
@@ -755,10 +721,31 @@ const extractJSON = (response) => {
         incomplete: incomplete.substring(0, 100) 
       });
       
-      // Try to complete the JSON by adding missing properties and closing brackets
-      let completed = incomplete;
+      // Strategy: extract all fully-formed objects from the truncated array,
+      // discard the last partial object, and close the array.
+      const fullObjectsMatch = incomplete.match(/\{[^{}]*\}/g);
+      if (fullObjectsMatch && fullObjectsMatch.length > 0) {
+        // Validate each extracted object and keep only parseable ones
+        const validObjects = fullObjectsMatch.filter(obj => {
+          try { JSON.parse(obj); return true; } catch { return false; }
+        });
+        if (validObjects.length > 0) {
+          const repaired = '[' + validObjects.join(',') + ']';
+          try {
+            JSON.parse(repaired);
+            DebugUtils.log('NVIDIA_AI', 'Successfully repaired truncated JSON', {
+              objectsRecovered: validObjects.length,
+              objectsDiscarded: fullObjectsMatch.length - validObjects.length
+            });
+            return repaired;
+          } catch (e) {
+            DebugUtils.warn('NVIDIA_AI', 'Repaired JSON still invalid', { error: e.message });
+          }
+        }
+      }
       
-      // If it ends with a comma or quote, try to complete the object
+      // Fallback: try to complete the JSON by adding missing properties and closing brackets
+      let completed = incomplete;
       if (completed.trim().endsWith(',') || completed.trim().endsWith('"')) {
         // Add missing icon and color if not present
         if (!completed.includes('"icon"')) {
@@ -771,7 +758,7 @@ const extractJSON = (response) => {
         
         try {
           JSON.parse(completed);
-          DebugUtils.log('NVIDIA_AI', 'Successfully completed truncated JSON');
+          DebugUtils.log('NVIDIA_AI', 'Successfully completed truncated JSON with field repair');
           return completed;
         } catch (e) {
           DebugUtils.warn('NVIDIA_AI', 'Failed to complete JSON', { error: e.message });
@@ -1170,38 +1157,20 @@ export const processExpenseForAlerts = async (userId, expense, currentBudget, ca
 // Memory-optimized conversation context
 export const getOptimizedConversationContext = async (userId, sessionId, limit = 10) => {
   try {
-    const result = await chatMemoryManager.loadMessages(userId, sessionId, 0, limit);
-    
-    // Return only essential context for AI processing
-    return result.messages.map(msg => ({
-      role: msg.isBot ? 'assistant' : 'user',
-      content: msg.text,
-      timestamp: msg.timestamp
-    }));
+    // Chat memory service removed — return empty context
+    return [];
   } catch (error) {
     DebugUtils.error('NVIDIA_AI', 'Error getting conversation context', error);
     return [];
   }
 };
 
-// Enhanced error recovery for AI failures
+// Error recovery for AI failures
 export const handleAIFailure = async (errorType, context) => {
-  try {
-    const recovery = await errorRecoveryManager.handleError(errorType, context, {});
-    
-    if (recovery.success) {
-      return {
-        success: true,
-        fallbackResponse: recovery.response.text,
-        recoveryType: recovery.type,
-        requiresUserAction: recovery.response.requiresUserAction,
-        actionType: recovery.response.actionType
-      };
-    }
-    
-    return { success: false, error: 'Recovery failed' };
-  } catch (error) {
-    DebugUtils.error('NVIDIA_AI', 'Error in AI failure recovery', error);
-    return { success: false, error: error.message };
-  }
+  DebugUtils.warn('NVIDIA_AI', `AI failure: ${errorType}`, context);
+  return {
+    success: false,
+    error: 'Recovery service not available',
+    fallbackResponse: 'Service temporarily unavailable. Please try again.',
+  };
 };

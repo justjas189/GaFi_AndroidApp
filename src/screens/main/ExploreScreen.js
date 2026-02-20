@@ -15,31 +15,23 @@ import { useTheme } from '../../context/ThemeContext';
 import MascotImage from '../../components/MascotImage';
 
 const { width } = Dimensions.get('window');
-const cardWidth = (width - 60) / 2; // 2 columns with padding
+const cardWidth = (width - 56) / 2; // 2 columns: 20px padding each side + 16px gap
 
 const ExploreScreen = ({ navigation }) => {
   const { theme } = useTheme();
 
   // Define your explore categories/features
   const exploreItems = [
-    {
-      id: '1',
-      title: 'Budget',
-      subtitle: 'Track your budget',
-      icon: 'wallet',
-      color: '#4CAF50',
-      screen: 'Budget'
-    },
+    // {
+    //   id: '1',
+    //   title: 'Budget',
+    //   subtitle: 'Track your budget',
+    //   icon: 'wallet',
+    //   color: '#4CAF50',
+    //   screen: 'Budget'
+    // },
     {
       id: '2',
-      title: 'Predictions',
-      subtitle: 'Spending forecasts',
-      icon: 'analytics',
-      color: '#3498DB',
-      screen: 'DataPrediction'
-    },
-    {
-      id: '3',
       title: 'Leaderboard',
       subtitle: 'Compare savings',
       icon: 'podium',
@@ -47,21 +39,29 @@ const ExploreScreen = ({ navigation }) => {
       screen: 'Leaderboard'
     },
     {
-      id: '4',
+      id: '3',
       title: 'Achievements',
       subtitle: 'Your milestones',
       icon: 'ribbon',
       color: '#FFEB3B',
       screen: 'Achievements'
     },
+    // {
+    //   id: '4',
+    //   title: 'Gamification',
+    //   subtitle: 'Fun challenges',
+    //   icon: 'game-controller',
+    //   color: '#E91E63',
+    //   screen: 'Gamification'
+    // }
     {
       id: '5',
-      title: 'Gamification',
-      subtitle: 'Fun challenges',
-      icon: 'game-controller',
-      color: '#E91E63',
-      screen: 'Gamification'
-    }
+      title: 'Manage Friends',
+      subtitle: 'Add & view friends',
+      icon: 'people',
+      color: '#2196F3',
+      screen: 'ManageFriends'
+    },
   ];
 
   const handleCardPress = (item) => {
@@ -109,17 +109,6 @@ const ExploreScreen = ({ navigation }) => {
         <View style={styles.grid}>
           {exploreItems.map(item => renderExploreCard(item))}
         </View>
-
-        {/* Optional: Add a promotional banner or featured content */}
-        <View style={[styles.bannerCard, { backgroundColor: theme.colors.primary + '10' }]}>
-          <Ionicons name="bulb" size={40} color={theme.colors.primary} />
-          <Text style={[styles.bannerTitle, { color: theme.colors.text }]}>
-            New to GaFI?
-          </Text>
-          <Text style={[styles.bannerText, { color: theme.colors.textSecondary }]}>
-            Start by setting your first savings goal and tracking your daily expenses!
-          </Text>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -154,17 +143,20 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    gap: 16,
   },
   card: {
     width: cardWidth,
-    padding: 16,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
     borderRadius: 16,
-    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -173,12 +165,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   iconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
   },
   cardTitle: {
     fontSize: 16,
@@ -190,24 +182,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
   },
-  bannerCard: {
-    padding: 20,
-    borderRadius: 16,
-    alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 20,
-  },
-  bannerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  bannerText: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
+
 });
 
 export default ExploreScreen;

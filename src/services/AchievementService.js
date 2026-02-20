@@ -377,7 +377,7 @@ export class AchievementService {
             await this.awardAchievement(userId, 'explorer_school');
             newAchievements.push(definitions.explorer_school);
           }
-          if (locationId === 'mall' && !existingIds.includes('explorer_mall')) {
+          if ((locationId === 'mall' || locationId === 'mall_1f') && !existingIds.includes('explorer_mall')) {
             await this.awardAchievement(userId, 'explorer_mall');
             newAchievements.push(definitions.explorer_mall);
           }

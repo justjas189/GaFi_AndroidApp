@@ -5,13 +5,16 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { View, Text, ActivityIndicator } from 'react-native';
-import { NotificationService } from './src/MonT/services/NotificationService';
+import { LogLevel, OneSignal } from 'react-native-onesignal';
+import Constants from 'expo-constants';
 
 // Enhanced Components & Utilities
 import ErrorBoundary from './src/components/ErrorBoundary';
+import GlobalDraggableKoin from './src/components/GlobalDraggableKoin';
 import DebugUtils from './src/utils/DebugUtils';
 import PerformanceManager from './src/utils/PerformanceManager';
 import SecurityManager from './src/utils/SecurityManager';
@@ -29,10 +32,15 @@ import { navigationRef } from './src/navigation/navigationRef';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { DataProvider } from './src/context/DataContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
-import { ChatbotProvider } from './src/context/EnhancedChatbotContext';
-import { MascotProvider } from './src/MonT/context/MascotContext';
 
 const Stack = createStackNavigator();
+
+// Only show the Koin bubble when the user is authenticated
+const AuthenticatedBubble = () => {
+  const { userToken, userInfo } = useAuth();
+  if (!userToken || !userInfo) return null;
+  return <GlobalDraggableKoin />;
+};
 
 // Simple loading screen component
 const LoadingScreen = ({ message }) => (
@@ -192,6 +200,17 @@ export default function App() {
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
+    // 1. Initialize OneSignal
+    OneSignal.Debug.setLogLevel(LogLevel.Verbose); // Remove this before production
+    OneSignal.initialize(Constants.expoConfig.extra.oneSignalAppId);
+
+    // 2. Request Permission (Required for iOS)
+    OneSignal.Notifications.requestPermission(true);
+
+    // 3. Listen for Notifications (Optional: Handle what happens when clicked)
+    OneSignal.Notifications.addEventListener('click', (event) => {
+      console.log('OneSignal: notification clicked:', event);
+    });
     initializeApp();
   }, []);
 
@@ -214,23 +233,9 @@ export default function App() {
       // Initialize security manager
       await SecurityManager.initialize();
       DebugUtils.debug('APP', 'Security manager initialized');
-      
-      // Initialize notifications
-      NotificationService.initialize();
-      // Handle notification taps
-      const subscription = NotificationService.addNotificationResponseListener(response => {
-        const data = response.notification.request.content.data;
-        
-        if (data.screen) {
-          // Navigate to appropriate screen
-          navigationRef.current?.navigate(data.screen);
-        }
-      });
 
       DebugUtils.log('APP', 'Application initialization completed');
       setIsInitialized(true);
-      
-      return () => subscription?.remove();
     } catch (error) {
       DebugUtils.error('APP', 'Failed to initialize application', error);
       // Still allow app to continue
@@ -248,19 +253,21 @@ export default function App() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
           <ThemeProvider>
+            <BottomSheetModalProvider>
             <ThemedNavigationContainer>
               <AuthProvider>
                 <DataProvider>
-                  <ChatbotProvider>
-                    <MascotProvider>
-                      <StatusBar style="auto" />
+                    <StatusBar style="auto" />
+                    <View style={{ flex: 1 }}>
                       <AppNavigator />
-                    </MascotProvider>
-                  </ChatbotProvider>
+                      <AuthenticatedBubble />
+                    </View>
                 </DataProvider>
               </AuthProvider>
             </ThemedNavigationContainer>
-          </ThemeProvider>        </SafeAreaProvider>
+            </BottomSheetModalProvider>
+          </ThemeProvider>
+        </SafeAreaProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>
   );

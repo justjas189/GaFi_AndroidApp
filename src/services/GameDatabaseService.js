@@ -84,6 +84,7 @@ class GameDatabaseService {
     categorySpending = null,
     totalAllocated = null,
     actualSavingsPercent = null,
+    goalsData = null,
   }) {
     try {
       const updates = {
@@ -96,6 +97,7 @@ class GameDatabaseService {
       if (categorySpending !== null) updates.category_spending = categorySpending;
       if (totalAllocated !== null) updates.total_allocated = totalAllocated;
       if (actualSavingsPercent !== null) updates.actual_savings_percent = actualSavingsPercent;
+      if (goalsData !== null) updates.goals_data = goalsData;
 
       const { error } = await supabase
         .from('story_mode_sessions')
@@ -193,6 +195,11 @@ class GameDatabaseService {
     savingsAmount = null,
     categorySpending = null,
     goalsProgress = null,
+    customRules = null,
+    customGoals = null,
+    customSavingsTarget = null,
+    modeType = null,
+    endDate = null,
   }) {
     try {
       const updates = {
@@ -204,6 +211,11 @@ class GameDatabaseService {
       if (savingsAmount !== null) updates.savings_amount = savingsAmount;
       if (categorySpending !== null) updates.category_spending = categorySpending;
       if (goalsProgress !== null) updates.goals_progress = goalsProgress;
+      if (customRules !== null) updates.custom_rules = customRules;
+      if (customGoals !== null) updates.custom_goals = customGoals;
+      if (customSavingsTarget !== null) updates.custom_savings_target = Math.min(customSavingsTarget, 100);
+      if (modeType !== null) updates.mode_type = modeType;
+      if (endDate !== null) updates.end_date = endDate;
 
       const { error } = await supabase
         .from('custom_mode_sessions')
@@ -321,6 +333,7 @@ class GameDatabaseService {
 
   /**
    * Upsert character selection and unlocked items.
+   * If selectedCharacter is undefined, only unlocked_characters is updated.
    */
   async saveCharacterCustomization({
     selectedCharacter,
@@ -331,18 +344,24 @@ class GameDatabaseService {
       const userId = await this._getUserId();
       if (!userId) throw new Error('Not authenticated');
 
+      const upsertData = {
+        user_id: userId,
+        unlocked_characters: unlockedCharacters,
+        equipped_outfit: equippedOutfit,
+        updated_at: new Date().toISOString(),
+      };
+
+      // Only set selected_character if explicitly provided
+      if (selectedCharacter !== undefined) {
+        upsertData.selected_character = selectedCharacter;
+      }
+
       const { error } = await supabase
         .from('character_customizations')
-        .upsert({
-          user_id: userId,
-          selected_character: selectedCharacter,
-          unlocked_characters: unlockedCharacters,
-          equipped_outfit: equippedOutfit,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id' });
+        .upsert(upsertData, { onConflict: 'user_id' });
 
       if (error) throw error;
-      console.log(`✅ Character customization saved (selected=${selectedCharacter})`);
+      console.log(`✅ Character customization saved (selected=${selectedCharacter || 'unchanged'}, unlocked=${unlockedCharacters.length})`);
     } catch (err) {
       console.error('❌ saveCharacterCustomization error:', err.message);
     }
@@ -366,6 +385,66 @@ class GameDatabaseService {
       return data;
     } catch (err) {
       console.error('❌ loadCharacterCustomization error:', err.message);
+      return null;
+    }
+  }
+
+  // ─── 5b. Store purchases (persisted in customization_data JSONB) ──
+
+  /**
+   * Save store purchase data (purchased item IDs + spent XP) to Supabase.
+   * Uses the customization_data JSONB column on character_customizations.
+   */
+  async saveStorePurchases({ purchasedItems, spentXP, unlockedCharacters }) {
+    try {
+      const userId = await this._getUserId();
+      if (!userId) throw new Error('Not authenticated');
+
+      const { error } = await supabase
+        .from('character_customizations')
+        .upsert({
+          user_id: userId,
+          unlocked_characters: unlockedCharacters,
+          customization_data: {
+            purchased_items: purchasedItems,
+            spent_xp: spentXP,
+          },
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+
+      if (error) throw error;
+      console.log(`✅ Store purchases saved to Supabase (${purchasedItems.length} items, ${spentXP} XP spent)`);
+    } catch (err) {
+      console.error('❌ saveStorePurchases error:', err.message);
+    }
+  }
+
+  /**
+   * Load store purchase data from Supabase.
+   * Returns { purchasedItems, spentXP, unlockedCharacters } or null.
+   */
+  async loadStorePurchases() {
+    try {
+      const userId = await this._getUserId();
+      if (!userId) return null;
+
+      const { data, error } = await supabase
+        .from('character_customizations')
+        .select('unlocked_characters, customization_data')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) return null;
+
+      const customData = data.customization_data || {};
+      return {
+        purchasedItems: customData.purchased_items || [],
+        spentXP: customData.spent_xp || 0,
+        unlockedCharacters: data.unlocked_characters || ['girl', 'jasper'],
+      };
+    } catch (err) {
+      console.error('❌ loadStorePurchases error:', err.message);
       return null;
     }
   }
@@ -474,9 +553,17 @@ class GameDatabaseService {
       if (userLevels?.story_level_1_completed) unlocked.push(2);
       if (userLevels?.story_level_2_completed) unlocked.push(3);
 
+      // Derive intro-seen flags from user_levels
+      const introSeen = {
+        1: !!userLevels?.intro_seen_level_1,
+        2: !!userLevels?.intro_seen_level_2,
+        3: !!userLevels?.intro_seen_level_3,
+      };
+
       console.log('📦 Loaded game progress:', {
         hasUserLevels: !!userLevels,
         unlockedLevels: unlocked,
+        introSeen,
         selectedCharacter: character?.selected_character || 'girl',
         tutorialCompleted: tutorial?.tutorial_completed || false,
         activeStorySession: activeStory?.id || null,
@@ -490,6 +577,7 @@ class GameDatabaseService {
         activeStory,
         activeCustom,
         unlockedLevels: unlocked,
+        introSeen,
       };
     } catch (err) {
       console.error('❌ loadGameProgress error:', err.message);
@@ -594,6 +682,190 @@ class GameDatabaseService {
       if (updateErr) throw updateErr;
     } catch (err) {
       console.error('❌ incrementUserLevelStats error:', err.message);
+    }
+  }
+
+  // ─── 10. Intro-seen flags (one-time level intros) ───────
+
+  /**
+   * Mark a story level intro as seen for the current user.
+   * Persists to the `user_levels` table (intro_seen_level_X column).
+   */
+  async markIntroSeen(level) {
+    try {
+      const userId = await this._getUserId();
+      if (!userId) return;
+
+      const col = `intro_seen_level_${level}`;
+      // Ensure the row exists first
+      await supabase
+        .from('user_levels')
+        .upsert(
+          { user_id: userId },
+          { onConflict: 'user_id', ignoreDuplicates: true }
+        );
+
+      const { error } = await supabase
+        .from('user_levels')
+        .update({ [col]: true, updated_at: new Date().toISOString() })
+        .eq('user_id', userId);
+
+      if (error) throw error;
+      console.log(`✅ Marked intro seen for level ${level}`);
+    } catch (err) {
+      console.error('❌ markIntroSeen error:', err.message);
+    }
+  }
+
+  /**
+   * Load which level intros have been seen from the DB.
+   * Returns an object like { 1: true, 2: false, 3: false }.
+   */
+  async getIntroSeenLevels() {
+    try {
+      const userId = await this._getUserId();
+      if (!userId) return {};
+
+      const { data, error } = await supabase
+        .from('user_levels')
+        .select('intro_seen_level_1, intro_seen_level_2, intro_seen_level_3')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) return {};
+
+      return {
+        1: !!data.intro_seen_level_1,
+        2: !!data.intro_seen_level_2,
+        3: !!data.intro_seen_level_3,
+      };
+    } catch (err) {
+      console.error('❌ getIntroSeenLevels error:', err.message);
+      return {};
+    }
+  }
+
+  // ─── 11. Find active session by level ─────────────────────
+
+  /**
+   * Find an in-progress story session for a specific level.
+   * Used to resume instead of creating duplicates.
+   */
+  async findActiveStorySession(level) {
+    try {
+      const userId = await this._getUserId();
+      if (!userId) return null;
+
+      const { data, error } = await supabase
+        .from('story_mode_sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('level', level)
+        .eq('status', 'in_progress')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error('❌ findActiveStorySession error:', err.message);
+      return null;
+    }
+  }
+
+  /**
+   * Find ANY in-progress story session (regardless of level).
+   * Used by the 'Single Active Session' model to auto-resume.
+   */
+  async findAnyActiveStorySession() {
+    try {
+      const userId = await this._getUserId();
+      if (!userId) return null;
+
+      const { data, error } = await supabase
+        .from('story_mode_sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'in_progress')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error('❌ findAnyActiveStorySession error:', err.message);
+      return null;
+    }
+  }
+
+  // ─── 12. Abandon sessions ─────────────────────────────────
+
+  /**
+   * Mark a story session as 'abandoned'.
+   * Resets progress for the level — the user can start fresh.
+   */
+  async abandonStorySession(sessionId) {
+    try {
+      const { error } = await supabase
+        .from('story_mode_sessions')
+        .update({
+          status: 'abandoned',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', sessionId);
+
+      if (error) throw error;
+      console.log(`✅ Story session ${sessionId} abandoned`);
+    } catch (err) {
+      console.error('❌ abandonStorySession error:', err.message);
+    }
+  }
+
+  /**
+   * Mark a custom session as 'abandoned'.
+   */
+  async abandonCustomSession(sessionId) {
+    try {
+      const { error } = await supabase
+        .from('custom_mode_sessions')
+        .update({
+          status: 'abandoned',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', sessionId);
+
+      if (error) throw error;
+      console.log(`✅ Custom session ${sessionId} abandoned`);
+    } catch (err) {
+      console.error('❌ abandonCustomSession error:', err.message);
+    }
+  }
+
+  /**
+   * Find an in-progress custom mode session.
+   */
+  async findActiveCustomSession() {
+    try {
+      const userId = await this._getUserId();
+      if (!userId) return null;
+
+      const { data, error } = await supabase
+        .from('custom_mode_sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'in_progress')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error('❌ findActiveCustomSession error:', err.message);
+      return null;
     }
   }
 

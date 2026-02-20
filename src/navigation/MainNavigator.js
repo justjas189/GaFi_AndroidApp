@@ -4,9 +4,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemeContext } from '../context/ThemeContext';
-import GlobalDraggableMonT from '../components/GlobalDraggableMonT';
 
-// Import only core screens that are known to work
+// Core screens
 import HomeScreen from '../screens/main/HomeScreen';
 import ExpenseScreen from '../screens/main/ExpenseScreen';
 import ExpenseGraphScreen from '../screens/main/ExpenseGraphScreen';
@@ -15,20 +14,18 @@ import NoteScreen from '../screens/main/NoteScreen';
 import AddNoteScreen from '../screens/main/AddNoteScreen';
 import SettingsScreen from '../screens/main/SettingsScreen';
 import LearnScreen from '../screens/main/LearnScreen';
-import SavingsGoalsScreen from '../screens/main/SavingsGoalsScreen';
 import GamificationScreen from '../screens/main/GamificationScreen';
-import ChatScreen from '../MonT/components/EnhancedChatWithMascot';
-import ChatHistorySettingsScreen from '../screens/main/ChatHistorySettingsScreen';
 import NotificationSettings from '../components/NotificationSettings';
 import NotificationTestScreen from '../screens/main/NotificationTestScreen';
-import MonTBubbleTestScreen from '../screens/test/MonTBubbleTestScreen';
 import GameScreen from '../screens/main/GameScreen';
 import ExploreScreen from '../screens/main/ExploreScreen';
+import ProfileScreen from '../screens/main/ProfileScreen';
 import BudgetManagementScreen from '../screens/main/BudgetManagementScreen';
 import LeaderboardScreen from '../screens/main/LeaderboardScreen';
 import AchievementDashboard from '../screens/main/AchievementDashboard';
 import FriendRequestsScreen from '../screens/main/FriendRequestsScreen';
 import FriendsListScreen from '../screens/main/FriendsListScreen';
+import ManageFriendsScreen from '../screens/main/ManageFriendsScreen';
 import DataPredictionScreen from '../screens/main/DataPrediction';
 
 const Stack = createStackNavigator();
@@ -76,24 +73,16 @@ const TabNavigator = () => {
         tabBarIcon: ({ focused, color, size }) => {
           let iconName;
 
-          if (route.name === 'Home') {
-            iconName = focused ? 'wallet' : 'wallet-outline';
+          if (route.name === 'Game') {
+            iconName = focused ? 'game-controller' : 'game-controller-outline';
           } else if (route.name === 'Expenses') {
             iconName = focused ? 'stats-chart' : 'stats-chart-outline';
-          } else if (route.name === 'Budget') {
-            iconName = focused ? 'card' : 'card-outline';
-          } else if (route.name === 'MonT AI') {
-            iconName = focused ? 'chatbubble' : 'chatbubble-outline';
+          } else if (route.name === 'Predictions') {
+            iconName = focused ? 'analytics' : 'analytics-outline';
           } else if (route.name === 'Explore') {
             iconName = focused ? 'apps' : 'apps-outline';
-          } else if (route.name === 'Learn') {
-            iconName = focused ? 'school' : 'school-outline';
-          } else if (route.name === 'Goals') {
-            iconName = focused ? 'trophy' : 'trophy-outline';
-          } else if (route.name === 'Social') {
-            iconName = focused ? 'people' : 'people-outline';
-          } else if (route.name === 'Game') {
-            iconName = focused ? 'game-controller' : 'game-controller-outline';
+          } else if (route.name === 'Profile') {
+            iconName = focused ? 'person' : 'person-outline';
           }
 
           return <Ionicons name={iconName} size={size} color={color} />;
@@ -111,10 +100,10 @@ const TabNavigator = () => {
       })}
     >
       <Tab.Screen name="Game" component={GameScreen} />
-      <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Expenses" component={ExpenseScreen} />
+      <Tab.Screen name="Predictions" component={DataPredictionScreen} />
       <Tab.Screen name="Explore" component={ExploreScreen} />
-      {/*<Tab.Screen name="MonT AI" component={ChatScreen} />*/}
+      <Tab.Screen name="Profile" component={ProfileScreen} />
       
     </Tab.Navigator>
   );
@@ -133,7 +122,6 @@ const MainNavigator = () => {
         <Stack.Screen name="ExpenseGraph" component={ExpenseGraphScreen} />
         <Stack.Screen name="AddNote" component={AddNoteScreen} />
         <Stack.Screen name="Notes" component={NoteScreen} />
-        <Stack.Screen name="ChatHistorySettings" component={ChatHistorySettingsScreen} />
         <Stack.Screen name="Calendar" component={CalendarScreen} />
         <Stack.Screen name="Settings" component={SettingsScreen} />
         <Stack.Screen name="NotificationSettings" component={NotificationSettings} />
@@ -144,18 +132,10 @@ const MainNavigator = () => {
         <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
         <Stack.Screen name="FriendRequests" component={FriendRequestsScreen} />
         <Stack.Screen name="FriendsList" component={FriendsListScreen} />
-        <Stack.Screen name="DataPrediction" component={DataPredictionScreen} />
-        <Stack.Screen name="OldSavingsGoals" component={SavingsGoalsScreen} />
+        <Stack.Screen name="ManageFriends" component={ManageFriendsScreen} />
+        <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="OldLearn" component={LearnScreen} />
-        
-        {/* Test Screen for MonT Bubble - Remove in production */}
-        {__DEV__ && (
-          <Stack.Screen name="MonTBubbleTest" component={MonTBubbleTestScreen} />
-        )}
       </Stack.Navigator>
-      
-      {/* Global Draggable MonT Chat Bubble - Appears on all screens */}
-      <GlobalDraggableMonT />
     </View>
   );
 };
