@@ -83,6 +83,7 @@ const LeaderboardScreen = ({ navigation }) => {
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [pulseAnim] = useState(new Animated.Value(1));
+  const [showAllRankings, setShowAllRankings] = useState(false);
 
   // Create dynamic styles based on theme
   const styles = createStyles(colors, isDarkMode);
@@ -194,99 +195,55 @@ const LeaderboardScreen = ({ navigation }) => {
     try {
       setLoading(true);
 
-      // Get all users' achievement points from user_achievements table
-      const { data: allUserAchievements, error: achievementsError } = await supabase
-        .from('user_achievements')
-        .select('user_id, points, achievement_id');
+      // Fetch pre-aggregated leaderboard from updated_leaderboard table
+      // This table is readable by all authenticated users (RLS allows SELECT)
+      // and is auto-refreshed by a DB trigger whenever user_achievements changes
+      const { data: lbData, error: lbError } = await supabase
+        .from('updated_leaderboard')
+        .select('user_id, username, full_name, total_points, achievements_count')
+        .order('total_points', { ascending: false });
 
-      if (achievementsError) {
-        console.error('Error fetching achievements:', achievementsError);
+      if (lbError) {
+        console.error('Error fetching updated_leaderboard:', lbError);
       }
 
-      // Aggregate points by user
-      const userPointsMap = {};
-      const userAchievementCountMap = {};
-      
-      (allUserAchievements || []).forEach(achievement => {
-        const oduserId = achievement.user_id;
-        if (!userPointsMap[oduserId]) {
-          userPointsMap[oduserId] = 0;
-          userAchievementCountMap[oduserId] = 0;
-        }
-        userPointsMap[oduserId] += achievement.points || 0;
-        userAchievementCountMap[oduserId] += 1;
+      // Build leaderboard entries
+      const leaderboardData = (lbData || []).map((row, index) => {
+        const displayName = row.full_name || row.username || `Player ${row.user_id.slice(0, 6)}`;
+        const totalXP = row.total_points || 0;
+        const rankTitle = getRankTitle(totalXP);
+
+        return {
+          rank: index + 1,
+          oduserId: row.user_id,
+          name: displayName,
+          totalXP,
+          achievementsUnlocked: row.achievements_count || 0,
+          rankTitle,
+          isCurrentUser: row.user_id === user?.id
+        };
       });
 
-      // Get user profiles
-      const userIds = Object.keys(userPointsMap);
-      let profilesData = [];
+      setLeaderboard(leaderboardData);
 
-      if (userIds.length > 0) {
-        const { data: profiles, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, full_name, username')
-          .in('id', userIds);
-
-        if (!profilesError) {
-          profilesData = profiles || [];
-        }
-      }
-
-      // Build leaderboard
-      const leaderboardData = userIds
-        .map(oduserId => {
-          const profile = profilesData.find(p => p.id === oduserId);
-          const totalXP = userPointsMap[oduserId];
-          const rankTitle = getRankTitle(totalXP);
-          
-          return {
-            rank: 0,
-            oduserId,
-            name: profile?.full_name || profile?.username || `Player ${oduserId.slice(0, 6)}`,
-            totalXP,
-            achievementsUnlocked: userAchievementCountMap[oduserId] || 0,
-            rankTitle,
-            isCurrentUser: oduserId === user?.id
-          };
-        })
-        .sort((a, b) => b.totalXP - a.totalXP)
-        .map((entry, index) => ({ ...entry, rank: index + 1 }));
-
-      // If no data, create sample leaderboard
-      if (leaderboardData.length === 0) {
-        const sampleLeaderboard = [
-          { rank: 1, oduserId: 'sample-1', name: 'ProSaver99', totalXP: 1250, achievementsUnlocked: 12, rankTitle: getRankTitle(1250), isCurrentUser: false },
-          { rank: 2, oduserId: 'sample-2', name: 'BudgetKing', totalXP: 890, achievementsUnlocked: 9, rankTitle: getRankTitle(890), isCurrentUser: false },
-          { rank: 3, oduserId: 'sample-3', name: 'MoneyMaster', totalXP: 650, achievementsUnlocked: 7, rankTitle: getRankTitle(650), isCurrentUser: false },
-          { rank: 4, oduserId: 'sample-4', name: 'SmartSpender', totalXP: 420, achievementsUnlocked: 5, rankTitle: getRankTitle(420), isCurrentUser: false },
-          { rank: 5, oduserId: 'sample-5', name: 'ThriftyTom', totalXP: 280, achievementsUnlocked: 4, rankTitle: getRankTitle(280), isCurrentUser: false },
-        ];
-        setLeaderboard(sampleLeaderboard);
-      } else {
-        setLeaderboard(leaderboardData);
-      }
-
-      // Get current user's stats
+      // Current user stats
       if (user?.id) {
-        const userTotalXP = userPointsMap[user.id] || 0;
-        const userAchievements = userAchievementCountMap[user.id] || 0;
-        const userRank = leaderboardData.find(entry => entry.oduserId === user.id)?.rank || null;
+        const currentEntry = leaderboardData.find(e => e.isCurrentUser);
         const totalAchievements = AchievementService.getAchievementDefinitionsArray().length;
 
         setCurrentUserStats({
-          totalXP: userTotalXP,
-          achievementsUnlocked: userAchievements,
+          totalXP: currentEntry?.totalXP || 0,
+          achievementsUnlocked: currentEntry?.achievementsUnlocked || 0,
           totalAchievements,
-          rank: userRank,
-          rankTitle: getRankTitle(userTotalXP)
+          rank: currentEntry?.rank || null,
+          rankTitle: getRankTitle(currentEntry?.totalXP || 0)
         });
       }
 
-      // Load friends leaderboard
+      // Friends leaderboard
       try {
         const friendsData = await FriendService.getFriendsLeaderboard();
         if (Array.isArray(friendsData) && friendsData.length > 0) {
-          // Transform friends data to match our format
           const friendsWithXP = friendsData.map((friend, index) => ({
             rank: index + 1,
             oduserId: friend.friend_id,
@@ -296,7 +253,7 @@ const LeaderboardScreen = ({ navigation }) => {
             rankTitle: getRankTitle(friend.total_xp || 0),
             isCurrentUser: friend.isCurrentUser
           })).sort((a, b) => b.totalXP - a.totalXP);
-          
+
           setFriendsLeaderboard(friendsWithXP);
         }
       } catch (error) {
@@ -569,6 +526,67 @@ const LeaderboardScreen = ({ navigation }) => {
     </View>
   );
 
+  // === Podium for top 3 ===
+  const renderPodium = (top3) => {
+    if (top3.length === 0) return null;
+    const podiumColors = ['#FFD700', '#C0C0C0', '#CD7F32'];
+    const podiumHeights = [90, 70, 60];
+    // Display order: 2nd, 1st, 3rd
+    const podiumOrder = top3.length >= 3 ? [top3[1], top3[0], top3[2]] : top3;
+    const heightOrder = top3.length >= 3 ? [podiumHeights[1], podiumHeights[0], podiumHeights[2]] : podiumHeights.slice(0, top3.length);
+    const colorOrder = top3.length >= 3 ? [podiumColors[1], podiumColors[0], podiumColors[2]] : podiumColors.slice(0, top3.length);
+    const medalIcons = ['🥇', '🥈', '🥉'];
+
+    return (
+      <View style={styles.podiumContainer}>
+        {podiumOrder.map((player, i) => {
+          if (!player) return null;
+          const rt = player.rankTitle;
+          return (
+            <View key={player.oduserId} style={styles.podiumSlot}>
+              {player.rank === 1 && <Text style={styles.podiumCrown}>👑</Text>}
+              <View style={[styles.podiumAvatar, { backgroundColor: rt.color, borderColor: colorOrder[i] }]}>
+                <Text style={styles.podiumAvatarEmoji}>{rt.icon}</Text>
+              </View>
+              <Text style={[styles.podiumName, player.isCurrentUser && { color: colors.primary }]} numberOfLines={1}>
+                {player.name}
+              </Text>
+              <Text style={styles.podiumScore}>{player.totalXP.toLocaleString()} pts</Text>
+              <Text style={styles.podiumAchievements}>🏆 {player.achievementsUnlocked}</Text>
+              <View style={[styles.podiumBar, { height: heightOrder[i], backgroundColor: colorOrder[i] }]}>
+                <Text style={styles.podiumMedal}>{medalIcons[player.rank - 1]}</Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    );
+  };
+
+  // === Compact row for ranks 4+ ===
+  const renderCompactItem = (player) => (
+    <View
+      key={player.oduserId}
+      style={[styles.compactItem, player.isCurrentUser && styles.currentUserItem]}
+    >
+      <Text style={styles.compactRank}>#{player.rank}</Text>
+      <View style={[styles.compactAvatar, { backgroundColor: player.rankTitle.color }]}>
+        <Text style={{ fontSize: 14 }}>{player.rankTitle.icon}</Text>
+      </View>
+      <View style={styles.compactInfo}>
+        <Text style={[styles.compactName, player.isCurrentUser && { color: colors.primary }]} numberOfLines={1}>
+          {player.name}{player.isCurrentUser ? ' (You)' : ''}
+        </Text>
+        <Text style={styles.compactRankTitle}>{player.rankTitle.title}</Text>
+      </View>
+      <View style={styles.compactStats}>
+        <Text style={styles.compactXP}>{player.totalXP.toLocaleString()}</Text>
+        <Text style={styles.compactAch}>🏆 {player.achievementsUnlocked}</Text>
+      </View>
+    </View>
+  );
+
+  // === Legacy card renderer (friends tab) ===
   const renderLeaderboardItem = (player, index) => {
     const isTopThree = player.rank <= 3;
     const medalIcons = ['🥇', '🥈', '🥉'];
@@ -582,7 +600,6 @@ const LeaderboardScreen = ({ navigation }) => {
           isTopThree && styles.topThreeItem
         ]}
       >
-        {/* Rank */}
         <View style={styles.rankColumn}>
           {isTopThree ? (
             <Text style={styles.medalEmoji}>{medalIcons[player.rank - 1]}</Text>
@@ -590,8 +607,6 @@ const LeaderboardScreen = ({ navigation }) => {
             <Text style={styles.rankNumber}>#{player.rank}</Text>
           )}
         </View>
-
-        {/* Player Info */}
         <View style={styles.playerInfo}>
           <View style={[styles.playerAvatar, { backgroundColor: player.rankTitle.color }]}>
             <Text style={styles.avatarEmoji}>{player.rankTitle.icon}</Text>
@@ -603,16 +618,12 @@ const LeaderboardScreen = ({ navigation }) => {
             <Text style={styles.playerRankTitle}>{player.rankTitle.title}</Text>
           </View>
         </View>
-
-        {/* Stats */}
         <View style={styles.playerStats}>
           <View style={styles.xpBadge}>
             <Ionicons name="star" size={14} color={colors.primary} />
             <Text style={styles.xpBadgeText}>{player.totalXP.toLocaleString()}</Text>
           </View>
-          <Text style={styles.achievementCountSmall}>
-            🏆 {player.achievementsUnlocked}
-          </Text>
+          <Text style={styles.achievementCountSmall}>🏆 {player.achievementsUnlocked}</Text>
         </View>
       </View>
     );
@@ -777,6 +788,42 @@ const LeaderboardScreen = ({ navigation }) => {
                   <Ionicons name="person-add" size={20} color="#FFFFFF" />
                   <Text style={styles.emptyButtonText}>Add Friends</Text>
                 </TouchableOpacity>
+              )}
+            </View>
+          ) : activeTab === 'overall' ? (
+            <View>
+              {/* Podium for top 3 */}
+              {renderPodium(currentLeaderboard.slice(0, 3))}
+
+              {/* Ranks 4-10 compact list */}
+              {currentLeaderboard.length > 3 && (
+                <View style={styles.compactList}>
+                  {currentLeaderboard.slice(3, 10).map(player => renderCompactItem(player))}
+                </View>
+              )}
+
+              {/* Expandable section for 11+ */}
+              {currentLeaderboard.length > 10 && (
+                <>
+                  {showAllRankings && (
+                    <View style={styles.compactList}>
+                      {currentLeaderboard.slice(10).map(player => renderCompactItem(player))}
+                    </View>
+                  )}
+                  <TouchableOpacity
+                    style={styles.expandButton}
+                    onPress={() => setShowAllRankings(!showAllRankings)}
+                  >
+                    <Text style={styles.expandButtonText}>
+                      {showAllRankings ? 'Show Less' : `Show ${currentLeaderboard.length - 10} More`}
+                    </Text>
+                    <Ionicons
+                      name={showAllRankings ? 'chevron-up' : 'chevron-down'}
+                      size={18}
+                      color={colors.primary}
+                    />
+                  </TouchableOpacity>
+                </>
               )}
             </View>
           ) : (
@@ -1152,6 +1199,133 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   sectionSubtitle: {
     fontSize: 14,
     color: colors.textSecondary,
+  },
+  // Podium styles
+  podiumContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    paddingHorizontal: 8,
+    marginBottom: 16,
+    paddingTop: 24,
+  },
+  podiumSlot: {
+    flex: 1,
+    alignItems: 'center',
+    maxWidth: width / 3 - 16,
+  },
+  podiumCrown: {
+    fontSize: 20,
+    marginBottom: 2,
+  },
+  podiumAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    marginBottom: 6,
+  },
+  podiumAvatarEmoji: {
+    fontSize: 22,
+  },
+  podiumName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: 2,
+    maxWidth: 90,
+  },
+  podiumScore: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: colors.primary,
+    marginBottom: 2,
+  },
+  podiumAchievements: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    marginBottom: 6,
+  },
+  podiumBar: {
+    width: '80%',
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 40,
+  },
+  podiumMedal: {
+    fontSize: 22,
+  },
+  // Compact list styles
+  compactList: {
+    gap: 6,
+    marginBottom: 8,
+  },
+  compactItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  compactRank: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: colors.textSecondary,
+    width: 32,
+    textAlign: 'center',
+  },
+  compactAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  compactInfo: {
+    flex: 1,
+  },
+  compactName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  compactRankTitle: {
+    fontSize: 11,
+    color: colors.textSecondary,
+  },
+  compactStats: {
+    alignItems: 'flex-end',
+  },
+  compactXP: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: colors.primary,
+  },
+  compactAch: {
+    fontSize: 11,
+    color: colors.textSecondary,
+  },
+  // Expand button
+  expandButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    gap: 6,
+  },
+  expandButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
   },
   leaderboardList: {
     gap: 10,

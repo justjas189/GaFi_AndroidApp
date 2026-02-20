@@ -529,13 +529,11 @@ const AchievementDashboard = () => {
     }
   };
 
-  // Calculate total earned XP (for leaderboard - never decreases)
+  // Calculate total earned XP from the points stored in user_achievements DB rows
+  // This is the single source of truth — same data the Leaderboard screen uses
   const getTotalEarnedXP = () => {
-    if (!Array.isArray(userAchievements) || !Array.isArray(allAchievements)) return 0;
-    return userAchievements.reduce((sum, ua) => {
-      const achievement = allAchievements.find(a => a.id === ua.achievement_id);
-      return sum + (achievement?.points || 0);
-    }, 0);
+    if (!Array.isArray(userAchievements)) return 0;
+    return userAchievements.reduce((sum, ua) => sum + (ua.points || 0), 0);
   };
 
   // Calculate spendable XP (earned - spent)
