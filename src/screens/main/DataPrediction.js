@@ -891,20 +891,31 @@ const DataPredictionScreen = ({ navigation }) => {
             </View>
           )}
           
-          <View style={styles.trendContainer}>
-            <Ionicons 
-              name={getTrendIcon(predictions.trend)} 
-              size={20} 
-              color={getTrendColor(predictions.trend)} 
-            />
-            <Text style={[styles.trendText, { color: getTrendColor(predictions.trend) }]}>
-              {predictions.trend === 'increasing' ? 'Trending Up' : 
-               predictions.trend === 'decreasing' ? 'Trending Down' : 'Stable'}
-            </Text>
-            <Text style={styles.averageText}>
-              vs ₱{predictions.historicalAverage.toLocaleString()} average
-            </Text>
-          </View>
+          {(() => {
+            const avg = predictions.historicalAverage || 0;
+            const projected = predictions.totalPredicted || 0;
+            const pctDiff = avg > 0 ? Math.round(((projected - avg) / avg) * 100) : 0;
+            const dynamicTrend = pctDiff > 2 ? 'increasing' : pctDiff < -2 ? 'decreasing' : 'stable';
+            return (
+              <View style={styles.trendContainer}>
+                <Ionicons
+                  name={getTrendIcon(dynamicTrend)}
+                  size={20}
+                  color={getTrendColor(dynamicTrend)}
+                />
+                <Text style={[styles.trendText, { color: getTrendColor(dynamicTrend) }]}>
+                  {dynamicTrend === 'increasing'
+                    ? `+${Math.abs(pctDiff)}% Up`
+                    : dynamicTrend === 'decreasing'
+                    ? `-${Math.abs(pctDiff)}% Down`
+                    : 'Stable'}
+                </Text>
+                <Text style={styles.averageText}>
+                  vs ₱{predictions.historicalAverage.toLocaleString()} average
+                </Text>
+              </View>
+            );
+          })()}
 
           {/* Year-over-Year & Factors Summary */}
           <View style={styles.predictionFactors}>
