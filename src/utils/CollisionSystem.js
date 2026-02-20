@@ -13,14 +13,14 @@
 // Import map data directly
 import Map002Data from '../../assets/Game_Graphics/maps/Map002.json';
 import Map003Data from '../../assets/Game_Graphics/maps/Map003.json';
-import Map004Data from '../../assets/Game_Graphics/maps/Map004.json';
+import Map004Data from '../../assets/Game_Graphics/maps/School/Map004.json';
 import Map006Data from '../../assets/Game_Graphics/maps/Mall/Map006.json';
 import Map007Data from '../../assets/Game_Graphics/maps/Mall/Map007.json';
 import Map008Data from '../../assets/Game_Graphics/maps/Mall/Map008.json';
 import TilesetsData from '../../assets/Game_Graphics/maps/Tilesets.json';
 import MallTilesetsData from '../../assets/Game_Graphics/maps/Mall_Tilesets.json';
 import MallFloorTilesetsData from '../../assets/Game_Graphics/maps/Mall/Tilesets.json';
-import SchoolTilesetsData from '../../assets/Game_Graphics/maps/School_Tilesets.json';
+import SchoolTilesetsData from '../../assets/Game_Graphics/maps/School/Tilesets.json';
 
 class CollisionSystem {
   constructor() {

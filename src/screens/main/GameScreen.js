@@ -25,7 +25,7 @@ const MAPS = {
     id: 'school',
     name: 'School Campus',
     icon: '🏫',
-    image: require('../../../assets/Game_Graphics/maps/Map004.png'),
+    image: require('../../../assets/Game_Graphics/maps/School/Map004.png'),
     spawnPoint: { x: width * 0.30, y: height * 0.55 },
     locations: [
       {
