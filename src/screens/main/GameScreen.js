@@ -254,7 +254,7 @@ const NPC_POSITIONS = {
   ],
 };
 
-export default function BuildScreen() {
+export default function GameScreen() {
   const { colors } = useTheme();
   const { user } = useContext(AuthContext);
   const { addExpense, expenses } = useContext(DataContext);

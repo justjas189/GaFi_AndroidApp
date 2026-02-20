@@ -405,7 +405,7 @@ const LeaderboardScreen = ({ navigation }) => {
       <View style={styles.storyProgressSection}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>📖 Story Mode Progress</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Build')}>
+          <TouchableOpacity onPress={() => navigation.navigate('MainTabs', { screen: 'Game' })}>
             <Text style={styles.playNowText}>Play Now →</Text>
           </TouchableOpacity>
         </View>
