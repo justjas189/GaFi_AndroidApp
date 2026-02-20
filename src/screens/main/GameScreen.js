@@ -254,7 +254,7 @@ const NPC_POSITIONS = {
   ],
 };
 
-export default function GameScreen() {
+export default function BuildScreen() {
   const { colors } = useTheme();
   const { user } = useContext(AuthContext);
   const { addExpense, expenses } = useContext(DataContext);
@@ -578,26 +578,35 @@ export default function GameScreen() {
     1: [
       { text: "Hey there, adventurer! I'm Koin, your financial buddy!" },
       { text: "Welcome to Level 1: Budget Basics! This is where your journey begins." },
-      { text: "You'll learn the 50/30/20 rule — the golden rule of budgeting!" },
-      { text: "50% of your budget goes to Needs — food, transport, school supplies..." },
-      { text: "30% goes to Wants — shopping, entertainment, electronics..." },
-      { text: "And 20% should be saved! That's the secret to building wealth." },
+      { text: "Ever heard of the 50/30/20 rule? It's one of the most popular budgeting strategies out there — and for good reason!" },
+      { text: "The idea is simple: split your money into three buckets so you always know where it's going." },
+      { text: "50% goes to Needs — the essentials like food, transport, and school supplies." },
+      { text: "30% goes to Wants — the fun stuff like shopping, entertainment, and gadgets." },
+      { text: "And 20% goes straight to Savings — this is how you build a safety net and grow your wealth over time." },
+      { text: "Why does this matter? Because without a plan, money disappears fast. The 50/30/20 rule gives you control!" },
       { text: "You have 7 days. Stay within the budget limits, and you'll pass this level. Good luck!" },
     ],
     2: [
       { text: "You made it to Level 2! I knew you had it in you!" },
-      { text: "This time, we're learning about Goal Setting!" },
-      { text: "I'll give you three savings goals: Emergency Fund, Fun Money, and Future Savings." },
-      { text: "Your mission? Allocate money towards these goals throughout the week." },
-      { text: "You need to reach at least 80% of your target to pass!" },
-      { text: "Remember, every peso saved is a step toward your dreams. Let's go!" },
+      { text: "This time, we're diving into Goal Setting — one of the most powerful money habits you can build." },
+      { text: "In real life, people set short-term, mid-term, and long-term financial goals." },
+      { text: "Short-term goals are things you save for within weeks or months — like an emergency fund or a small treat." },
+      { text: "Mid-term goals take a few months to a year — maybe a new gadget or a trip." },
+      { text: "Long-term goals are the big dreams — college funds, a car, or even your first home!" },
+      { text: "Since we only have one week, I'll give you two goals to focus on: an Emergency Fund and Fun Money." },
+      { text: "Your Emergency Fund will be 15% of your budget — because unexpected expenses can happen anytime!" },
+      { text: "Fun Money will be 5% — a small reward for yourself, because balance matters." },
+      { text: "Reach at least 80% of your target to pass. Every peso counts — let's go!" },
     ],
     3: [
       { text: "Welcome to the final challenge... Level 3: Super Saver!" },
       { text: "You've learned budgeting. You've learned goal setting. Now it's time for the ultimate test." },
+      { text: "This level is all about building the habit of saving — and understanding why it truly matters." },
+      { text: "Savings aren't just extra money sitting around. They're your safety net when life throws surprises at you." },
+      { text: "A medical emergency, a broken phone, an unexpected school expense — savings protect you from all of that." },
+      { text: "Beyond emergencies, savings give you freedom — the freedom to chase opportunities without financial stress." },
       { text: "Your mission: Save at least 30% of your weekly budget!" },
-      { text: "This means spending wisely and resisting unnecessary purchases." },
-      { text: "Think before every spend — do you NEED it, or just WANT it?" },
+      { text: "This means spending wisely and resisting unnecessary purchases. Think before every spend — do you NEED it, or just WANT it?" },
       { text: "Complete this, and you'll truly be a financial master. I believe in you!" },
     ],
   };
@@ -608,6 +617,7 @@ export default function GameScreen() {
   const [customBudgetRules, setCustomBudgetRules] = useState({ needs: 50, wants: 30, savings: 20 });
   const [customGoals, setCustomGoals] = useState([{ name: '', target: '' }]);
   const [customSavingsTarget, setCustomSavingsTarget] = useState('20');
+  const [customWeeks, setCustomWeeks] = useState(1);
   const [showCustomSettingsModal, setShowCustomSettingsModal] = useState(false);
   const [settingsModeType, setSettingsModeType] = useState(null); // tracks which type is selected inside the settings modal
   
@@ -805,7 +815,7 @@ export default function GameScreen() {
     },
     2: {
       name: 'Goal Setter',
-      description: 'Set savings goals and allocate money towards them. Reach at least 80% of your goal!',
+      description: 'Allocate money to your Emergency Fund (15%) and Fun Money (5%). Reach at least 80% of your goal!',
       type: 'goals',
       icon: '🎯',
       minGoalProgress: 0.80, // Must reach 80% of goal
@@ -816,8 +826,8 @@ export default function GameScreen() {
       description: 'The ultimate challenge! Save at least 30% of your weekly budget.',
       type: 'saving',
       icon: '👑',
-      savingsGoal: 0.40, // 40% savings required
-      goalText: 'Save 40% of your budget',
+      savingsGoal: 0.30, // 30% savings required
+      goalText: 'Save 30% of your budget',
     },
   };
   
@@ -1369,11 +1379,10 @@ export default function GameScreen() {
       } else if (levelConfig.type === 'goals') {
         // Level 2: Set up savings goals
         setSavingsGoals([
-          { id: 'emergency', name: 'Emergency Fund', icon: '🏥', target: calculatedWeeklyBudget * 0.10 },
+          { id: 'emergency', name: 'Emergency Fund', icon: '🏥', target: calculatedWeeklyBudget * 0.15 },
           { id: 'wants', name: 'Fun Money', icon: '🎮', target: calculatedWeeklyBudget * 0.05 },
-          { id: 'future', name: 'Future Savings', icon: '🎓', target: calculatedWeeklyBudget * 0.05 },
         ]);
-        setGoalAllocations({ emergency: 0, wants: 0, future: 0 });
+        setGoalAllocations({ emergency: 0, wants: 0 });
       }
       
       // Close intro and start game
@@ -1397,9 +1406,8 @@ export default function GameScreen() {
         wantsBudget: levelConfig.type === 'budgeting' ? calculatedWeeklyBudget * 0.30 : null,
         savingsBudget: levelConfig.type === 'budgeting' ? calculatedWeeklyBudget * 0.20 : null,
         goalsData: levelConfig.type === 'goals' ? [
-          { id: 'emergency', name: 'Emergency Fund', target: calculatedWeeklyBudget * 0.10 },
+          { id: 'emergency', name: 'Emergency Fund', target: calculatedWeeklyBudget * 0.15 },
           { id: 'wants', name: 'Fun Money', target: calculatedWeeklyBudget * 0.05 },
-          { id: 'future', name: 'Future Savings', target: calculatedWeeklyBudget * 0.05 },
         ] : null,
         savingsGoalPercent: levelConfig.type === 'saving' ? 30 : null,
       });
@@ -3805,7 +3813,13 @@ export default function GameScreen() {
     setStoryEndDate(new Date(session.end_date));
     setWeeklySpending(session.weekly_spending || 0);
     if (session.category_spending) setCategorySpending(session.category_spending);
-    if (session.custom_rules) setCustomBudgetRules(session.custom_rules);
+    if (session.custom_rules) {
+      setCustomBudgetRules(session.custom_rules);
+      // Restore weeks from start/end dates
+      const diffMs = new Date(session.end_date) - new Date(session.start_date);
+      const weeksFromDates = Math.round(diffMs / (7 * 24 * 60 * 60 * 1000));
+      setCustomWeeks(weeksFromDates || 1);
+    }
 
     const modeType = session.mode_type;
     if (modeType) setCustomModeType(modeType);
@@ -4100,9 +4114,9 @@ export default function GameScreen() {
       const calculatedWeeklyBudget = monthlyBudget / 4;
       setWeeklyBudget(calculatedWeeklyBudget);
       
-      // Set start and end dates — real-time 168-hour window from NOW
+      // Set start and end dates — duration based on customWeeks
       const startDate = new Date(); // exact moment user pressed Start
-      const endDate = new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000); // exactly 7 days later
+      const endDate = new Date(startDate.getTime() + customWeeks * 7 * 24 * 60 * 60 * 1000); // customWeeks weeks
       
       setStoryStartDate(startDate);
       setStoryEndDate(endDate);
@@ -4177,7 +4191,7 @@ export default function GameScreen() {
         startDate,
         endDate,
         customGoals: customGoalsForDB,
-        customSavingsTarget: customModeType === 'saving' ? parseFloat(customSavingsTarget) : null,
+        customSavingsTarget: customModeType === 'saving' ? Math.min(parseFloat(customSavingsTarget) || 0, 100) : null,
       });
       if (session) setActiveSessionId(session.id);
       gameDatabaseService.logActivity({ activityType: 'level_start', details: { type: customModeType, mode: 'custom', rules: customBudgetRules }, sessionId: session?.id });
@@ -4254,10 +4268,17 @@ export default function GameScreen() {
       // For 'saving', customSavingsTarget is already updated via state
     }
 
-    setShowCustomSettingsModal(false);
-    console.log(`⚙️ Custom settings applied: mode=${newModeType}`);
+    // Update end date based on customWeeks
+    const newEndDate = new Date(storyStartDate.getTime() + customWeeks * 7 * 24 * 60 * 60 * 1000);
+    setStoryEndDate(newEndDate);
 
-    // ── Persist updated custom settings to DB ──
+    setShowCustomSettingsModal(false);
+    console.log(`⚙️ Custom settings applied: mode=${newModeType}, weeks=${customWeeks}`);
+
+    // Invalidate cached session so re-entering custom mode fetches fresh data from DB
+    cachedActiveCustomRef.current = null;
+
+    // ── Persist updated custom settings to DB (single call) ──
     if (activeSessionId) {
       const updatedGoalsForDB = (newModeType === 'goals')
         ? customGoals.filter(g => g.name.trim() && parseFloat(g.target) > 0).map(g => ({ name: g.name.trim(), target: parseFloat(g.target) || 0 }))
@@ -4270,15 +4291,12 @@ export default function GameScreen() {
         goalsProgress: updatedGoalsForDB
           ? updatedGoalsForDB.map(g => ({ name: g.name, target: g.target, allocated: goalAllocations[`custom_${updatedGoalsForDB.indexOf(g)}`] || 0 }))
           : null,
+        customRules: newModeType === 'budgeting' ? customBudgetRules : null,
+        customGoals: (newModeType === 'goals' && updatedGoalsForDB) ? updatedGoalsForDB : null,
+        customSavingsTarget: newModeType === 'saving' ? Math.min(parseFloat(customSavingsTarget) || 0, 100) : null,
+        modeType: newModeType,
+        endDate: newEndDate.toISOString(),
       });
-      // Also update the session row metadata (custom_rules, custom_goals, custom_savings_target)
-      // via a direct Supabase update for the fields createCustomSession originally set
-      const metadataUpdates = { updated_at: new Date().toISOString() };
-      if (newModeType === 'budgeting') metadataUpdates.custom_rules = customBudgetRules;
-      if (newModeType === 'goals' && updatedGoalsForDB) metadataUpdates.custom_goals = updatedGoalsForDB;
-      if (newModeType === 'saving') metadataUpdates.custom_savings_target = parseFloat(customSavingsTarget);
-      metadataUpdates.mode_type = newModeType;
-      supabase.from('custom_mode_sessions').update(metadataUpdates).eq('id', activeSessionId).then(() => {});
     }
   };
 
@@ -4350,7 +4368,19 @@ export default function GameScreen() {
                         >
                           <Ionicons name="remove" size={16} color="#FFF" />
                         </TouchableOpacity>
-                        <Text style={[settingsStyles.sliderValue, { color: cat.color }]}>{customBudgetRules[cat.key]}%</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <TextInput
+                            style={[settingsStyles.sliderValue, { color: cat.color, backgroundColor: 'rgba(45,45,68,0.9)', borderRadius: 6, paddingHorizontal: 4, borderWidth: 1, borderColor: '#5A5A7A' }]}
+                            value={String(customBudgetRules[cat.key])}
+                            onChangeText={(text) => {
+                              const val = parseInt(text.replace(/[^0-9]/g, ''));
+                              setCustomBudgetRules(prev => ({ ...prev, [cat.key]: isNaN(val) ? 0 : Math.min(100, val) }));
+                            }}
+                            keyboardType="numeric"
+                            maxLength={3}
+                          />
+                          <Text style={{ color: cat.color, fontWeight: 'bold', fontSize: 16 }}>%</Text>
+                        </View>
                         <TouchableOpacity
                           style={settingsStyles.adjBtn}
                           onPress={() => setCustomBudgetRules(prev => ({ ...prev, [cat.key]: Math.min(100, prev[cat.key] + 5) }))}
@@ -4425,7 +4455,19 @@ export default function GameScreen() {
                     >
                       <Ionicons name="remove" size={20} color="#FFF" />
                     </TouchableOpacity>
-                    <Text style={settingsStyles.savingsBigValue}>{customSavingsTarget}%</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <TextInput
+                        style={[settingsStyles.savingsBigValue, { backgroundColor: 'rgba(45,45,68,0.9)', borderRadius: 8, paddingHorizontal: 8, borderWidth: 1, borderColor: '#5A5A7A', minWidth: 55, textAlign: 'center' }]}
+                        value={customSavingsTarget}
+                        onChangeText={(text) => {
+                          const cleaned = text.replace(/[^0-9]/g, '');
+                          setCustomSavingsTarget(cleaned === '' ? '0' : String(Math.min(100, parseInt(cleaned))));
+                        }}
+                        keyboardType="numeric"
+                        maxLength={3}
+                      />
+                      <Text style={settingsStyles.savingsBigValue}>%</Text>
+                    </View>
                     <TouchableOpacity
                       style={settingsStyles.adjBtn}
                       onPress={() => setCustomSavingsTarget(prev => Math.min(80, parseInt(prev) + 5).toString())}
@@ -4446,6 +4488,50 @@ export default function GameScreen() {
                   </View>
                 </View>
               )}
+
+              {/* Duration Settings - shown for all mode types */}
+              <View style={settingsStyles.section}>
+                <Text style={settingsStyles.sectionLabel}>📅 Duration</Text>
+                <View style={settingsStyles.savingsRow}>
+                  <TouchableOpacity
+                    style={settingsStyles.adjBtn}
+                    onPress={() => setCustomWeeks(prev => Math.max(1, prev - 1))}
+                  >
+                    <Ionicons name="remove" size={20} color="#FFF" />
+                  </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <TextInput
+                      style={[settingsStyles.savingsBigValue, { backgroundColor: 'rgba(45,45,68,0.9)', borderRadius: 8, paddingHorizontal: 8, borderWidth: 1, borderColor: '#5A5A7A', minWidth: 50, textAlign: 'center' }]}
+                      value={String(customWeeks)}
+                      onChangeText={(text) => {
+                        const val = parseInt(text.replace(/[^0-9]/g, ''));
+                        setCustomWeeks(isNaN(val) ? 1 : Math.min(52, Math.max(1, val)));
+                      }}
+                      keyboardType="numeric"
+                      maxLength={2}
+                    />
+                    <Text style={[settingsStyles.savingsBigValue, { fontSize: 18, marginLeft: 4 }]}>{customWeeks === 1 ? 'week' : 'weeks'}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={settingsStyles.adjBtn}
+                    onPress={() => setCustomWeeks(prev => Math.min(52, prev + 1))}
+                  >
+                    <Ionicons name="add" size={20} color="#FFF" />
+                  </TouchableOpacity>
+                </View>
+                <View style={settingsStyles.quickRow}>
+                  {[1, 2, 3, 4].map(w => (
+                    <TouchableOpacity
+                      key={w}
+                      style={[settingsStyles.quickBtn, customWeeks === w && settingsStyles.quickBtnActive]}
+                      onPress={() => setCustomWeeks(w)}
+                    >
+                      <Text style={[settingsStyles.quickBtnText, customWeeks === w && { color: '#FFF' }]}>{w}w</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={[settingsStyles.totalText, { color: '#D4C4A8', marginTop: 4 }]}>= {customWeeks * 7} days total</Text>
+              </View>
             </ScrollView>
 
             {/* Apply Button */}
@@ -4865,7 +4951,19 @@ export default function GameScreen() {
                 <View style={customStyles.sliderContainer}>
                   <View style={customStyles.sliderHeader}>
                     <Text style={customStyles.sliderLabel}>🏠 Needs (Food, Transport)</Text>
-                    <Text style={customStyles.sliderValue}>{customBudgetRules.needs}%</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <TextInput
+                        style={customStyles.sliderInputField}
+                        value={String(customBudgetRules.needs)}
+                        onChangeText={(text) => {
+                          const val = parseInt(text.replace(/[^0-9]/g, ''));
+                          setCustomBudgetRules(prev => ({ ...prev, needs: isNaN(val) ? 0 : Math.min(100, val) }));
+                        }}
+                        keyboardType="numeric"
+                        maxLength={3}
+                      />
+                      <Text style={customStyles.sliderValue}>%</Text>
+                    </View>
                   </View>
                   <View style={customStyles.sliderTrack}>
                     <View 
@@ -4892,7 +4990,19 @@ export default function GameScreen() {
                 <View style={customStyles.sliderContainer}>
                   <View style={customStyles.sliderHeader}>
                     <Text style={customStyles.sliderLabel}>🎮 Wants (Shopping, Entertainment)</Text>
-                    <Text style={customStyles.sliderValue}>{customBudgetRules.wants}%</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <TextInput
+                        style={customStyles.sliderInputField}
+                        value={String(customBudgetRules.wants)}
+                        onChangeText={(text) => {
+                          const val = parseInt(text.replace(/[^0-9]/g, ''));
+                          setCustomBudgetRules(prev => ({ ...prev, wants: isNaN(val) ? 0 : Math.min(100, val) }));
+                        }}
+                        keyboardType="numeric"
+                        maxLength={3}
+                      />
+                      <Text style={customStyles.sliderValue}>%</Text>
+                    </View>
                   </View>
                   <View style={customStyles.sliderTrack}>
                     <View 
@@ -4919,7 +5029,19 @@ export default function GameScreen() {
                 <View style={customStyles.sliderContainer}>
                   <View style={customStyles.sliderHeader}>
                     <Text style={customStyles.sliderLabel}>💰 Savings</Text>
-                    <Text style={customStyles.sliderValue}>{customBudgetRules.savings}%</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <TextInput
+                        style={customStyles.sliderInputField}
+                        value={String(customBudgetRules.savings)}
+                        onChangeText={(text) => {
+                          const val = parseInt(text.replace(/[^0-9]/g, ''));
+                          setCustomBudgetRules(prev => ({ ...prev, savings: isNaN(val) ? 0 : Math.min(100, val) }));
+                        }}
+                        keyboardType="numeric"
+                        maxLength={3}
+                      />
+                      <Text style={customStyles.sliderValue}>%</Text>
+                    </View>
                   </View>
                   <View style={customStyles.sliderTrack}>
                     <View 
@@ -4955,6 +5077,59 @@ export default function GameScreen() {
                   {budgetValid && (
                     <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
                   )}
+                </View>
+
+                {/* Duration Selector */}
+                <View style={customStyles.durationContainer}>
+                  <Text style={customStyles.durationTitle}>📅 Duration</Text>
+                  <Text style={customStyles.durationSubtitle}>How many weeks should this challenge last?</Text>
+                  <View style={customStyles.durationInputRow}>
+                    <TouchableOpacity
+                      style={customStyles.savingsAdjustBtn}
+                      onPress={() => setCustomWeeks(prev => Math.max(1, prev - 1))}
+                    >
+                      <Ionicons name="remove" size={24} color="#FFF" />
+                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+                      <TextInput
+                        style={customStyles.weeksInput}
+                        value={String(customWeeks)}
+                        onChangeText={(text) => {
+                          const val = parseInt(text.replace(/[^0-9]/g, ''));
+                          setCustomWeeks(isNaN(val) ? 1 : Math.min(52, Math.max(1, val)));
+                        }}
+                        keyboardType="numeric"
+                        maxLength={2}
+                      />
+                      <Text style={customStyles.weeksLabel}>{customWeeks === 1 ? 'week' : 'weeks'}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={customStyles.savingsAdjustBtn}
+                      onPress={() => setCustomWeeks(prev => Math.min(52, prev + 1))}
+                    >
+                      <Ionicons name="add" size={24} color="#FFF" />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={customStyles.quickSelectRow}>
+                    {[1, 2, 3, 4].map((w) => (
+                      <TouchableOpacity
+                        key={w}
+                        style={[
+                          customStyles.quickSelectBtn,
+                          customWeeks === w && customStyles.quickSelectActive
+                        ]}
+                        onPress={() => setCustomWeeks(w)}
+                      >
+                        <Text style={[
+                          customStyles.quickSelectText,
+                          customWeeks === w && customStyles.quickSelectTextActive
+                        ]}>
+                          {w}w
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <Text style={customStyles.durationNote}>= {customWeeks * 7} days total</Text>
                 </View>
 
                 {/* Start Button */}
@@ -5038,6 +5213,59 @@ export default function GameScreen() {
                   </TouchableOpacity>
                 )}
 
+                {/* Duration Selector */}
+                <View style={customStyles.durationContainer}>
+                  <Text style={customStyles.durationTitle}>📅 Duration</Text>
+                  <Text style={customStyles.durationSubtitle}>How many weeks should this challenge last?</Text>
+                  <View style={customStyles.durationInputRow}>
+                    <TouchableOpacity
+                      style={customStyles.savingsAdjustBtn}
+                      onPress={() => setCustomWeeks(prev => Math.max(1, prev - 1))}
+                    >
+                      <Ionicons name="remove" size={24} color="#FFF" />
+                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+                      <TextInput
+                        style={customStyles.weeksInput}
+                        value={String(customWeeks)}
+                        onChangeText={(text) => {
+                          const val = parseInt(text.replace(/[^0-9]/g, ''));
+                          setCustomWeeks(isNaN(val) ? 1 : Math.min(52, Math.max(1, val)));
+                        }}
+                        keyboardType="numeric"
+                        maxLength={2}
+                      />
+                      <Text style={customStyles.weeksLabel}>{customWeeks === 1 ? 'week' : 'weeks'}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={customStyles.savingsAdjustBtn}
+                      onPress={() => setCustomWeeks(prev => Math.min(52, prev + 1))}
+                    >
+                      <Ionicons name="add" size={24} color="#FFF" />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={customStyles.quickSelectRow}>
+                    {[1, 2, 3, 4].map((w) => (
+                      <TouchableOpacity
+                        key={w}
+                        style={[
+                          customStyles.quickSelectBtn,
+                          customWeeks === w && customStyles.quickSelectActive
+                        ]}
+                        onPress={() => setCustomWeeks(w)}
+                      >
+                        <Text style={[
+                          customStyles.quickSelectText,
+                          customWeeks === w && customStyles.quickSelectTextActive
+                        ]}>
+                          {w}w
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <Text style={customStyles.durationNote}>= {customWeeks * 7} days total</Text>
+                </View>
+
                 {/* Start Button */}
                 <TouchableOpacity
                   style={[customStyles.startButton, !goalsValid && customStyles.startButtonDisabled]}
@@ -5077,7 +5305,16 @@ export default function GameScreen() {
                     </TouchableOpacity>
                     
                     <View style={customStyles.savingsValueContainer}>
-                      <Text style={customStyles.savingsValue}>{customSavingsTarget}</Text>
+                      <TextInput
+                        style={customStyles.savingsValueInput}
+                        value={customSavingsTarget}
+                        onChangeText={(text) => {
+                          const cleaned = text.replace(/[^0-9]/g, '');
+                          setCustomSavingsTarget(cleaned === '' ? '0' : String(Math.min(100, parseInt(cleaned))));
+                        }}
+                        keyboardType="numeric"
+                        maxLength={3}
+                      />
                       <Text style={customStyles.savingsPercent}>%</Text>
                     </View>
                     
@@ -5122,6 +5359,59 @@ export default function GameScreen() {
                        parseInt(customSavingsTarget) <= 30 ? '💪 Medium' : '🔥 Hard'}
                     </Text>
                   </View>
+                </View>
+
+                {/* Duration Selector */}
+                <View style={customStyles.durationContainer}>
+                  <Text style={customStyles.durationTitle}>📅 Duration</Text>
+                  <Text style={customStyles.durationSubtitle}>How many weeks should this challenge last?</Text>
+                  <View style={customStyles.durationInputRow}>
+                    <TouchableOpacity
+                      style={customStyles.savingsAdjustBtn}
+                      onPress={() => setCustomWeeks(prev => Math.max(1, prev - 1))}
+                    >
+                      <Ionicons name="remove" size={24} color="#FFF" />
+                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+                      <TextInput
+                        style={customStyles.weeksInput}
+                        value={String(customWeeks)}
+                        onChangeText={(text) => {
+                          const val = parseInt(text.replace(/[^0-9]/g, ''));
+                          setCustomWeeks(isNaN(val) ? 1 : Math.min(52, Math.max(1, val)));
+                        }}
+                        keyboardType="numeric"
+                        maxLength={2}
+                      />
+                      <Text style={customStyles.weeksLabel}>{customWeeks === 1 ? 'week' : 'weeks'}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={customStyles.savingsAdjustBtn}
+                      onPress={() => setCustomWeeks(prev => Math.min(52, prev + 1))}
+                    >
+                      <Ionicons name="add" size={24} color="#FFF" />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={customStyles.quickSelectRow}>
+                    {[1, 2, 3, 4].map((w) => (
+                      <TouchableOpacity
+                        key={w}
+                        style={[
+                          customStyles.quickSelectBtn,
+                          customWeeks === w && customStyles.quickSelectActive
+                        ]}
+                        onPress={() => setCustomWeeks(w)}
+                      >
+                        <Text style={[
+                          customStyles.quickSelectText,
+                          customWeeks === w && customStyles.quickSelectTextActive
+                        ]}>
+                          {w}w
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <Text style={customStyles.durationNote}>= {customWeeks * 7} days total</Text>
                 </View>
 
                 {/* Start Button */}
@@ -5454,6 +5744,83 @@ export default function GameScreen() {
     difficultyValue: {
       fontSize: 14,
       fontWeight: 'bold',
+    },
+    sliderInputField: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: '#FF9800',
+      backgroundColor: 'rgba(45, 45, 68, 0.9)',
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: '#5A5A7A',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      minWidth: 50,
+      textAlign: 'center',
+    },
+    savingsValueInput: {
+      fontSize: 56,
+      fontWeight: 'bold',
+      color: '#FF9800',
+      backgroundColor: 'rgba(45, 45, 68, 0.9)',
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: '#5A5A7A',
+      paddingHorizontal: 8,
+      minWidth: 75,
+      textAlign: 'center',
+    },
+    durationContainer: {
+      backgroundColor: 'rgba(45, 45, 68, 0.9)',
+      borderRadius: 16,
+      padding: 20,
+      borderWidth: 2,
+      borderColor: '#5A5A7A',
+      alignItems: 'center',
+    },
+    durationTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: '#F5DEB3',
+      marginBottom: 4,
+    },
+    durationSubtitle: {
+      fontSize: 12,
+      color: '#D4C4A8',
+      textAlign: 'center',
+      marginBottom: 12,
+    },
+    durationInputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 20,
+      marginBottom: 16,
+    },
+    weeksInput: {
+      fontSize: 40,
+      fontWeight: 'bold',
+      color: '#FF9800',
+      backgroundColor: 'rgba(30, 30, 50, 0.8)',
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: '#5A5A7A',
+      paddingHorizontal: 10,
+      minWidth: 55,
+      textAlign: 'center',
+    },
+    weeksLabel: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: '#FF9800',
+      marginLeft: 4,
+      marginBottom: 6,
+    },
+    durationNote: {
+      color: '#D4C4A8',
+      fontSize: 12,
+      marginTop: 8,
+      textAlign: 'center',
     },
   });
 
@@ -7096,19 +7463,6 @@ export default function GameScreen() {
               </View>
             );
           })()}
-        </View>
-      )}
-
-      {/* Location Badge - hidden in tutorial, offset in story/custom */}
-      {!(tutorialActive && gameMode === 'tutorial') && (
-        <View style={[
-          styles.locationBadge,
-          (gameMode === 'story' || gameMode === 'custom') && { top: 105 }
-        ]}>
-          <View style={[styles.walkingIndicator, isWalking && { backgroundColor: '#FF9800' }]} />
-          <Text style={styles.locationText}>
-            {isWalking ? 'Walking to...' : currentLocation}
-          </Text>
         </View>
       )}
 

@@ -195,6 +195,11 @@ class GameDatabaseService {
     savingsAmount = null,
     categorySpending = null,
     goalsProgress = null,
+    customRules = null,
+    customGoals = null,
+    customSavingsTarget = null,
+    modeType = null,
+    endDate = null,
   }) {
     try {
       const updates = {
@@ -206,6 +211,11 @@ class GameDatabaseService {
       if (savingsAmount !== null) updates.savings_amount = savingsAmount;
       if (categorySpending !== null) updates.category_spending = categorySpending;
       if (goalsProgress !== null) updates.goals_progress = goalsProgress;
+      if (customRules !== null) updates.custom_rules = customRules;
+      if (customGoals !== null) updates.custom_goals = customGoals;
+      if (customSavingsTarget !== null) updates.custom_savings_target = Math.min(customSavingsTarget, 100);
+      if (modeType !== null) updates.mode_type = modeType;
+      if (endDate !== null) updates.end_date = endDate;
 
       const { error } = await supabase
         .from('custom_mode_sessions')
