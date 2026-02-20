@@ -72,12 +72,59 @@ export class FriendService {
    */
   static async sendFriendRequest(friendUsername) {
     try {
-      const { data, error } = await supabase.rpc('send_friend_request', {
-        friend_username: friendUsername
-      });
+      const currentUserId = await this.getCurrentUserId();
+      if (!currentUserId) {
+        return { success: false, error: 'Not authenticated' };
+      }
 
-      if (error) throw error;
-      return data;
+      // Look up the friend's profile by username
+      const { data: friendProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('username', friendUsername)
+        .single();
+
+      if (profileError || !friendProfile) {
+        return { success: false, error: 'User not found' };
+      }
+
+      const friendId = friendProfile.id;
+
+      if (friendId === currentUserId) {
+        return { success: false, error: 'You cannot add yourself as a friend' };
+      }
+
+      // Check if a friendship/request already exists in either direction
+      const { data: existing } = await supabase
+        .from('friends')
+        .select('id, status')
+        .or(
+          `and(user_id.eq.${currentUserId},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${currentUserId})`
+        )
+        .maybeSingle();
+
+      if (existing) {
+        if (existing.status === 'accepted') {
+          return { success: false, error: 'You are already friends with this user' };
+        }
+        if (existing.status === 'pending') {
+          return { success: false, error: 'A friend request already exists' };
+        }
+      }
+
+      // Insert the friend request with requested_by set to the current user
+      const { error: insertError } = await supabase
+        .from('friends')
+        .insert({
+          user_id: currentUserId,
+          friend_id: friendId,
+          status: 'pending',
+          requested_by: currentUserId,
+        });
+
+      if (insertError) throw insertError;
+
+      return { success: true, message: 'Friend request sent!' };
     } catch (error) {
       console.error('Error sending friend request:', error);
       return {
@@ -146,13 +193,43 @@ export class FriendService {
    */
   static async respondToFriendRequest(requesterId, response) {
     try {
-      const { data, error } = await supabase.rpc('respond_to_friend_request', {
-        requester_id: requesterId,
-        response: response
-      });
+      const currentUserId = await this.getCurrentUserId();
+      if (!currentUserId) {
+        return { success: false, error: 'Not authenticated' };
+      }
 
-      if (error) throw error;
-      return data;
+      // Find the pending friend request where requester is user_id and current user is friend_id
+      const { data: request, error: fetchError } = await supabase
+        .from('friends')
+        .select('id, user_id, friend_id, requested_by')
+        .eq('user_id', requesterId)
+        .eq('friend_id', currentUserId)
+        .eq('status', 'pending')
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+
+      if (!request) {
+        return { success: false, error: 'Friend request not found' };
+      }
+
+      const newStatus = response === 'accept' ? 'accepted' : 'declined';
+
+      // Update the existing row, preserving the requested_by field
+      const { error: updateError } = await supabase
+        .from('friends')
+        .update({
+          status: newStatus,
+          requested_by: request.requested_by || requesterId,
+        })
+        .eq('id', request.id);
+
+      if (updateError) throw updateError;
+
+      return {
+        success: true,
+        message: response === 'accept' ? 'Friend request accepted!' : 'Friend request declined.'
+      };
     } catch (error) {
       console.error('Error responding to friend request:', error);
       return {

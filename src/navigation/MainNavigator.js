@@ -25,6 +25,7 @@ import LeaderboardScreen from '../screens/main/LeaderboardScreen';
 import AchievementDashboard from '../screens/main/AchievementDashboard';
 import FriendRequestsScreen from '../screens/main/FriendRequestsScreen';
 import FriendsListScreen from '../screens/main/FriendsListScreen';
+import ManageFriendsScreen from '../screens/main/ManageFriendsScreen';
 import DataPredictionScreen from '../screens/main/DataPrediction';
 
 const Stack = createStackNavigator();
@@ -131,6 +132,7 @@ const MainNavigator = () => {
         <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
         <Stack.Screen name="FriendRequests" component={FriendRequestsScreen} />
         <Stack.Screen name="FriendsList" component={FriendsListScreen} />
+        <Stack.Screen name="ManageFriends" component={ManageFriendsScreen} />
         <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="OldLearn" component={LearnScreen} />
       </Stack.Navigator>
