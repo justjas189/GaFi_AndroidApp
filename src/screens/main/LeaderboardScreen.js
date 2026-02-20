@@ -7,8 +7,6 @@ import {
   TouchableOpacity,
   Alert,
   RefreshControl,
-  Modal,
-  TextInput,
   Dimensions,
   Animated
 } from 'react-native';
@@ -18,7 +16,6 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../config/supabase';
 import { AchievementService } from '../../services/AchievementService';
-import { FriendService } from '../../services/FriendService';
 
 const { width } = Dimensions.get('window');
 
@@ -78,10 +75,6 @@ const LeaderboardScreen = ({ navigation }) => {
   });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [showAddFriendModal, setShowAddFriendModal] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [searchLoading, setSearchLoading] = useState(false);
   const [pulseAnim] = useState(new Animated.Value(1));
   const [showAllRankings, setShowAllRankings] = useState(false);
 
@@ -240,21 +233,53 @@ const LeaderboardScreen = ({ navigation }) => {
         });
       }
 
-      // Friends leaderboard
+      // Friends leaderboard – use the same updated_leaderboard view as Global,
+      // but filtered to only show accepted friends + the current user.
       try {
-        const friendsData = await FriendService.getFriendsLeaderboard();
-        if (Array.isArray(friendsData) && friendsData.length > 0) {
-          const friendsWithXP = friendsData.map((friend, index) => ({
-            rank: index + 1,
-            oduserId: friend.friend_id,
-            name: friend.friend_name || 'Friend',
-            totalXP: friend.total_xp || friend.total_saved || 0,
-            achievementsUnlocked: friend.achievements_count || 0,
-            rankTitle: getRankTitle(friend.total_xp || 0),
-            isCurrentUser: friend.isCurrentUser
-          })).sort((a, b) => b.totalXP - a.totalXP);
+        const currentUserId = user?.id;
+        if (currentUserId) {
+          // 1. Get accepted friend IDs from the friends table
+          const { data: friendRows, error: friendsErr } = await supabase
+            .from('friends')
+            .select('user_id, friend_id')
+            .or(`user_id.eq.${currentUserId},friend_id.eq.${currentUserId}`)
+            .eq('status', 'accepted');
 
-          setFriendsLeaderboard(friendsWithXP);
+          if (!friendsErr && friendRows && friendRows.length > 0) {
+            const friendIds = friendRows.map(r =>
+              r.user_id === currentUserId ? r.friend_id : r.user_id
+            );
+            // Include the current user so they appear in their own friends tab
+            const allIds = [...new Set([...friendIds, currentUserId])];
+
+            // 2. Query the same updated_leaderboard view used by the Global tab
+            const { data: friendsLb, error: friendsLbErr } = await supabase
+              .from('updated_leaderboard')
+              .select('user_id, username, full_name, total_points, achievements_count')
+              .in('user_id', allIds)
+              .order('total_points', { ascending: false });
+
+            if (!friendsLbErr && friendsLb && friendsLb.length > 0) {
+              const friendsWithXP = friendsLb.map((row, index) => {
+                const displayName = row.full_name || row.username || `Player ${row.user_id.slice(0, 6)}`;
+                const totalXP = row.total_points || 0;
+                return {
+                  rank: index + 1,
+                  oduserId: row.user_id,
+                  name: displayName,
+                  totalXP,
+                  achievementsUnlocked: row.achievements_count || 0,
+                  rankTitle: getRankTitle(totalXP),
+                  isCurrentUser: row.user_id === currentUserId,
+                };
+              });
+              setFriendsLeaderboard(friendsWithXP);
+            } else {
+              setFriendsLeaderboard([]);
+            }
+          } else {
+            setFriendsLeaderboard([]);
+          }
         }
       } catch (error) {
         console.log('Friends leaderboard not available:', error);
@@ -274,39 +299,6 @@ const LeaderboardScreen = ({ navigation }) => {
     await loadLeaderboardData();
     await loadStoryProgress();
     setRefreshing(false);
-  };
-
-  const searchUsers = async (term) => {
-    if (!term.trim()) {
-      setSearchResults([]);
-      return;
-    }
-
-    try {
-      setSearchLoading(true);
-      const results = await FriendService.searchUsers(term);
-      setSearchResults(results || []);
-    } catch (error) {
-      console.error('Error searching users:', error);
-    } finally {
-      setSearchLoading(false);
-    }
-  };
-
-  const sendFriendRequest = async (username) => {
-    try {
-      const result = await FriendService.sendFriendRequest(username);
-      if (result.success) {
-        Alert.alert('Success', 'Friend request sent!');
-        setShowAddFriendModal(false);
-        setSearchTerm('');
-        setSearchResults([]);
-      } else {
-        Alert.alert('Error', result.error || 'Failed to send friend request');
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to send friend request');
-    }
   };
 
   const getProgressToNextRank = () => {
@@ -405,7 +397,7 @@ const LeaderboardScreen = ({ navigation }) => {
       <View style={styles.storyProgressSection}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>📖 Story Mode Progress</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Build')}>
+          <TouchableOpacity onPress={() => navigation.navigate('MainTabs', { screen: 'Game' })}>
             <Text style={styles.playNowText}>Play Now →</Text>
           </TouchableOpacity>
         </View>
@@ -629,69 +621,7 @@ const LeaderboardScreen = ({ navigation }) => {
     );
   };
 
-  const renderAddFriendModal = () => (
-    <Modal
-      visible={showAddFriendModal}
-      transparent={true}
-      animationType="slide"
-      onRequestClose={() => setShowAddFriendModal(false)}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>🤝 Add Friend</Text>
-            <TouchableOpacity
-              onPress={() => setShowAddFriendModal(false)}
-              style={styles.closeButton}
-            >
-              <Ionicons name="close-circle" size={28} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.searchContainer}>
-            <Ionicons name="search" size={20} color={colors.textSecondary} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search by username..."
-              placeholderTextColor={colors.textSecondary}
-              value={searchTerm}
-              onChangeText={(text) => {
-                setSearchTerm(text);
-                searchUsers(text);
-              }}
-              autoCapitalize="none"
-            />
-          </View>
-
-          <ScrollView style={styles.searchResults}>
-            {searchLoading ? (
-              <Text style={styles.searchStatus}>Searching...</Text>
-            ) : searchResults.length > 0 ? (
-              searchResults.map((resultUser) => (
-                <TouchableOpacity
-                  key={resultUser.user_id}
-                  style={styles.searchResultItem}
-                  onPress={() => sendFriendRequest(resultUser.username)}
-                >
-                  <View style={styles.searchUserInfo}>
-                    <Text style={styles.searchUserName}>{resultUser.full_name}</Text>
-                    <Text style={styles.searchUsername}>@{resultUser.username}</Text>
-                  </View>
-                  <View style={styles.addButton}>
-                    <Ionicons name="person-add" size={20} color="#FFFFFF" />
-                  </View>
-                </TouchableOpacity>
-              ))
-            ) : searchTerm.trim() ? (
-              <Text style={styles.searchStatus}>No users found</Text>
-            ) : (
-              <Text style={styles.searchStatus}>Enter a username to search</Text>
-            )}
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
-  );
+  const renderAddFriendModal = () => null;
 
   if (loading) {
     return (
@@ -715,18 +645,6 @@ const LeaderboardScreen = ({ navigation }) => {
           <Text style={styles.headerTitle}>Leaderboard</Text>
         </View>
         <View style={styles.headerButtons}>
-          <TouchableOpacity 
-            style={styles.headerButton}
-            onPress={() => navigation.navigate('FriendsList')}
-          >
-            <Ionicons name="people" size={22} color={colors.text} />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.headerButton}
-            onPress={() => setShowAddFriendModal(true)}
-          >
-            <Ionicons name="person-add" size={22} color={colors.text} />
-          </TouchableOpacity>
           <TouchableOpacity 
             style={styles.headerButton}
             onPress={onRefresh}
@@ -783,7 +701,7 @@ const LeaderboardScreen = ({ navigation }) => {
               {activeTab === 'friends' && (
                 <TouchableOpacity 
                   style={styles.emptyButton}
-                  onPress={() => setShowAddFriendModal(true)}
+                  onPress={() => navigation.navigate('ManageFriends')}
                 >
                   <Ionicons name="person-add" size={20} color="#FFFFFF" />
                   <Text style={styles.emptyButtonText}>Add Friends</Text>

@@ -9,6 +9,9 @@ import {
   Switch,
   Linking,
   Share,
+  Modal,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,6 +26,9 @@ const SettingsScreen = ({ navigation }) => {
   const { expenses } = useContext(DataContext);
   const { theme, isDarkMode, toggleTheme } = useContext(ThemeContext);
   const [exportingData, setExportingData] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   // ── Handlers ──
 
@@ -47,32 +53,67 @@ const SettingsScreen = ({ navigation }) => {
   };
 
   const handleExportData = async () => {
+    if (!expenses || expenses.length === 0) {
+      Alert.alert('No Data', 'You have no expense data to export yet.');
+      return;
+    }
+
+    Alert.alert(
+      'Export Format',
+      'Choose your preferred export format:',
+      [
+        {
+          text: 'CSV',
+          onPress: () => exportAs('csv'),
+        },
+        {
+          text: 'TXT',
+          onPress: () => exportAs('txt'),
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const exportAs = async (format) => {
     try {
       setExportingData(true);
 
-      if (!expenses || expenses.length === 0) {
-        Alert.alert('No Data', 'You have no expense data to export yet.');
-        return;
+      if (format === 'csv') {
+        const header = 'Date,Category,Amount,Description\n';
+        const rows = expenses
+          .map((e) => {
+            const date = new Date(e.date || e.created_at).toLocaleDateString();
+            const category = (e.category || 'Uncategorized').replace(/,/g, ' ');
+            const amount = parseFloat(e.amount || 0).toFixed(2);
+            const description = (e.description || e.note || '').replace(/,/g, ' ').replace(/\n/g, ' ');
+            return `${date},${category},${amount},${description}`;
+          })
+          .join('\n');
+
+        await Share.share({
+          message: header + rows,
+          title: 'GaFI Expense Export (CSV)',
+        });
+      } else {
+        // TXT format – readable plain text
+        const lines = expenses
+          .map((e, i) => {
+            const date = new Date(e.date || e.created_at).toLocaleDateString();
+            const category = e.category || 'Uncategorized';
+            const amount = parseFloat(e.amount || 0).toFixed(2);
+            const description = e.description || e.note || 'No description';
+            return `${i + 1}. [${date}] ${category} — ₱${amount}\n   ${description}`;
+          })
+          .join('\n\n');
+
+        const txt = `GaFI Expense Report\n${'='.repeat(30)}\nTotal entries: ${expenses.length}\n\n${lines}\n`;
+
+        await Share.share({
+          message: txt,
+          title: 'GaFI Expense Export (TXT)',
+        });
       }
-
-      // Build CSV string
-      const header = 'Date,Category,Amount,Description\n';
-      const rows = expenses
-        .map((e) => {
-          const date = new Date(e.date || e.created_at).toLocaleDateString();
-          const category = (e.category || 'Uncategorized').replace(/,/g, ' ');
-          const amount = parseFloat(e.amount || 0).toFixed(2);
-          const description = (e.description || e.note || '').replace(/,/g, ' ').replace(/\n/g, ' ');
-          return `${date},${category},${amount},${description}`;
-        })
-        .join('\n');
-
-      const csv = header + rows;
-
-      await Share.share({
-        message: csv,
-        title: 'GaFI Expense Export',
-      });
     } catch (error) {
       if (error.message !== 'User did not share') {
         console.error('Export error:', error);
@@ -137,15 +178,73 @@ const SettingsScreen = ({ navigation }) => {
           text: 'Report a Bug',
           onPress: () => {
             Linking.openURL(
-              'mailto:gafi.support@example.com?subject=GaFI%20Bug%20Report&body=Please%20describe%20the%20issue%20you%20encountered:'
+              'mailto:malabananbills@gmail.com?subject=GaFI%20Bug%20Report&body=Please%20describe%20the%20issue%20you%20encountered:'
             ).catch(() => {
-              Alert.alert('Error', 'Could not open email client. Please email gafi.support@example.com manually.');
+              Alert.alert('Error', 'Could not open email client. Please email malabananbills@gmail.com manually.');
             });
           },
         },
         { text: 'Close', style: 'cancel' },
       ]
     );
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== 'DELETE') return;
+
+    try {
+      setDeletingAccount(true);
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        Alert.alert('Error', 'You are not signed in.');
+        return;
+      }
+
+      const userId = session.user.id;
+
+      // Delete user data from related tables (order matters for foreign keys)
+      const tablesToClear = [
+        'friends',
+        'savings_transactions',
+        'gamified_savings_goals',
+        'user_achievements',
+        'story_mode_sessions',
+        'user_levels',
+        'expenses',
+        'profiles',
+      ];
+
+      for (const table of tablesToClear) {
+        try {
+          // friends table has user in either column
+          if (table === 'friends') {
+            await supabase.from(table).delete().or(`user_id.eq.${userId},friend_id.eq.${userId}`);
+          } else {
+            await supabase.from(table).delete().eq('user_id', userId);
+          }
+        } catch (e) {
+          console.warn(`Could not clear ${table}:`, e);
+        }
+      }
+
+      // Clear local storage
+      await AsyncStorage.clear();
+
+      // Sign out (this also invalidates the session)
+      await supabase.auth.signOut();
+
+      setShowDeleteModal(false);
+      setDeleteConfirmText('');
+
+      // The AuthContext will detect the sign-out and redirect to auth screen
+      Alert.alert('Account Deleted', 'Your account and all associated data have been permanently deleted.');
+    } catch (error) {
+      console.error('Delete account error:', error);
+      Alert.alert('Error', 'Failed to delete account. Please try again or contact support.');
+    } finally {
+      setDeletingAccount(false);
+    }
   };
 
   // ── Render ──
@@ -234,7 +333,8 @@ const SettingsScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {/* ── Features ── */}
+        {/* ── Features (temporarily hidden) ── */}
+        {/*
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Features</Text>
 
@@ -306,6 +406,7 @@ const SettingsScreen = ({ navigation }) => {
             <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
           </TouchableOpacity>
         </View>
+        */}
 
         {/* ── Data Management ── */}
         <View style={styles.section}>
@@ -323,9 +424,7 @@ const SettingsScreen = ({ navigation }) => {
               </View>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingText, { color: theme.colors.text }]}>Export Data</Text>
-                <Text style={[styles.settingValue, { color: theme.colors.text }]}>
-                  Share your expense history as CSV
-                </Text>
+                <Text style={[styles.settingValue, { color: theme.colors.text }]}>Share your expense history</Text>
               </View>
             </View>
             <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
@@ -378,7 +477,7 @@ const SettingsScreen = ({ navigation }) => {
             style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
             onPress={() => {
               Linking.openURL(
-                'mailto:gafi.support@example.com?subject=GaFI%20Feedback'
+                'mailto:malabananbills@gmail.com?subject=GaFI%20Feedback'
               ).catch(() => {
                 Alert.alert('Error', 'Could not open email client.');
               });
@@ -417,15 +516,104 @@ const SettingsScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {/* ── Log Out ── */}
-        <TouchableOpacity
-          style={[styles.logoutButton, { backgroundColor: theme.colors.error }]}
-          onPress={handleLogout}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.logoutButtonText, { color: theme.colors.background }]}>Log Out</Text>
-        </TouchableOpacity>
+        {/* ── Log Out & Delete Account ── */}
+        <View style={styles.accountActions}>
+          <TouchableOpacity
+            style={[styles.logoutButton, { backgroundColor: theme.colors.error }]}
+            onPress={handleLogout}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.logoutButtonText, { color: theme.colors.background }]}>Log Out</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.deleteAccountButton, { borderColor: theme.colors.error }]}
+            onPress={() => setShowDeleteModal(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="warning-outline" size={18} color={theme.colors.error} />
+            <Text style={[styles.deleteAccountButtonText, { color: theme.colors.error }]}>Delete Account</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
+
+      {/* ── Delete Account Confirmation Modal ── */}
+      <Modal
+        visible={showDeleteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setShowDeleteModal(false);
+          setDeleteConfirmText('');
+        }}
+        statusBarTranslucent
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.background }]}>
+            <Ionicons name="alert-circle" size={48} color={theme.colors.error} style={{ alignSelf: 'center', marginBottom: 12 }} />
+            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Delete Account</Text>
+            <Text style={[styles.modalDescription, { color: theme.colors.textSecondary }]}>
+              This action is permanent and cannot be undone. All your data — expenses, friends, achievements, and progress — will be permanently deleted.
+            </Text>
+            <Text style={[styles.modalInstruction, { color: theme.colors.text }]}>
+              Type <Text style={{ fontWeight: 'bold', color: theme.colors.error }}>DELETE</Text> to confirm:
+            </Text>
+            <TextInput
+              style={[
+                styles.modalInput,
+                {
+                  color: theme.colors.text,
+                  borderColor: deleteConfirmText === 'DELETE' ? theme.colors.error : theme.colors.border,
+                  backgroundColor: theme.colors.card,
+                },
+              ]}
+              value={deleteConfirmText}
+              onChangeText={setDeleteConfirmText}
+              placeholder="Type DELETE here"
+              placeholderTextColor={theme.colors.textSecondary}
+              autoCapitalize="characters"
+              autoCorrect={false}
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalCancelBtn, { backgroundColor: theme.colors.card }]}
+                onPress={() => {
+                  setShowDeleteModal(false);
+                  setDeleteConfirmText('');
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.modalCancelText, { color: theme.colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalDeleteBtn,
+                  {
+                    backgroundColor: deleteConfirmText === 'DELETE' ? theme.colors.error : theme.colors.card,
+                    opacity: deleteConfirmText === 'DELETE' ? 1 : 0.5,
+                  },
+                ]}
+                onPress={handleDeleteAccount}
+                disabled={deleteConfirmText !== 'DELETE' || deletingAccount}
+                activeOpacity={0.8}
+              >
+                {deletingAccount ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text
+                    style={[
+                      styles.modalDeleteText,
+                      { color: deleteConfirmText === 'DELETE' ? '#fff' : theme.colors.textSecondary },
+                    ]}
+                  >
+                    Delete Forever
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -512,7 +700,6 @@ const styles = StyleSheet.create({
   logoutButton: {
     marginHorizontal: 16,
     marginTop: 8,
-    marginBottom: 32,
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
@@ -526,6 +713,96 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     letterSpacing: 0.2,
+  },
+
+  // Account actions
+  accountActions: {
+    marginBottom: 32,
+  },
+  deleteAccountButton: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingVertical: 16,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1.5,
+  },
+  deleteAccountButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+
+  // Delete Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    borderRadius: 20,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  modalDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  modalInstruction: {
+    fontSize: 15,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  modalInput: {
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    letterSpacing: 2,
+    marginBottom: 24,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalDeleteBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalDeleteText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 
