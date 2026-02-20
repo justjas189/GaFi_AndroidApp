@@ -19,6 +19,7 @@ import NotificationSettings from '../components/NotificationSettings';
 import NotificationTestScreen from '../screens/main/NotificationTestScreen';
 import GameScreen from '../screens/main/GameScreen';
 import ExploreScreen from '../screens/main/ExploreScreen';
+import ProfileScreen from '../screens/main/ProfileScreen';
 import BudgetManagementScreen from '../screens/main/BudgetManagementScreen';
 import LeaderboardScreen from '../screens/main/LeaderboardScreen';
 import AchievementDashboard from '../screens/main/AchievementDashboard';
@@ -101,7 +102,7 @@ const TabNavigator = () => {
       <Tab.Screen name="Expenses" component={ExpenseScreen} />
       <Tab.Screen name="Predictions" component={DataPredictionScreen} />
       <Tab.Screen name="Explore" component={ExploreScreen} />
-      <Tab.Screen name="Profile" component={SettingsScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
       
     </Tab.Navigator>
   );

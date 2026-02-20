@@ -1,15 +1,14 @@
-import React, { useContext, useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  ScrollView, 
+import React, { useContext, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
   Alert,
   Switch,
-  Modal,
-  TextInput,
-  useColorScheme
+  Linking,
+  Share,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,74 +16,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../../context/AuthContext';
 import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
+import { supabase } from '../../config/supabase';
 
 const SettingsScreen = ({ navigation }) => {
-  const { logout, userInfo, updateProfile } = useContext(AuthContext);
-  const { budget, updateBudget } = useContext(DataContext);
+  const { logout, userInfo } = useContext(AuthContext);
+  const { expenses } = useContext(DataContext);
   const { theme, isDarkMode, toggleTheme } = useContext(ThemeContext);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [showEditProfile, setShowEditProfile] = useState(false);
-  const [showEditBudget, setShowEditBudget] = useState(false);
-  const [name, setName] = useState(userInfo?.name || '');
-  const [email, setEmail] = useState(userInfo?.email || '');
-  const [username, setUsername] = useState(userInfo?.username || '');
-  const [monthlyBudget, setMonthlyBudget] = useState((budget?.monthly ?? 0).toString());
-  const [savingsGoal, setSavingsGoal] = useState((budget?.savingsGoal ?? 0).toString());
+  const [exportingData, setExportingData] = useState(false);
 
-  // Update name and username state when userInfo changes
-  useEffect(() => {
-    if (userInfo?.name) {
-      setName(userInfo.name);
-    }
-    if (userInfo?.username) {
-      setUsername(userInfo.username);
-    }
-  }, [userInfo]);
-
-  const handleUpdateProfile = async () => {
-    try {
-      if (!name.trim()) {
-        Alert.alert('Error', 'Please enter your name');
-        return;
-      }
-
-      if (username.trim() && username.trim().length < 3) {
-        Alert.alert('Error', 'Username must be at least 3 characters long');
-        return;
-      }
-
-      if (username.trim() && !/^[a-zA-Z0-9_]+$/.test(username.trim())) {
-        Alert.alert('Error', 'Username can only contain letters, numbers, and underscores');
-        return;
-      }
-
-      const profileData = { 
-        name: name.trim(),
-        ...(username.trim() && { username: username.trim() })
-      };
-
-      const result = await updateProfile(profileData);
-      
-      if (result.success) {
-        Alert.alert('Success', 'Profile updated successfully');
-        setShowEditProfile(false);
-      } else {
-        Alert.alert('Error', result.error || 'Failed to update profile');
-      }
-    } catch (error) {
-      console.error('Profile update error:', error);
-      Alert.alert('Error', 'Failed to update profile. Please try again.');
-    }
-  };
-
-  const handleCurrencyPress = () => {
-    Alert.alert('Currency', 'Currently only Philippine Peso (₱) is supported');
-  };
-
-  const handleNotificationsChange = (value) => {
-    setNotificationsEnabled(value);
-    // TODO: Implement notifications toggle
-  };
+  // ── Handlers ──
 
   const handleLogout = () => {
     Alert.alert(
@@ -92,94 +32,151 @@ const SettingsScreen = ({ navigation }) => {
       'Are you sure you want to logout?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Logout', 
+        {
+          text: 'Logout',
           style: 'destructive',
           onPress: async () => {
             const result = await logout();
-            // Navigator automatically switches to Auth when userToken becomes null.
-            // No manual reset('Auth') needed — it caused race conditions with
-            // the declarative navigator swap.
             if (!result.success) {
               Alert.alert('Error', 'Failed to logout. Please try again.');
             }
-          }
-        }
+          },
+        },
       ]
     );
   };
 
-  const handleUpdateBudget = () => {
-    const newBudget = {
-      ...budget,
-      monthly: parseFloat(monthlyBudget) || 0,
-      savingsGoal: parseFloat(savingsGoal) || 0
-    };
-    updateBudget(newBudget);
-    setShowEditBudget(false);
+  const handleExportData = async () => {
+    try {
+      setExportingData(true);
+
+      if (!expenses || expenses.length === 0) {
+        Alert.alert('No Data', 'You have no expense data to export yet.');
+        return;
+      }
+
+      // Build CSV string
+      const header = 'Date,Category,Amount,Description\n';
+      const rows = expenses
+        .map((e) => {
+          const date = new Date(e.date || e.created_at).toLocaleDateString();
+          const category = (e.category || 'Uncategorized').replace(/,/g, ' ');
+          const amount = parseFloat(e.amount || 0).toFixed(2);
+          const description = (e.description || e.note || '').replace(/,/g, ' ').replace(/\n/g, ' ');
+          return `${date},${category},${amount},${description}`;
+        })
+        .join('\n');
+
+      const csv = header + rows;
+
+      await Share.share({
+        message: csv,
+        title: 'GaFI Expense Export',
+      });
+    } catch (error) {
+      if (error.message !== 'User did not share') {
+        console.error('Export error:', error);
+        Alert.alert('Error', 'Failed to export data. Please try again.');
+      }
+    } finally {
+      setExportingData(false);
+    }
   };
+
+  const handleClearData = () => {
+    Alert.alert(
+      'Clear All Data',
+      'This will permanently delete all your local expense data and cached information. Your account will remain active. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear Data',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { data: { session } } = await supabase.auth.getSession();
+              const userId = session?.user?.id;
+              // Clear locally-cached keys (keep auth tokens so user stays signed in)
+              const allKeys = await AsyncStorage.getAllKeys();
+              const keysToRemove = allKeys.filter(
+                (k) =>
+                  !k.startsWith('userToken') &&
+                  !k.startsWith('userInfo') &&
+                  !k.startsWith('hasOnboarded_') &&
+                  !k.startsWith('theme')
+              );
+              if (keysToRemove.length > 0) {
+                await AsyncStorage.multiRemove(keysToRemove);
+              }
+              Alert.alert('Done', 'Local cached data has been cleared. Your cloud data remains intact.');
+            } catch (error) {
+              console.error('Clear data error:', error);
+              Alert.alert('Error', 'Failed to clear data. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleHelpSupport = () => {
+    Alert.alert(
+      'Help & Support',
+      'How can we help you?',
+      [
+        {
+          text: 'FAQs',
+          onPress: () => {
+            Alert.alert(
+              'Frequently Asked Questions',
+              '• How do I add an expense?\n  Go to the Expenses tab and tap the + button.\n\n• How do I set my budget?\n  Go to Profile → Budget and set your monthly budget.\n\n• How does the leaderboard work?\n  Save money consistently to earn XP and climb the rankings!\n\n• Is my data secure?\n  Yes! All data is encrypted and stored securely via Supabase.\n\n• How do I add friends?\n  Set a username in your profile, then go to Friends List to search and add friends.'
+            );
+          },
+        },
+        {
+          text: 'Report a Bug',
+          onPress: () => {
+            Linking.openURL(
+              'mailto:gafi.support@example.com?subject=GaFI%20Bug%20Report&body=Please%20describe%20the%20issue%20you%20encountered:'
+            ).catch(() => {
+              Alert.alert('Error', 'Could not open email client. Please email gafi.support@example.com manually.');
+            });
+          },
+        },
+        { text: 'Close', style: 'cancel' },
+      ]
+    );
+  };
+
+  // ── Render ──
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      
-      <Text style={[styles.title, { color: theme.colors.text }]}>Settings</Text>
-      
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Account</Text>
-          
-          <TouchableOpacity 
-            onPress={() => setShowEditProfile(true)}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.settingItem, { backgroundColor: theme.colors.card }]}>
-              <View style={styles.settingItemLeft}>
-                <View style={[styles.settingIconContainer, { backgroundColor: `${theme.colors.primary}20` }]}>
-                  <Ionicons name="person-outline" size={20} color={theme.colors.primary} />
-                </View>
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingText, { color: theme.colors.text }]}>Profile</Text>
-                  <Text style={[styles.settingValue, { color: theme.colors.text }]}>{userInfo?.name || 'Set your name'}</Text>
-                  {userInfo?.username && (
-                    <Text style={[styles.usernameText, { color: theme.colors.primary }]}>@{userInfo.username}</Text>
-                  )}
-                  <Text style={[styles.emailText, { color: theme.colors.text }]}>{userInfo?.email}</Text>
-                </View>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={theme.colors.text} style={{ opacity: 0.6 }} />
-            </View>
-          </TouchableOpacity>
+      {/* Header with back arrow */}
+      <View style={styles.headerRow}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="arrow-back" size={26} color={theme.colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.title, { color: theme.colors.text }]}>Settings</Text>
+        <View style={{ width: 26 }} />
+      </View>
 
-          <TouchableOpacity 
-            onPress={() => setShowEditBudget(true)}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.settingItem, { backgroundColor: theme.colors.card }]}>
-              <View style={styles.settingItemLeft}>
-                <View style={[styles.settingIconContainer, { backgroundColor: `${theme.colors.primary}20` }]}>
-                  <Ionicons name="wallet-outline" size={20} color={theme.colors.primary} />
-                </View>
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingText, { color: theme.colors.text }]}>Budget & Goals</Text>
-                  <Text style={[styles.settingValue, { color: theme.colors.text }]}>Monthly: ₱{(budget?.monthly ?? 0).toLocaleString()}</Text>
-                  <Text style={[styles.settingValue, { color: theme.colors.text }]}>Savings Goal: ₱{(budget?.savingsGoal ?? 0).toLocaleString()}</Text>
-                </View>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={theme.colors.text} style={{ opacity: 0.6 }} />
-            </View>
-          </TouchableOpacity>
-        </View>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
 
+        {/* ── Preferences ── */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Preferences</Text>
-          
+
           <View style={[styles.settingItem, { backgroundColor: theme.colors.card }]}>
             <View style={styles.settingItemLeft}>
               <View style={[styles.settingIconContainer, { backgroundColor: `${theme.colors.primary}20` }]}>
-                <Ionicons 
-                  name={isDarkMode ? "moon-outline" : "sunny-outline"} 
-                  size={20} 
-                  color={theme.colors.primary} 
+                <Ionicons
+                  name={isDarkMode ? 'moon-outline' : 'sunny-outline'}
+                  size={20}
+                  color={theme.colors.primary}
                 />
               </View>
               <View style={styles.settingInfo}>
@@ -198,7 +195,7 @@ const SettingsScreen = ({ navigation }) => {
             />
           </View>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
             onPress={() => navigation.navigate('NotificationSettings')}
             activeOpacity={0.7}
@@ -217,7 +214,7 @@ const SettingsScreen = ({ navigation }) => {
             <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
             onPress={() => navigation.navigate('NotificationTest')}
             activeOpacity={0.7}
@@ -237,11 +234,11 @@ const SettingsScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Features Section */}
+        {/* ── Features ── */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Features</Text>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
             onPress={() => navigation.navigate('Achievements')}
             activeOpacity={0.7}
@@ -258,7 +255,7 @@ const SettingsScreen = ({ navigation }) => {
             <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
             onPress={() => navigation.navigate('FriendsList')}
             activeOpacity={0.7}
@@ -275,7 +272,7 @@ const SettingsScreen = ({ navigation }) => {
             <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
             onPress={() => navigation.navigate('Calendar')}
             activeOpacity={0.7}
@@ -292,7 +289,7 @@ const SettingsScreen = ({ navigation }) => {
             <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
             onPress={() => navigation.navigate('OldLearn')}
             activeOpacity={0.7}
@@ -309,11 +306,104 @@ const SettingsScreen = ({ navigation }) => {
             <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
           </TouchableOpacity>
         </View>
-        
-        {/* About Section */}
+
+        {/* ── Data Management ── */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Data Management</Text>
+
+          <TouchableOpacity
+            style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
+            onPress={handleExportData}
+            activeOpacity={0.7}
+            disabled={exportingData}
+          >
+            <View style={styles.settingItemLeft}>
+              <View style={[styles.settingIconContainer, { backgroundColor: '#2196F320' }]}>
+                <Ionicons name="download-outline" size={20} color="#2196F3" />
+              </View>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>Export Data</Text>
+                <Text style={[styles.settingValue, { color: theme.colors.text }]}>
+                  Share your expense history as CSV
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
+            onPress={handleClearData}
+            activeOpacity={0.7}
+          >
+            <View style={styles.settingItemLeft}>
+              <View style={[styles.settingIconContainer, { backgroundColor: '#FF3B3020' }]}>
+                <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+              </View>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>Clear Local Data</Text>
+                <Text style={[styles.settingValue, { color: theme.colors.text }]}>
+                  Remove cached data & start fresh
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Help & Support ── */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Help & Support</Text>
+
+          <TouchableOpacity
+            style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
+            onPress={handleHelpSupport}
+            activeOpacity={0.7}
+          >
+            <View style={styles.settingItemLeft}>
+              <View style={[styles.settingIconContainer, { backgroundColor: '#5856D620' }]}>
+                <Ionicons name="help-circle-outline" size={20} color="#5856D6" />
+              </View>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>Help & FAQs</Text>
+                <Text style={[styles.settingValue, { color: theme.colors.text }]}>
+                  Get answers & report issues
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
+            onPress={() => {
+              Linking.openURL(
+                'mailto:gafi.support@example.com?subject=GaFI%20Feedback'
+              ).catch(() => {
+                Alert.alert('Error', 'Could not open email client.');
+              });
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={styles.settingItemLeft}>
+              <View style={[styles.settingIconContainer, { backgroundColor: '#00BCD420' }]}>
+                <Ionicons name="chatbubble-ellipses-outline" size={20} color="#00BCD4" />
+              </View>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>Send Feedback</Text>
+                <Text style={[styles.settingValue, { color: theme.colors.text }]}>
+                  Tell us what you think
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
+          </TouchableOpacity>
+        </View>
+
+        {/* ── About ── */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>About</Text>
-          
+
           <TouchableOpacity style={[styles.settingItem, { backgroundColor: theme.colors.card }]} activeOpacity={0.7}>
             <View style={styles.settingItemLeft}>
               <View style={[styles.settingIconContainer, { backgroundColor: `${theme.colors.primary}20` }]}>
@@ -326,8 +416,9 @@ const SettingsScreen = ({ navigation }) => {
             </View>
           </TouchableOpacity>
         </View>
-        
-        <TouchableOpacity 
+
+        {/* ── Log Out ── */}
+        <TouchableOpacity
           style={[styles.logoutButton, { backgroundColor: theme.colors.error }]}
           onPress={handleLogout}
           activeOpacity={0.8}
@@ -335,198 +426,11 @@ const SettingsScreen = ({ navigation }) => {
           <Text style={[styles.logoutButtonText, { color: theme.colors.background }]}>Log Out</Text>
         </TouchableOpacity>
       </ScrollView>
-
-      {/* Edit Profile Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={showEditProfile}
-        onRequestClose={() => setShowEditProfile(false)}
-        statusBarTranslucent
-      >
-        <View style={styles.modalContainer}>
-          <View style={[styles.modalContent, { backgroundColor: theme.colors.background }]}>
-            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Edit Profile</Text>
-            
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.colors.text }]}>Name</Text>
-              <TextInput
-                style={[styles.input, { 
-                  color: theme.colors.text,
-                  borderColor: theme.colors.border,
-                  backgroundColor: theme.colors.card
-                }]}
-                value={name}
-                onChangeText={setName}
-                placeholderTextColor={theme.colors.secondaryText}
-                placeholder="Enter your name"
-                returnKeyType="done"
-                onSubmitEditing={handleUpdateProfile}
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.colors.text }]}>Username</Text>
-              <TextInput
-                style={[styles.input, { 
-                  color: theme.colors.text,
-                  borderColor: theme.colors.border,
-                  backgroundColor: theme.colors.card
-                }]}
-                value={username}
-                onChangeText={setUsername}
-                placeholderTextColor={theme.colors.secondaryText}
-                placeholder="Enter a unique username (optional)"
-                returnKeyType="next"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              <Text style={[styles.helpText, { color: theme.colors.text }]}>
-                Username will be used for the Friends feature. Only letters, numbers, and underscores allowed.
-              </Text>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.colors.text }]}>Email</Text>
-              <TextInput
-                style={[styles.input, { 
-                  color: theme.colors.text,
-                  borderColor: theme.colors.border,
-                  backgroundColor: theme.colors.card,
-                  opacity: 0.6
-                }]}
-                value={email}
-                editable={false}
-                placeholderTextColor={theme.colors.secondaryText}
-                placeholder="Enter your email"
-              />
-              <Text style={[styles.helpText, { color: theme.colors.text }]}>
-                Email cannot be changed for security reasons
-              </Text>
-            </View>
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[
-                  styles.modalButton,
-                  { backgroundColor: theme.colors.card }
-                ]}
-                onPress={() => setShowEditProfile(false)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.cancelModalButtonText, { color: theme.colors.text }]}>Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.modalButton,
-                  { backgroundColor: theme.colors.primary }
-                ]}
-                onPress={handleUpdateProfile}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.saveModalButtonText, { color: theme.colors.background }]}>Save Changes</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Edit Budget Modal */}
-      <Modal
-        visible={showEditBudget}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowEditBudget(false)}
-        statusBarTranslucent
-      >
-        <View style={styles.modalContainer}>
-          <View style={[styles.modalContent, { backgroundColor: theme.colors.background }]}>
-            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Update Budget & Goals</Text>
-
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.colors.text }]}>Monthly Budget</Text>
-              <View style={[styles.inputContainer, { 
-                backgroundColor: theme.colors.card,
-                borderColor: theme.colors.border 
-              }]}>
-                <Text style={[styles.currencySymbol, { color: theme.colors.primary }]}>₱</Text>
-                <TextInput
-                  style={[styles.input, { 
-                    color: theme.colors.text,
-                    backgroundColor: 'transparent',
-                    borderWidth: 0,
-                    flex: 1,
-                    paddingVertical: 16
-                  }]}
-                  value={monthlyBudget}
-                  onChangeText={setMonthlyBudget}
-                  keyboardType="decimal-pad"
-                  placeholder="Enter monthly budget"
-                  placeholderTextColor={theme.colors.secondaryText}
-                  returnKeyType="next"
-                />
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.colors.text }]}>Savings Goal</Text>
-              <View style={[styles.inputContainer, { 
-                backgroundColor: theme.colors.card,
-                borderColor: theme.colors.border 
-              }]}>
-                <Text style={[styles.currencySymbol, { color: theme.colors.primary }]}>₱</Text>
-                <TextInput
-                  style={[styles.input, { 
-                    color: theme.colors.text,
-                    backgroundColor: 'transparent',
-                    borderWidth: 0,
-                    flex: 1,
-                    paddingVertical: 16
-                  }]}
-                  value={savingsGoal}
-                  onChangeText={setSavingsGoal}
-                  keyboardType="decimal-pad"
-                  placeholder="Enter savings goal"
-                  placeholderTextColor={theme.colors.secondaryText}
-                  returnKeyType="done"
-                  onSubmitEditing={handleUpdateBudget}
-                />
-              </View>
-            </View>
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[
-                  styles.modalButton,
-                  { backgroundColor: theme.colors.card }
-                ]}
-                onPress={() => setShowEditBudget(false)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.cancelModalButtonText, { color: theme.colors.text }]}>Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.modalButton,
-                  { backgroundColor: theme.colors.primary }
-                ]}
-                onPress={handleUpdateBudget}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.saveModalButtonText, { color: theme.colors.background }]}>Save Changes</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  // Container styles
   container: {
     flex: 1,
   },
@@ -534,15 +438,20 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     marginHorizontal: 16,
   },
-  
-  // Header styles
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
+
+  // Header
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 24,
-    letterSpacing: -0.5,
+    paddingBottom: 16,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    letterSpacing: -0.3,
   },
   sectionTitle: {
     fontSize: 16,
@@ -553,7 +462,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     opacity: 0.8,
   },
-  
+
   // Setting items
   settingItem: {
     flexDirection: 'row',
@@ -589,143 +498,31 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginBottom: 2,
   },
+  settingLabel: {
+    fontSize: 13,
+    marginBottom: 2,
+  },
   settingValue: {
     fontSize: 14,
     opacity: 0.7,
     lineHeight: 18,
   },
-  emailText: {
-    fontSize: 13,
-    opacity: 0.6,
-    marginTop: 2,
-  },
-  usernameText: {
-    fontSize: 13,
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  versionText: {
-    fontSize: 14,
-    opacity: 0.7,
-  },
-  
-  // Logout button
+
+  // Logout
   logoutButton: {
     marginHorizontal: 16,
-    marginTop: 24,
+    marginTop: 8,
     marginBottom: 32,
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
   },
   logoutButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    letterSpacing: 0.2,
-  },
-  
-  // Modal styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    borderRadius: 20,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 10,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 24,
-    textAlign: 'center',
-    letterSpacing: -0.3,
-  },
-  
-  // Input styles
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    opacity: 0.8,
-  },
-  input: {
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  currencySymbol: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginRight: 12,
-  },
-  helpText: {
-    fontSize: 12,
-    opacity: 0.6,
-    marginTop: 8,
-    fontStyle: 'italic',
-    textAlign: 'center',
-  },
-  
-  // Modal buttons
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 32,
-    gap: 12,
-  },
-  modalButton: {
-    flex: 1,
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  cancelModalButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  saveModalButtonText: {
     fontSize: 16,
     fontWeight: '600',
     letterSpacing: 0.2,

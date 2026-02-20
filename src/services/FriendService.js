@@ -41,15 +41,26 @@ export class FriendService {
         return [];
       }
 
-      const { data, error } = await supabase.rpc('search_users', {
-        search_term: searchTerm.trim()
-      });
+      // Search profiles table directly by username or full_name
+      const term = searchTerm.trim();
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, username, full_name')
+        .or(`username.ilike.%${term}%,full_name.ilike.%${term}%`)
+        .neq('id', currentUser)
+        .limit(20);
 
       if (error) {
         console.error('Database error searching users:', error);
         throw error;
       }
-      return data || [];
+
+      // Map to the shape expected by the UI (user_id, username, full_name)
+      return (data || []).filter(u => u.username).map(u => ({
+        user_id: u.id,
+        username: u.username,
+        full_name: u.full_name || u.username,
+      }));
     } catch (error) {
       console.error('Error searching users:', error);
       return [];
