@@ -20,6 +20,7 @@ import { ThemeContext } from '../../context/ThemeContext';
 import { PieChart, BarChart } from 'react-native-chart-kit';
 import { AchievementService } from '../../services/AchievementService';
 import { normalizeCategory } from '../../utils/categoryUtils';
+import { getCategoryIcon } from '../../utils/categoryIcons';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -390,25 +391,6 @@ const ExpenseScreen = ({ navigation, route }) => {
 
   const formatSelectedTime = (date) => {
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-  };
-
-  const getCategoryIcon = (category) => {
-    const canonical = normalizeCategory(category);
-    const categoryMap = {
-      'Food & Dining': 'fast-food-outline',
-      'Transport': 'bus-outline',
-      'Shopping': 'cart-outline',
-      'Groceries': 'nutrition-outline',
-      'Entertainment': 'film-outline',
-      'Electronics': 'phone-portrait-outline',
-      'School Supplies': 'book-outline',
-      'Utilities': 'build-outline',
-      'Health': 'medkit-outline',
-      'Education': 'school-outline',
-      'Other': 'apps-outline',
-      'No Spend Day': 'checkmark-circle-outline',
-    };
-    return categoryMap[canonical] || 'apps-outline';
   };
 
   // ========== PERIOD NAVIGATION ==========
