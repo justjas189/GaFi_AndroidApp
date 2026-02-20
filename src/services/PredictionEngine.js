@@ -387,9 +387,9 @@ class PredictionEngine {
 
       // Blend signals — YoY same-month is the dominant feature
       if (hasYearOverYearData && monthlyHistory.length >= 3) {
-        totalPredicted = recentWeightedPred * 0.15 + sameMonthPred * 0.85;
+        totalPredicted = recentWeightedPred * 0.30 + sameMonthPred * 0.70;
       } else if (hasYearOverYearData) {
-        totalPredicted = recentWeightedPred * 0.10 + sameMonthPred * 0.90;
+        totalPredicted = recentWeightedPred * 0.20 + sameMonthPred * 0.80;
       } else {
         totalPredicted = recentWeightedPred;
       }
@@ -398,8 +398,9 @@ class PredictionEngine {
       }
 
       // Current month: dynamic pace-based adjustment
-      // As more days pass, actual spending pace becomes a stronger signal
-      if (isCurrentMonth && spentSoFar > 0 && daysElapsed >= 5) {
+      // As more days pass, actual spending pace (including zero-spend days)
+      // becomes a stronger signal. If spending pauses, the projection drops.
+      if (isCurrentMonth && daysElapsed >= 5) {
         const paceProjection = (spentSoFar / daysElapsed) * daysInMonth;
         // Pace weight grows linearly: 0% at day 0 → 45% at end of month
         const paceWeight = Math.min(0.45, (daysElapsed / daysInMonth) * 0.55);
@@ -436,8 +437,8 @@ class PredictionEngine {
             if (prevYearCatAmt > 0) {
               const yearGap = targetYear - mostRecent;
               const inflAdj = prevYearCatAmt * Math.pow(1 + inflationRate, yearGap);
-              // YoY category data dominates (80%) over proportional allocation (20%)
-              predictedAmount = predictedAmount * 0.20 + inflAdj * 0.80;
+              // YoY category data (70%) over proportional allocation (30%)
+              predictedAmount = predictedAmount * 0.30 + inflAdj * 0.70;
             }
           }
         }

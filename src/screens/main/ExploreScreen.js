@@ -32,14 +32,6 @@ const ExploreScreen = ({ navigation }) => {
     },
     {
       id: '2',
-      title: 'Predictions',
-      subtitle: 'Spending forecasts',
-      icon: 'analytics',
-      color: '#3498DB',
-      screen: 'DataPrediction'
-    },
-    {
-      id: '3',
       title: 'Leaderboard',
       subtitle: 'Compare savings',
       icon: 'podium',
@@ -47,7 +39,7 @@ const ExploreScreen = ({ navigation }) => {
       screen: 'Leaderboard'
     },
     {
-      id: '4',
+      id: '3',
       title: 'Achievements',
       subtitle: 'Your milestones',
       icon: 'ribbon',
@@ -55,7 +47,7 @@ const ExploreScreen = ({ navigation }) => {
       screen: 'Achievements'
     },
     {
-      id: '5',
+      id: '4',
       title: 'Gamification',
       subtitle: 'Fun challenges',
       icon: 'game-controller',

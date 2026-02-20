@@ -71,14 +71,16 @@ const TabNavigator = () => {
         tabBarIcon: ({ focused, color, size }) => {
           let iconName;
 
-          if (route.name === 'Home') {
-            iconName = focused ? 'wallet' : 'wallet-outline';
+          if (route.name === 'Game') {
+            iconName = focused ? 'game-controller' : 'game-controller-outline';
           } else if (route.name === 'Expenses') {
             iconName = focused ? 'stats-chart' : 'stats-chart-outline';
+          } else if (route.name === 'Predictions') {
+            iconName = focused ? 'analytics' : 'analytics-outline';
           } else if (route.name === 'Explore') {
             iconName = focused ? 'apps' : 'apps-outline';
-          } else if (route.name === 'Game') {
-            iconName = focused ? 'game-controller' : 'game-controller-outline';
+          } else if (route.name === 'Profile') {
+            iconName = focused ? 'person' : 'person-outline';
           }
 
           return <Ionicons name={iconName} size={size} color={color} />;
@@ -96,10 +98,10 @@ const TabNavigator = () => {
       })}
     >
       <Tab.Screen name="Game" component={GameScreen} />
-      <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Expenses" component={ExpenseScreen} />
+      <Tab.Screen name="Predictions" component={DataPredictionScreen} />
       <Tab.Screen name="Explore" component={ExploreScreen} />
-      {/*<Tab.Screen name="MonT AI" component={ChatScreen} />*/}
+      <Tab.Screen name="Profile" component={SettingsScreen} />
       
     </Tab.Navigator>
   );
@@ -128,7 +130,7 @@ const MainNavigator = () => {
         <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
         <Stack.Screen name="FriendRequests" component={FriendRequestsScreen} />
         <Stack.Screen name="FriendsList" component={FriendsListScreen} />
-        <Stack.Screen name="DataPrediction" component={DataPredictionScreen} />
+        <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="OldLearn" component={LearnScreen} />
       </Stack.Navigator>
     </View>

@@ -453,9 +453,9 @@ const computePredictionForMonth = (expenses, targetMonthIdx, targetYear, current
   const yearsOfData = dataSpanYears;
 
   if (hasYearOverYearData && monthlyHistory.length >= 3) {
-    totalPredicted = recentWeightedPrediction * 0.15 + sameMonthPrediction * 0.85;
+    totalPredicted = recentWeightedPrediction * 0.30 + sameMonthPrediction * 0.70;
   } else if (hasYearOverYearData) {
-    totalPredicted = recentWeightedPrediction * 0.10 + sameMonthPrediction * 0.90;
+    totalPredicted = recentWeightedPrediction * 0.20 + sameMonthPrediction * 0.80;
   } else if (monthlyHistory.length >= 3) {
     totalPredicted = recentWeightedPrediction;
   } else {
@@ -467,8 +467,9 @@ const computePredictionForMonth = (expenses, targetMonthIdx, targetYear, current
   }
 
   // Current month: dynamic pace-based adjustment
-  // As more days pass, actual spending pace becomes a stronger signal
-  if (isCurrentMonth && spentSoFar > 0 && daysElapsed >= 5) {
+  // As more days pass, actual spending pace (including zero-spend days)
+  // becomes a stronger signal. If spending pauses, the projection drops.
+  if (isCurrentMonth && daysElapsed >= 5) {
     const paceProjection = (spentSoFar / daysElapsed) * daysInMonth;
     const paceWeight = Math.min(0.45, (daysElapsed / daysInMonth) * 0.55);
     totalPredicted = totalPredicted * (1 - paceWeight) + paceProjection * paceWeight;
@@ -492,8 +493,8 @@ const computePredictionForMonth = (expenses, targetMonthIdx, targetYear, current
         if (prevYearCatAmount > 0) {
           const yearGap = targetYear - mostRecentPrevYear;
           const inflationAdjustedCat = prevYearCatAmount * Math.pow(1 + inflationRate, yearGap);
-          // Prioritize YoY category data (80%) over proportional allocation (20%)
-          predictedAmount = predictedAmount * 0.20 + inflationAdjustedCat * 0.80;
+          // Prioritize YoY category data (70%) over proportional allocation (30%)
+          predictedAmount = predictedAmount * 0.30 + inflationAdjustedCat * 0.70;
         }
       }
 
@@ -917,33 +918,10 @@ const DataPredictionScreen = ({ navigation }) => {
               </View>
             )}
             <View style={styles.factorRow}>
-              <Ionicons name="analytics-outline" size={16} color="#FF9800" />
-              <Text style={styles.factorLabel}>Inflation Applied:</Text>
-              <Text style={styles.factorValue}>{((predictions.inflationRate || 0) * 100).toFixed(1)}%</Text>
-            </View>
-            {predictions.hasYearOverYearData && predictions.yoyGrowthRate !== 0 && (
-              <View style={styles.factorRow}>
-                <Ionicons name="swap-vertical-outline" size={16} color="#00BCD4" />
-                <Text style={styles.factorLabel}>Year-over-Year:</Text>
-                <Text style={[styles.factorValue, { color: predictions.yoyGrowthRate > 0 ? '#FF6B6B' : '#4CD964' }]}>
-                  {predictions.yoyGrowthRate > 0 ? '+' : ''}{(predictions.yoyGrowthRate * 100).toFixed(1)}%
-                </Text>
-              </View>
-            )}
-            <View style={styles.factorRow}>
               <Ionicons name="layers-outline" size={16} color="#00D4FF" />
-              <Text style={styles.factorLabel}>Data Span:</Text>
+              <Text style={styles.factorLabel}>Data History Analyzed:</Text>
               <Text style={styles.factorValue}>
                 {predictions.yearsOfData || 1} year{(predictions.yearsOfData || 1) !== 1 ? 's' : ''}
-              </Text>
-            </View>
-            {/* Prediction Method Badge */}
-            <View style={styles.factorRow}>
-              <Ionicons name="hardware-chip-outline" size={16} color={predictions.predictionMethod === 'XGBoost Hybrid ML' ? '#4CD964' : '#888'} />
-              <Text style={styles.factorLabel}>Prediction Engine:</Text>
-              <Text style={[styles.factorValue, { color: predictions.predictionMethod === 'XGBoost Hybrid ML' ? '#4CD964' : colors?.text || '#FFF' }]}>
-                {predictions.predictionMethod === 'XGBoost Hybrid ML' ? 'XGBoost Hybrid ML'
-                  : 'Heuristic (Server Offline)'}
               </Text>
             </View>
           </View>
