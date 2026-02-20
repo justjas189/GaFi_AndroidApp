@@ -6582,207 +6582,93 @@ export default function BuildScreen() {
   
   // Koin Tutorial Styles - In-Game Interactive Tutorial
   const tutorialStyles = StyleSheet.create({
-    // Game overlay styles
-    gameOverlay: {
-      ...StyleSheet.absoluteFillObject,
-      zIndex: 900,
-    },
-    highlightFab: {
-      position: 'absolute',
-      bottom: 90,
-      right: 10,
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      borderWidth: 3,
-      borderColor: '#FF9800',
-      backgroundColor: 'transparent',
-    },
-    highlightHeader: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
+    // ===== Tutorial header (replaces normal header in tutorial mode) =====
+    tutorialHeader: {
+      backgroundColor: 'rgba(26, 26, 46, 0.97)',
+      paddingHorizontal: 10,
+      paddingTop: 6,
+      paddingBottom: 4,
+      borderBottomWidth: 1,
+      borderBottomColor: 'rgba(255, 152, 0, 0.35)',
       height: 120,
-      borderWidth: 3,
-      borderColor: '#FF9800',
-      backgroundColor: 'transparent',
+      overflow: 'hidden',
     },
-    // Koin positioning
-    koinGameContainer: {
-      position: 'absolute',
-      zIndex: 950,
-    },
-    koinPositionCenter: {
-      top: '25%',
-      left: 20,
-      right: 20,
-      alignItems: 'center',
-    },
-    koinPositionTop: {
-      top: 140,
-      left: 10,
-      right: 10,
-    },
-    koinPositionBottom: {
-      bottom: 180,
-      left: 10,
-      right: 10,
-    },
-    koinPositionLeft: {
-      top: '35%',
-      left: 10,
-      width: '80%',
-    },
-    koinPositionRight: {
-      top: '25%',
-      right: 50,
-      width: '80%',
-      alignItems: 'flex-end',
-    },
-    koinWrapper: {
+    tutorialRow1: {
       flexDirection: 'row',
       alignItems: 'flex-start',
-    },
-    koinGameImage: {
-      width: 120,
-      height: 120,
-    },
-    speechBubbleGame: {
+      gap: 8,
       flex: 1,
-      backgroundColor: '#FFFDE7',
-      borderRadius: 16,
-      padding: 14,
-      marginLeft: -10,
-      marginTop: 20,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.25,
-      shadowRadius: 4,
-      elevation: 8,
-      maxWidth: 240,
     },
-    speechTitleGame: {
-      fontSize: 15,
-      fontWeight: 'bold',
-      color: '#2C3E50',
-      marginBottom: 6,
+    koinMini: {
+      width: 38,
+      height: 38,
     },
-    speechMessageGame: {
+    tutorialTextArea: {
+      flex: 1,
+    },
+    tutorialTitle: {
       fontSize: 13,
-      color: '#5D6D7E',
-      lineHeight: 18,
-      marginBottom: 10,
+      fontWeight: 'bold',
+      color: '#FF9800',
     },
-    stepIndicator: {
+    tutorialMessage: {
       fontSize: 11,
-      color: '#999',
-      marginTop: 8,
-      textAlign: 'right',
+      color: '#CCC',
+      lineHeight: 14,
+      marginTop: 1,
     },
-    // Progress dots inside speech bubble
-    progressDotsInline: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      gap: 5,
-      marginBottom: 10,
-    },
-    // Navigation inside speech bubble
-    navButtonRowInline: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginTop: 4,
-    },
-    skipButtonInline: {
-      paddingVertical: 6,
-      paddingHorizontal: 8,
-    },
-    backButtonInline: {
-      backgroundColor: '#F0F0F0',
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-      borderRadius: 20,
-    },
-    nextButtonInline: {
+    tutorialRow2: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: '#FF9800',
-      paddingVertical: 8,
-      paddingHorizontal: 14,
-      borderRadius: 20,
-      gap: 4,
-    },
-    nextButtonTextInline: {
-      fontSize: 13,
-      fontWeight: 'bold',
-      color: '#FFF',
-    },
-    // Navigation at bottom (legacy - no longer used)
-    tutorialNavigation: {
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.9)',
-      paddingVertical: 16,
-      paddingHorizontal: 20,
-      paddingBottom: 30,
-      zIndex: 1000,
-    },
-    progressDotsGame: {
-      flexDirection: 'row',
-      justifyContent: 'center',
+      marginTop: 5,
       gap: 6,
-      marginBottom: 16,
     },
-    dotGame: {
-      width: 6,
-      height: 6,
+    tutorialHint: {
+      flex: 1,
+      fontSize: 10,
+      color: '#FFB74D',
+      fontStyle: 'italic',
+    },
+    tutorialDots: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+    },
+    dot: {
+      width: 5,
+      height: 5,
       borderRadius: 3,
-      backgroundColor: '#DDD',
+      backgroundColor: 'rgba(255,255,255,0.25)',
     },
-    dotActiveGame: {
+    dotActive: {
       backgroundColor: '#FF9800',
-      width: 14,
+      width: 12,
     },
-    dotCompletedGame: {
+    dotDone: {
       backgroundColor: '#4CAF50',
     },
-    navButtonRow: {
+    tutorialNav: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
       alignItems: 'center',
+      gap: 6,
     },
-    navMainButtons: {
-      flexDirection: 'row',
-      gap: 8,
+    btnBack: {
+      backgroundColor: 'rgba(255,255,255,0.12)',
+      paddingVertical: 5,
+      paddingHorizontal: 8,
+      borderRadius: 12,
     },
-    skipButtonGame: {
-      paddingVertical: 10,
-      paddingHorizontal: 16,
-    },
-    skipButtonTextGame: {
-      fontSize: 12,
-      color: '#999',
-    },
-    backButtonGame: {
-      backgroundColor: 'rgba(255,255,255,0.2)',
-      paddingVertical: 12,
-      paddingHorizontal: 16,
-      borderRadius: 25,
-    },
-    nextButtonGame: {
+    btnNext: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: '#FF9800',
-      paddingVertical: 12,
-      paddingHorizontal: 24,
-      borderRadius: 25,
-      gap: 8,
+      paddingVertical: 5,
+      paddingHorizontal: 10,
+      borderRadius: 12,
+      gap: 3,
     },
-    nextButtonTextGame: {
-      fontSize: 16,
+    btnNextText: {
+      fontSize: 11,
       fontWeight: 'bold',
       color: '#FFF',
     },
@@ -6955,65 +6841,141 @@ export default function BuildScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header with Title and Spending Tracker */}
-      <View style={styles.header}>
-        {/* Back to Menu Button */}
-        <TouchableOpacity
-          style={styles.backToMenuButton}
-          onPress={() => {
-            // Clear tutorial state if active
-            if (tutorialActive) {
-              setTutorialActive(false);
-              setTutorialStep(0);
-            }
-            setGameMode(null);
-            setShowMainMenu(true);
-          }}
-        >
-          <Ionicons name="home" size={20} color="#FFF" />
-        </TouchableOpacity>
-        {/* End Session / Give Up Button — story & custom mode only */}
-        {(gameMode === 'story') && (
-          <TouchableOpacity
-            style={styles.giveUpButton}
-            onPress={handleAbandonSession}
-          >
-            <Ionicons name="flag" size={16} color="#FFF" />
-            <Text style={styles.giveUpButtonText}>Give Up</Text>
-          </TouchableOpacity>
-        )}
-        <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>{currentMap.icon} {currentMap.name}</Text>
-          <Text style={styles.headerSubtitle}>
-            {gameMode === 'tutorial' ? '🎓 Tutorial' : gameMode === 'story' ? `Story Mode - Level ${storyLevel}` : 'Custom Mode'}
-          </Text>
-        </View>
-        <View style={styles.headerRight}>
-          <Text style={styles.spendingLabel}>Today's Spending</Text>
-          <Text style={styles.spendingAmount}>₱{todaySpending.toFixed(2)}</Text>
-          {/* Weekly Budget - Show in Story Mode and Custom Mode */}
-          {(gameMode === 'story' || gameMode === 'custom') && (
-            <>
-              <Text style={[styles.spendingLabel, { marginTop: 6 }]}>Weekly Budget</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={[styles.spendingAmount, { 
-                  color: getRemainingWeeklyBudget() < weeklyBudget * 0.2 ? '#FF4444' : '#4CAF50' 
-                }]}>
-                  ₱{getRemainingWeeklyBudget().toFixed(2)}
+      {/* Header — tutorial mode replaces it with compact tutorial bar */}
+      {tutorialActive && gameMode === 'tutorial' ? (
+        <View style={tutorialStyles.tutorialHeader}>
+          {/* Row 1: Home + Koin avatar + title/message */}
+          <View style={tutorialStyles.tutorialRow1}>
+            <TouchableOpacity
+              style={styles.backToMenuButton}
+              onPress={() => {
+                setTutorialActive(false);
+                setTutorialStep(0);
+                setGameMode(null);
+                setShowMainMenu(true);
+              }}
+            >
+              <Ionicons name="home" size={20} color="#FFF" />
+            </TouchableOpacity>
+            <Image
+              source={KOIN_TUTORIAL_IMAGE}
+              style={tutorialStyles.koinMini}
+              resizeMode="contain"
+            />
+            <View style={tutorialStyles.tutorialTextArea}>
+              <Text style={tutorialStyles.tutorialTitle} numberOfLines={1}>
+                {TUTORIAL_STEPS[tutorialStep]?.title}
+              </Text>
+              <Text style={tutorialStyles.tutorialMessage}>
+                {TUTORIAL_STEPS[tutorialStep]?.message}
+              </Text>
+            </View>
+          </View>
+          {/* Row 2: hint + dots + nav */}
+          <View style={tutorialStyles.tutorialRow2}>
+            {!isTutorialStepComplete() && TUTORIAL_STEPS[tutorialStep]?.conditionKey ? (
+              <Text style={tutorialStyles.tutorialHint}>⏳ Do the action to continue</Text>
+            ) : (
+              <View style={{ flex: 1 }} />
+            )}
+            <View style={tutorialStyles.tutorialDots}>
+              {TUTORIAL_STEPS.map((_, i) => (
+                <View key={i} style={[
+                  tutorialStyles.dot,
+                  i === tutorialStep && tutorialStyles.dotActive,
+                  i < tutorialStep && tutorialStyles.dotDone,
+                ]} />
+              ))}
+            </View>
+            <View style={tutorialStyles.tutorialNav}>
+              {tutorialStep > 0 && (
+                <TouchableOpacity
+                  style={tutorialStyles.btnBack}
+                  onPress={() => setTutorialStep(p => p - 1)}
+                >
+                  <Ionicons name="arrow-back" size={14} color="#AAA" />
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[tutorialStyles.btnNext, !isTutorialStepComplete() && { backgroundColor: '#555' }]}
+                disabled={!isTutorialStepComplete()}
+                onPress={() => {
+                  if (tutorialStep < TUTORIAL_STEPS.length - 1) {
+                    const next = tutorialStep + 1;
+                    setTutorialStep(next);
+                    gameDatabaseService.saveTutorialProgress({ currentStep: next, stepsCompleted: Array.from({ length: next }, (_, i) => String(i)), tutorialCompleted: false });
+                  } else {
+                    endTutorial();
+                  }
+                }}
+              >
+                <Text style={tutorialStyles.btnNextText}>
+                  {tutorialStep === TUTORIAL_STEPS.length - 1 ? 'Done!' : 'Next'}
                 </Text>
-                {gameMode === 'custom' && (
-                  <TouchableOpacity
-                    onPress={() => { setSettingsModeType(customModeType); setShowCustomSettingsModal(true); }}
-                    style={styles.settingsGearButton}
-                  >
-                    <Ionicons name="settings-sharp" size={18} color="#F5DEB3" />
-                  </TouchableOpacity>
-                )}
-              </View>
-            </>
-          )}
+                <Ionicons
+                  name={tutorialStep === TUTORIAL_STEPS.length - 1 ? 'checkmark' : 'arrow-forward'}
+                  size={13} color="#FFF"
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
-      </View>
+      ) : (
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backToMenuButton}
+            onPress={() => {
+              if (tutorialActive) {
+                setTutorialActive(false);
+                setTutorialStep(0);
+              }
+              setGameMode(null);
+              setShowMainMenu(true);
+            }}
+          >
+            <Ionicons name="home" size={20} color="#FFF" />
+          </TouchableOpacity>
+          {(gameMode === 'story') && (
+            <TouchableOpacity
+              style={styles.giveUpButton}
+              onPress={handleAbandonSession}
+            >
+              <Ionicons name="flag" size={16} color="#FFF" />
+              <Text style={styles.giveUpButtonText}>Give Up</Text>
+            </TouchableOpacity>
+          )}
+          <View style={styles.headerLeft}>
+            <Text style={styles.headerTitle}>{currentMap.icon} {currentMap.name}</Text>
+            <Text style={styles.headerSubtitle}>
+              {gameMode === 'story' ? `Story Mode - Level ${storyLevel}` : 'Custom Mode'}
+            </Text>
+          </View>
+          <View style={styles.headerRight}>
+            <Text style={styles.spendingLabel}>Today's Spending</Text>
+            <Text style={styles.spendingAmount}>₱{todaySpending.toFixed(2)}</Text>
+            {(gameMode === 'story' || gameMode === 'custom') && (
+              <>
+                <Text style={[styles.spendingLabel, { marginTop: 6 }]}>Weekly Budget</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={[styles.spendingAmount, {
+                    color: getRemainingWeeklyBudget() < weeklyBudget * 0.2 ? '#FF4444' : '#4CAF50'
+                  }]}>
+                    ₱{getRemainingWeeklyBudget().toFixed(2)}
+                  </Text>
+                  {gameMode === 'custom' && (
+                    <TouchableOpacity
+                      onPress={() => { setSettingsModeType(customModeType); setShowCustomSettingsModal(true); }}
+                      style={styles.settingsGearButton}
+                    >
+                      <Ionicons name="settings-sharp" size={18} color="#F5DEB3" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      )}
 
       {/* Story/Custom Mode Progress - Level-specific UI */}
       {(gameMode === 'story' || gameMode === 'custom') && (
@@ -7137,16 +7099,18 @@ export default function BuildScreen() {
         </View>
       )}
 
-      {/* Location Badge - positioned below progress bar in story/custom mode */}
-      <View style={[
-        styles.locationBadge,
-        (gameMode === 'story' || gameMode === 'custom') && { top: 105 }
-      ]}>
-        <View style={[styles.walkingIndicator, isWalking && { backgroundColor: '#FF9800' }]} />
-        <Text style={styles.locationText}>
-          {isWalking ? 'Walking to...' : currentLocation}
-        </Text>
-      </View>
+      {/* Location Badge - hidden in tutorial, offset in story/custom */}
+      {!(tutorialActive && gameMode === 'tutorial') && (
+        <View style={[
+          styles.locationBadge,
+          (gameMode === 'story' || gameMode === 'custom') && { top: 105 }
+        ]}>
+          <View style={[styles.walkingIndicator, isWalking && { backgroundColor: '#FF9800' }]} />
+          <Text style={styles.locationText}>
+            {isWalking ? 'Walking to...' : currentLocation}
+          </Text>
+        </View>
+      )}
 
       {/* Map Content */}
       {renderMapContent()}
@@ -7173,129 +7137,7 @@ export default function BuildScreen() {
         </View>
       )}
 
-      {/* In-Game Koin Tutorial Overlay */}
-      {tutorialActive && gameMode === 'tutorial' && (
-        <>
-          {/* Semi-transparent overlay for non-highlighted areas */}
-          <View style={tutorialStyles.gameOverlay} pointerEvents="box-none">
-            {/* Highlight specific UI elements based on current step */}
-            {TUTORIAL_STEPS[tutorialStep]?.highlight === 'fab' && (
-              <View style={tutorialStyles.highlightFab} />
-            )}
-            {TUTORIAL_STEPS[tutorialStep]?.highlight === 'header' && (
-              <View style={tutorialStyles.highlightHeader} />
-            )}
-          </View>
-          
-          {/* Koin Character and Speech Bubble */}
-          <View 
-            style={[
-              tutorialStyles.koinGameContainer,
-              TUTORIAL_STEPS[tutorialStep]?.position === 'top' && tutorialStyles.koinPositionTop,
-              TUTORIAL_STEPS[tutorialStep]?.position === 'bottom' && tutorialStyles.koinPositionBottom,
-              TUTORIAL_STEPS[tutorialStep]?.position === 'left' && tutorialStyles.koinPositionLeft,
-              TUTORIAL_STEPS[tutorialStep]?.position === 'right' && tutorialStyles.koinPositionRight,
-              TUTORIAL_STEPS[tutorialStep]?.position === 'center' && tutorialStyles.koinPositionCenter,
-            ]}
-            pointerEvents="box-none"
-          >
-            <View style={tutorialStyles.koinWrapper}>
-              {/* Koin Image */}
-              <Image
-                source={KOIN_TUTORIAL_IMAGE}
-                style={tutorialStyles.koinGameImage}
-                resizeMode="contain"
-              />
-              
-              {/* Speech Bubble with Navigation Inside */}
-              <View style={tutorialStyles.speechBubbleGame}>
-                <Text style={tutorialStyles.speechTitleGame}>
-                  {TUTORIAL_STEPS[tutorialStep]?.title}
-                </Text>
-                <Text style={tutorialStyles.speechMessageGame}>
-                  {TUTORIAL_STEPS[tutorialStep]?.message}
-                </Text>
-
-                {/* Condition hint - show what user needs to do */}
-                {!isTutorialStepComplete() && TUTORIAL_STEPS[tutorialStep]?.conditionKey && (
-                  <View style={{ backgroundColor: '#FFF3E0', borderRadius: 8, padding: 6, marginBottom: 8 }}>
-                    <Text style={{ fontSize: 11, color: '#E65100', textAlign: 'center', fontStyle: 'italic' }}>
-                      ⏳ Complete the action above to continue
-                    </Text>
-                  </View>
-                )}
-                
-                {/* Step Counter */}
-                <Text style={{ fontSize: 11, color: '#999', textAlign: 'center', marginBottom: 6 }}>
-                  Step {tutorialStep + 1} of {TUTORIAL_STEPS.length}
-                </Text>
-                
-                {/* Progress Dots */}
-                <View style={tutorialStyles.progressDotsInline}>
-                  {TUTORIAL_STEPS.map((_, index) => (
-                    <View
-                      key={index}
-                      style={[
-                        tutorialStyles.dotGame,
-                        index === tutorialStep && tutorialStyles.dotActiveGame,
-                        index < tutorialStep && tutorialStyles.dotCompletedGame,
-                      ]}
-                    />
-                  ))}
-                </View>
-                
-                {/* Navigation Buttons Inside Speech Bubble */}
-                <View style={tutorialStyles.navButtonRowInline}>
-                  <TouchableOpacity
-                    style={tutorialStyles.skipButtonInline}
-                    onPress={endTutorial}
-                  >
-                    <Text style={tutorialStyles.skipButtonTextGame}>Skip</Text>
-                  </TouchableOpacity>
-                  
-                  <View style={tutorialStyles.navMainButtons}>
-                    {tutorialStep > 0 && (
-                      <TouchableOpacity
-                        style={tutorialStyles.backButtonInline}
-                        onPress={() => setTutorialStep(prev => prev - 1)}
-                      >
-                        <Ionicons name="arrow-back" size={18} color="#666" />
-                      </TouchableOpacity>
-                    )}
-                    
-                    <TouchableOpacity
-                      style={[
-                        tutorialStyles.nextButtonInline,
-                        !isTutorialStepComplete() && { backgroundColor: '#CCC' },
-                      ]}
-                      disabled={!isTutorialStepComplete()}
-                      onPress={() => {
-                        if (tutorialStep < TUTORIAL_STEPS.length - 1) {
-                          const nextStep = tutorialStep + 1;
-                          setTutorialStep(nextStep);
-                          // Persist step progress to Supabase
-                          gameDatabaseService.saveTutorialProgress({ currentStep: nextStep, stepsCompleted: Array.from({ length: nextStep }, (_, i) => String(i)), tutorialCompleted: false });
-                        } else {
-                          endTutorial();
-                        }
-                      }}
-                    >
-                      <Text style={tutorialStyles.nextButtonTextInline}>
-                        {tutorialStep === TUTORIAL_STEPS.length - 1 ? "Done!" : 'Next'}
-                      </Text>
-                      <Ionicons 
-                        name={tutorialStep === TUTORIAL_STEPS.length - 1 ? "checkmark" : "arrow-forward"} 
-                        size={16} 
-                        color="#FFF" 
-                      />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-            </View>
-          </View>
-        </>
-      )}
+      {/* Tutorial overlay removed — tutorial now renders inside the header */}
 
       {/* Closet Modal - Character Selection */}
       <Modal
