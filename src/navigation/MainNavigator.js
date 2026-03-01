@@ -15,7 +15,7 @@ import AddNoteScreen from '../screens/main/AddNoteScreen';
 import SettingsScreen from '../screens/main/SettingsScreen';
 import LearnScreen from '../screens/main/LearnScreen';
 import GamificationScreen from '../screens/main/GamificationScreen';
-import NotificationSettings from '../components/NotificationSettings';
+import NotificationSettingsScreen from '../screens/main/NotificationSettingsScreen';
 import NotificationTestScreen from '../screens/main/NotificationTestScreen';
 import GameScreen from '../screens/main/GameScreen';
 import ExploreScreen from '../screens/main/ExploreScreen';
@@ -124,7 +124,7 @@ const MainNavigator = () => {
         <Stack.Screen name="Notes" component={NoteScreen} />
         <Stack.Screen name="Calendar" component={CalendarScreen} />
         <Stack.Screen name="Settings" component={SettingsScreen} />
-        <Stack.Screen name="NotificationSettings" component={NotificationSettings} />
+        <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
         <Stack.Screen name="NotificationTest" component={NotificationTestScreen} />
         <Stack.Screen name="Gamification" component={GamificationScreen} />
         <Stack.Screen name="Achievements" component={AchievementDashboard} />

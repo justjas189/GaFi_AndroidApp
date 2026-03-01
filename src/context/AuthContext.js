@@ -3,6 +3,7 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { supabase, supabaseAdmin, formatSupabaseError } from '../config/supabase';
+import notificationService from '../services/OneSignalNotificationService';
 
 export const AuthContext = createContext();
 
@@ -64,7 +65,22 @@ export const AuthProvider = ({ children }) => {
         setUserInfo(enhancedUserInfo);
         await AsyncStorage.setItem('userToken', session.access_token);
         await AsyncStorage.setItem('userInfo', JSON.stringify(enhancedUserInfo));
+
+        // Link device to OneSignal for push notifications
+        try {
+          await notificationService.loginUser(session.user.id, session.user.email);
+          await notificationService.updateActiveUserTag();
+        } catch (e) {
+          console.warn('OneSignal login failed (non-critical):', e.message);
+        }
       } else if (event === 'SIGNED_OUT') {
+        // Unlink device from OneSignal
+        try {
+          await notificationService.logoutUser();
+        } catch (e) {
+          console.warn('OneSignal logout failed (non-critical):', e.message);
+        }
+
         setUserToken(null);
         setUserInfo(null);
         await AsyncStorage.removeItem('userToken');

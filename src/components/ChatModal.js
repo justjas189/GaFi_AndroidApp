@@ -46,6 +46,10 @@ const _sendMessageRef = { current: null };
 const _isTypingListeners = new Set();
 const _notifyIsTyping = (val) => _isTypingListeners.forEach(fn => fn(val));
 
+// Keyboard height bridge — footer publishes, ChatModal subscribes
+const _keyboardHeightListeners = new Set();
+const _notifyKeyboardHeight = (val) => _keyboardHeightListeners.forEach(fn => fn(val));
+
 // ──────────────────────────────────────────────
 // Standalone footer component — defined OUTSIDE ChatModal so its
 // identity (and thus the footerComponent prop) never changes,
@@ -55,12 +59,34 @@ const ChatFooterComponent = (props) => {
   const { colors } = useTheme(); // works — ThemeProvider is above BottomSheetModalProvider
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   // Subscribe to isTyping changes pushed from ChatModal
   useEffect(() => {
     const listener = (val) => setIsTyping(val);
     _isTypingListeners.add(listener);
     return () => _isTypingListeners.delete(listener);
+  }, []);
+
+  // Track keyboard height for bottomInset + notify ChatModal for FlatList padding
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      const h = e.endCoordinates.height;
+      setKeyboardHeight(h);
+      _notifyKeyboardHeight(h);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+      _notifyKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
   }, []);
 
   const handleSend = useCallback(() => {
@@ -71,7 +97,7 @@ const ChatFooterComponent = (props) => {
   }, [inputText, isTyping]);
 
   return (
-    <BottomSheetFooter {...props} bottomInset={0}>
+    <BottomSheetFooter {...props} bottomInset={keyboardHeight}>
       <View style={[styles.inputArea, { backgroundColor: colors.background, borderTopColor: colors.border || '#3C3C3C' }]}>
         <View style={[styles.inputContainer, { backgroundColor: colors.card }]}>
           <BottomSheetTextInput
@@ -213,6 +239,18 @@ const ChatModal = forwardRef(({ visible, onClose }, ref) => {
 
   // Snap points: 88% of screen height
   const snapPoints = useMemo(() => ['88%'], []);
+
+  // Keyboard-aware padding for the FlatList so messages stay visible
+  const [kbHeight, setKbHeight] = useState(0);
+  useEffect(() => {
+    const listener = (h) => {
+      setKbHeight(h);
+      // Auto-scroll so the latest message stays visible above the keyboard
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 120);
+    };
+    _keyboardHeightListeners.add(listener);
+    return () => _keyboardHeightListeners.delete(listener);
+  }, []);
 
   // Chat state
   const [messages, setMessages] = useState([]);
@@ -852,7 +890,7 @@ YOUR PERSONALITY:
       footerComponent={ChatFooterComponent}
       keyboardBehavior="interactive"
       keyboardBlurBehavior="restore"
-      android_keyboardInputMode="adjustResize"
+      android_keyboardInputMode="adjustPan"
       backgroundStyle={{ backgroundColor: colors.background }}
       style={styles.sheetContainer}
     >
@@ -861,7 +899,12 @@ YOUR PERSONALITY:
         data={messages}
         renderItem={renderMessage}
         keyExtractor={item => item.id}
-        contentContainerStyle={styles.messagesList}
+        contentContainerStyle={[
+          styles.messagesList,
+          // Add extra bottom padding when keyboard is open so messages
+          // aren't hidden behind the footer + keyboard
+          kbHeight > 0 && { paddingBottom: 100 + kbHeight },
+        ]}
         showsVerticalScrollIndicator={false}
         ListFooterComponent={renderListFooter}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}

@@ -1,5 +1,5 @@
 // src/screens/main/NotificationTestScreen.js
-// Test screen to verify notification functionality
+// Test screen to verify all notification types using OneSignal + local notifications
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -8,74 +8,95 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
-  Switch
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BudgetAlertManager } from '../../services/BudgetAlertManager';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { OneSignal } from 'react-native-onesignal';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import notificationService from '../../services/OneSignalNotificationService';
+
+const TEST_BUTTONS = [
+  {
+    type: 'budget_warning',
+    label: '⚠️ Budget Warning',
+    description: '"Low Health" — 85% of budget used',
+    color: '#FF3B30',
+  },
+  {
+    type: 'budget_critical',
+    label: '🔴 Budget Critical',
+    description: '95% of budget used — almost at the limit',
+    color: '#FF6B6B',
+  },
+  {
+    type: 'level_up',
+    label: '🎉 Level Up!',
+    description: 'Milestone celebration push notification',
+    color: '#FFD700',
+  },
+  {
+    type: 'weekly_checkin',
+    label: '🤖 Koin AI Check-In',
+    description: 'Weekly spending analysis from Koin AI',
+    color: '#5856D6',
+  },
+  {
+    type: 'budget_reset',
+    label: '💰 Budget Reset',
+    description: 'New cycle begins notification',
+    color: '#34C759',
+  },
+  {
+    type: 'daily_reminder',
+    label: '📝 Daily Reminder',
+    description: 'Expense logging nudge',
+    color: '#FF9500',
+  },
+];
 
 const NotificationTestScreen = ({ navigation }) => {
-  const { theme } = useTheme();
+  const { theme, isDarkMode } = useTheme();
   const { user } = useAuth();
-  const [notificationStatus, setNotificationStatus] = useState(null);
-  const [pushToken, setPushToken] = useState(null);
-  const [dailyReminderEnabled, setDailyReminderEnabled] = useState(false);
+  const [sending, setSending] = useState(null);
+  const [subscriptionId, setSubscriptionId] = useState(null);
+  const [permissionGranted, setPermissionGranted] = useState(null);
 
   useEffect(() => {
-    checkNotificationStatus();
+    checkStatus();
   }, []);
 
-  const checkNotificationStatus = async () => {
+  const checkStatus = async () => {
     try {
-      setNotificationStatus({ status: 'not-configured' });
-      
-      // Check if daily reminder is set
-      const savedReminder = await AsyncStorage.getItem('expense_reminder_id');
-      setDailyReminderEnabled(!!savedReminder);
-      
+      const permission = OneSignal.Notifications.hasPermission();
+      setPermissionGranted(permission);
+
+      const id = OneSignal.User.pushSubscription.getPushSubscriptionId();
+      setSubscriptionId(id || null);
     } catch (error) {
-      console.error('Error checking notification status:', error);
-      Alert.alert('Error', 'Failed to check notification status');
+      console.warn('Error checking notification status:', error);
     }
   };
 
-  const testInstantNotification = async () => {
+  const handleTest = async (type) => {
+    setSending(type);
     try {
-      Alert.alert('Info', 'Notification service is not currently configured.');
+      await notificationService.sendTestNotification(type);
+      Alert.alert('Sent!', `Test "${type}" notification fired. Check your notification tray.`);
     } catch (error) {
-      console.error('Error sending test notification:', error);
-      Alert.alert('Error', 'Failed to send test notification: ' + error.message);
+      Alert.alert('Error', 'Failed to send: ' + error.message);
+    } finally {
+      setSending(null);
     }
   };
 
-  const testBudgetAlert = async () => {
+  const handleRequestPermission = async () => {
     try {
-      const alertManager = new BudgetAlertManager();
-      await alertManager.triggerTestAlert(user?.id, 'warning');
-      Alert.alert('Budget Alert Sent! 💰', 'Check your notifications for the budget warning alert.');
+      OneSignal.Notifications.requestPermission(true);
+      setTimeout(checkStatus, 1000);
     } catch (error) {
-      console.error('Error sending budget alert:', error);
-      Alert.alert('Error', 'Failed to send budget alert: ' + error.message);
-    }
-  };
-
-  const toggleDailyReminder = async (enabled) => {
-    try {
-      if (enabled) {
-        setDailyReminderEnabled(true);
-        Alert.alert(
-          'Daily Reminder Set! \uD83D\uDCC5', 
-          'You will be reminded daily at 6:00 PM to track your expenses!'
-        );
-      } else {
-        setDailyReminderEnabled(false);
-        Alert.alert('Reminder Disabled', 'Daily expense reminders have been turned off.');
-      }
-    } catch (error) {
-      console.error('Error toggling daily reminder:', error);
-      Alert.alert('Error', 'Failed to toggle daily reminder: ' + error.message);
+      Alert.alert('Error', 'Failed to request permission');
     }
   };
 
@@ -85,116 +106,183 @@ const NotificationTestScreen = ({ navigation }) => {
       backgroundColor: theme.colors.background,
     },
     header: {
-      backgroundColor: theme.colors.primary,
-      padding: 20,
-      paddingTop: 40,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 20,
+      paddingTop: 12,
+      paddingBottom: 12,
     },
-    headerText: {
-      color: '#FFFFFF',
-      fontSize: 24,
-      fontWeight: 'bold',
-      textAlign: 'center',
+    headerTitle: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: theme.colors.text,
     },
     content: {
       flex: 1,
       padding: 20,
     },
     statusCard: {
-      backgroundColor: theme.colors.surface,
-      borderRadius: 12,
-      padding: 20,
+      backgroundColor: isDarkMode ? theme.colors.surface : theme.colors.card,
+      borderRadius: 14,
+      padding: 18,
       marginBottom: 20,
-      elevation: 2,
+      borderWidth: 1,
+      borderColor: isDarkMode ? theme.colors.border : '#E8E8E8',
     },
     statusTitle: {
-      fontSize: 18,
-      fontWeight: 'bold',
+      fontSize: 16,
+      fontWeight: '700',
       color: theme.colors.text,
-      marginBottom: 10,
+      marginBottom: 12,
     },
-    statusText: {
-      fontSize: 16,
-      color: theme.colors.textSecondary,
-      marginBottom: 5,
-    },
-    button: {
-      backgroundColor: theme.colors.primary,
-      borderRadius: 12,
-      padding: 15,
-      marginBottom: 15,
+    statusRow: {
+      flexDirection: 'row',
       alignItems: 'center',
+      marginBottom: 8,
+      gap: 8,
     },
-    buttonText: {
-      color: '#FFFFFF',
-      fontSize: 16,
+    statusLabel: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+      flex: 1,
+    },
+    statusValue: {
+      fontSize: 14,
       fontWeight: '600',
     },
-    toggleContainer: {
-      backgroundColor: theme.colors.surface,
-      borderRadius: 12,
-      padding: 15,
-      marginBottom: 15,
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
+    sectionTitle: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginBottom: 12,
     },
-    toggleText: {
-      fontSize: 16,
+    testButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 10,
+      borderWidth: 1,
+      gap: 12,
+    },
+    testButtonLabel: {
+      fontSize: 15,
+      fontWeight: '600',
       color: theme.colors.text,
-      flex: 1,
+    },
+    testButtonDesc: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+    },
+    permButton: {
+      backgroundColor: theme.colors.primary,
+      borderRadius: 12,
+      padding: 16,
+      alignItems: 'center',
+      marginBottom: 20,
+    },
+    permButtonText: {
+      color: '#FFF',
+      fontWeight: '700',
+      fontSize: 15,
+    },
+    refreshButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 14,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      gap: 8,
     },
   });
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerText}>🔔 Notification Test Center</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>🧪 Notification Lab</Text>
+        <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Status Card */}
         <View style={styles.statusCard}>
-          <Text style={styles.statusTitle}>📊 Notification Status</Text>
-          <Text style={styles.statusText}>
-            Permissions: {notificationStatus ? '✅ Granted' : '❌ Denied'}
-          </Text>
-          <Text style={styles.statusText}>
-            Daily Reminder: {dailyReminderEnabled ? '✅ Active' : '❌ Inactive'}
-          </Text>
-          <Text style={styles.statusText}>
-            User ID: {user?.id || 'Not logged in'}
-          </Text>
+          <Text style={styles.statusTitle}>📊 System Status</Text>
+
+          <View style={styles.statusRow}>
+            <Text style={styles.statusLabel}>Permission</Text>
+            <Text style={[styles.statusValue, { color: permissionGranted ? theme.colors.success : theme.colors.error }]}>
+              {permissionGranted === null ? '...' : permissionGranted ? '✅ Granted' : '❌ Denied'}
+            </Text>
+          </View>
+
+          <View style={styles.statusRow}>
+            <Text style={styles.statusLabel}>OneSignal ID</Text>
+            <Text style={[styles.statusValue, { color: subscriptionId ? theme.colors.success : theme.colors.warning }]} numberOfLines={1}>
+              {subscriptionId ? `${subscriptionId.substring(0, 16)}…` : '❌ Not registered'}
+            </Text>
+          </View>
+
+          <View style={styles.statusRow}>
+            <Text style={styles.statusLabel}>User ID</Text>
+            <Text style={[styles.statusValue, { color: user?.id ? theme.colors.success : theme.colors.error }]} numberOfLines={1}>
+              {user?.id ? `${user.id.substring(0, 16)}…` : 'Not logged in'}
+            </Text>
+          </View>
         </View>
+
+        {/* Permission Button */}
+        {permissionGranted === false && (
+          <TouchableOpacity style={styles.permButton} onPress={handleRequestPermission}>
+            <Text style={styles.permButtonText}>🔓 Grant Notification Permission</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Test Buttons */}
-        <TouchableOpacity style={styles.button} onPress={testInstantNotification}>
-          <Text style={styles.buttonText}>🔔 Send Test Notification</Text>
-        </TouchableOpacity>
+        <Text style={styles.sectionTitle}>Send Test Notifications</Text>
+        {TEST_BUTTONS.map((btn) => (
+          <TouchableOpacity
+            key={btn.type}
+            style={[
+              styles.testButton,
+              {
+                backgroundColor: `${btn.color}10`,
+                borderColor: `${btn.color}30`,
+                opacity: sending && sending !== btn.type ? 0.5 : 1,
+              },
+            ]}
+            onPress={() => handleTest(btn.type)}
+            disabled={!!sending}
+            activeOpacity={0.7}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.testButtonLabel}>{btn.label}</Text>
+              <Text style={styles.testButtonDesc}>{btn.description}</Text>
+            </View>
+            {sending === btn.type ? (
+              <ActivityIndicator size="small" color={btn.color} />
+            ) : (
+              <Ionicons name="send" size={18} color={btn.color} />
+            )}
+          </TouchableOpacity>
+        ))}
 
-        <TouchableOpacity style={styles.button} onPress={testBudgetAlert}>
-          <Text style={styles.buttonText}>💰 Send Budget Alert Test</Text>
-        </TouchableOpacity>
-
-        {/* Daily Reminder Toggle */}
-        <View style={styles.toggleContainer}>
-          <Text style={styles.toggleText}>📅 Daily Expense Reminder (6:00 PM)</Text>
-          <Switch
-            value={dailyReminderEnabled}
-            onValueChange={toggleDailyReminder}
-            trackColor={{ false: '#767577', true: theme.colors.primary }}
-          />
-        </View>
-
-        {/* Refresh Status Button */}
-        <TouchableOpacity 
-          style={[styles.button, { backgroundColor: theme.colors.secondary }]} 
-          onPress={checkNotificationStatus}
-        >
-          <Text style={styles.buttonText}>🔄 Refresh Status</Text>
+        {/* Refresh */}
+        <TouchableOpacity style={styles.refreshButton} onPress={checkStatus}>
+          <Ionicons name="refresh-outline" size={18} color={theme.colors.text} />
+          <Text style={{ color: theme.colors.text, fontWeight: '600' }}>Refresh Status</Text>
         </TouchableOpacity>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 };
 

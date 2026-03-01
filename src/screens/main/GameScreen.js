@@ -1,5 +1,5 @@
 import React, { useState, useRef, useContext, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ImageBackground, Dimensions, TouchableWithoutFeedback, Animated, Modal, Text, TextInput, TouchableOpacity, Alert, ScrollView, Easing, Image } from 'react-native';
+import { View, StyleSheet, ImageBackground, Dimensions, TouchableWithoutFeedback, Animated, Modal, Text, TextInput, TouchableOpacity, Alert, ScrollView, Easing, Image, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
@@ -13,7 +13,7 @@ import gameDatabaseService from '../../services/GameDatabaseService';
 import { normalizeCategory } from '../../utils/categoryUtils';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const { width, height } = Dimensions.get('window');
+const { width: INITIAL_WIDTH, height: INITIAL_HEIGHT } = Dimensions.get('window');
 const CHARACTER_SIZE = 48;
 
 // Quick amount options for canteen
@@ -26,7 +26,7 @@ const MAPS = {
     name: 'School Campus',
     icon: '🏫',
     image: require('../../../assets/Game_Graphics/maps/School/Map004.png'),
-    spawnPoint: { x: width * 0.30, y: height * 0.55 },
+    spawnPoint: { xPct: 0.30, yPct: 0.55 },
     locations: [
       {
         id: 'canteen',
@@ -60,7 +60,7 @@ const MAPS = {
     name: 'Home',
     icon: '🏠',
     image: require('../../../assets/Game_Graphics/maps/Home/Map002.png'),
-    spawnPoint: { x: width / 2, y: height * 0.5 },
+    spawnPoint: { xPct: 0.5, yPct: 0.5 },
     locations: [
       {
         id: 'door',
@@ -93,7 +93,7 @@ const MAPS = {
     name: 'Mall - 1F',
     icon: '🏬',
     image: require('../../../assets/Game_Graphics/maps/Mall/Map006.png'),
-    spawnPoint: { x: width / 2, y: height * 0.5 },
+    spawnPoint: { xPct: 0.5, yPct: 0.5 },
     locations: [
       {
         id: 'entrance',
@@ -145,7 +145,7 @@ const MAPS = {
     name: 'Mall - 2F',
     icon: '🏬',
     image: require('../../../assets/Game_Graphics/maps/Mall/Map007.png'),
-    spawnPoint: { x: width / 2, y: height * 0.5 },
+    spawnPoint: { xPct: 0.5, yPct: 0.5 },
     locations: [
       {
         id: 'escalator_down_1f',
@@ -189,7 +189,7 @@ const MAPS = {
     name: 'Mall - 3F',
     icon: '🏬',
     image: require('../../../assets/Game_Graphics/maps/Mall/Map008.png'),
-    spawnPoint: { x: width * 0.32, y: height * 0.5 },
+    spawnPoint: { xPct: 0.32, yPct: 0.5 },
     locations: [
       {
         id: 'escalator_down_2f',
@@ -258,15 +258,28 @@ export default function BuildScreen() {
   const { colors } = useTheme();
   const { user } = useContext(AuthContext);
   const { addExpense, expenses } = useContext(DataContext);
+
+  // ─── Responsive dimensions ─────────────────────────────────────────
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+
+  // Helper: resolve a percentage-based spawn point to actual pixels
+  const resolveSpawn = useCallback(
+    (sp, w = screenWidth, h = screenHeight) => ({
+      x: w * (sp.xPct ?? 0.5),
+      y: h * (sp.yPct ?? 0.5),
+    }),
+    [screenWidth, screenHeight],
+  );
   
   // Current map state
   const [currentMapId, setCurrentMapId] = useState('dorm');
   const currentMap = MAPS[currentMapId];
   
-  // Character position
-  const [characterPosition, setCharacterPosition] = useState(currentMap.spawnPoint);
-  const animatedX = useRef(new Animated.Value(currentMap.spawnPoint.x - CHARACTER_SIZE / 2)).current;
-  const animatedY = useRef(new Animated.Value(currentMap.spawnPoint.y - CHARACTER_SIZE / 2)).current;
+  // Character position — resolve spawn point from percentages using initial screen size
+  const initialSpawn = { x: INITIAL_WIDTH * (currentMap.spawnPoint.xPct ?? 0.5), y: INITIAL_HEIGHT * (currentMap.spawnPoint.yPct ?? 0.5) };
+  const [characterPosition, setCharacterPosition] = useState(initialSpawn);
+  const animatedX = useRef(new Animated.Value(initialSpawn.x - CHARACTER_SIZE / 2)).current;
+  const animatedY = useRef(new Animated.Value(initialSpawn.y - CHARACTER_SIZE / 2)).current;
   const [isWalking, setIsWalking] = useState(false);
   const [todaySpending, setTodaySpending] = useState(0);
   const walkingPulse = useRef(new Animated.Value(1)).current;
@@ -748,7 +761,7 @@ export default function BuildScreen() {
   };
 
   // Content area dimensions (for accurate bounds detection)
-  const [contentSize, setContentSize] = useState({ width: width, height: height });
+  const [contentSize, setContentSize] = useState({ width: screenWidth, height: screenHeight });
 
   // ─── NPC helpers ────────────────────────────────────────────────────
   // Returns true if the tile at (tileX, tileY) is occupied by an NPC on the current map
@@ -868,12 +881,13 @@ export default function BuildScreen() {
     const newMap = MAPS[currentMapId];
     if (newMap) {
       const halfChar = getCharSize() / 2;
-      const spawnX = newMap.spawnPoint.x - halfChar;
-      const spawnY = newMap.spawnPoint.y - halfChar;
+      const spawn = resolveSpawn(newMap.spawnPoint, contentSize.width, contentSize.height);
+      const spawnX = spawn.x - halfChar;
+      const spawnY = spawn.y - halfChar;
       console.log('📍 Resetting character to spawn point:', spawnX, spawnY);
       animatedX.setValue(spawnX);
       animatedY.setValue(spawnY);
-      setCharacterPosition(newMap.spawnPoint);
+      setCharacterPosition(spawn);
       setCurrentLocation('Hallway 🚶');
     }
   }, [currentMapId]);
@@ -1532,9 +1546,9 @@ export default function BuildScreen() {
   const isInCanteenArea = (x, y) => {
     const canteenBounds = {
       left: 0,
-      right: width * 0.45,
-      top: height * 0.50,
-      bottom: height / 0.15,
+      right: contentSize.width * 0.45,
+      top: contentSize.height * 0.50,
+      bottom: contentSize.height / 0.15,
       colors: red,
     };
     return (
@@ -1814,12 +1828,13 @@ export default function BuildScreen() {
     
     if (exitLocation && exitLocation.exitSpawnPoint) {
       // Spawn at the exit point (percentage-based coordinates)
-      spawnX = width * exitLocation.exitSpawnPoint.x;
-      spawnY = height * exitLocation.exitSpawnPoint.y;
+      spawnX = contentSize.width * exitLocation.exitSpawnPoint.x;
+      spawnY = contentSize.height * exitLocation.exitSpawnPoint.y;
     } else {
       // Fallback to default spawn point
-      spawnX = newMap.spawnPoint.x;
-      spawnY = newMap.spawnPoint.y;
+      const fallback = resolveSpawn(newMap.spawnPoint, contentSize.width, contentSize.height);
+      spawnX = fallback.x;
+      spawnY = fallback.y;
     }
     
     const spawn = { x: spawnX, y: spawnY };
@@ -1879,11 +1894,12 @@ export default function BuildScreen() {
 
     let spawnX, spawnY;
     if (arrivalEscalator && arrivalEscalator.exitSpawnPoint) {
-      spawnX = width * arrivalEscalator.exitSpawnPoint.x;
-      spawnY = height * arrivalEscalator.exitSpawnPoint.y;
+      spawnX = contentSize.width * arrivalEscalator.exitSpawnPoint.x;
+      spawnY = contentSize.height * arrivalEscalator.exitSpawnPoint.y;
     } else {
-      spawnX = newMap.spawnPoint.x;
-      spawnY = newMap.spawnPoint.y;
+      const fallback = resolveSpawn(newMap.spawnPoint, contentSize.width, contentSize.height);
+      spawnX = fallback.x;
+      spawnY = fallback.y;
     }
 
     const spawn = { x: spawnX, y: spawnY };
@@ -2508,46 +2524,46 @@ export default function BuildScreen() {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+      paddingHorizontal: screenWidth * 0.04,
+      paddingVertical: screenHeight * 0.015,
       backgroundColor: 'rgba(26, 26, 46, 0.95)',
       borderBottomWidth: 1,
       borderBottomColor: 'rgba(255,255,255,0.1)',
     },
     backToMenuButton: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
+      width: Math.round(screenWidth * 0.09),
+      height: Math.round(screenWidth * 0.09),
+      borderRadius: Math.round(screenWidth * 0.045),
       backgroundColor: '#E67E22',
       justifyContent: 'center',
       alignItems: 'center',
-      marginRight: 8,
+      marginRight: screenWidth * 0.02,
     },
     giveUpButton: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: '#C62828',
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 14,
-      marginRight: 8,
+      paddingHorizontal: Math.round(screenWidth * 0.025),
+      paddingVertical: screenHeight * 0.007,
+      borderRadius: Math.round(screenWidth * 0.035),
+      marginRight: screenWidth * 0.02,
       gap: 4,
     },
     giveUpButtonText: {
       color: '#FFF',
-      fontSize: 11,
+      fontSize: Math.round(screenWidth * 0.028),
       fontWeight: 'bold',
     },
     headerLeft: {
       flex: 1,
     },
     headerTitle: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: '#fff',
     },
     headerSubtitle: {
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       color: '#888',
       marginTop: 2,
     },
@@ -2555,30 +2571,30 @@ export default function BuildScreen() {
       alignItems: 'flex-end',
     },
     spendingLabel: {
-      fontSize: 11,
+      fontSize: Math.round(screenWidth * 0.028),
       color: '#888',
       marginBottom: 2,
     },
     spendingAmount: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: '#FF9800',
     },
     settingsGearButton: {
-      width: 28,
-      height: 28,
-      borderRadius: 14,
+      width: Math.round(screenWidth * 0.07),
+      height: Math.round(screenWidth * 0.07),
+      borderRadius: Math.round(screenWidth * 0.035),
       backgroundColor: 'rgba(90, 90, 122, 0.8)',
       justifyContent: 'center',
       alignItems: 'center',
     },
     locationBadge: {
       position: 'absolute',
-      top: 70,
+      top: screenHeight * 0.085,
       alignSelf: 'center',
       backgroundColor: 'rgba(0,0,0,0.7)',
-      paddingHorizontal: 16,
-      paddingVertical: 8,
+      paddingHorizontal: screenWidth * 0.04,
+      paddingVertical: screenHeight * 0.01,
       borderRadius: 20,
       flexDirection: 'row',
       alignItems: 'center',
@@ -2587,24 +2603,24 @@ export default function BuildScreen() {
     },
     locationText: {
       color: '#fff',
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       fontWeight: '600',
     },
     walkingIndicator: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
+      width: Math.round(screenWidth * 0.02),
+      height: Math.round(screenWidth * 0.02),
+      borderRadius: Math.round(screenWidth * 0.01),
       backgroundColor: '#4CAF50',
     },
     // Story Mode Progress Bar Styles - Top compact strip below header
     storyProgressContainer: {
       position: 'absolute',
-      top: 135,
-      left: 8,
-      right: 8,
+      top: screenHeight * 0.165,
+      left: screenWidth * 0.02,
+      right: screenWidth * 0.02,
       backgroundColor: 'rgba(26, 26, 46, 0.95)',
       borderRadius: 12,
-      padding: 10,
+      padding: screenWidth * 0.025,
       zIndex: 50,
       borderWidth: 1,
       borderColor: 'rgba(255,255,255,0.15)',
@@ -2622,12 +2638,12 @@ export default function BuildScreen() {
     },
     storyProgressLabel: {
       color: '#F5DEB3',
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       fontWeight: '600',
     },
     storyProgressPercent: {
       color: '#4CAF50',
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       fontWeight: 'bold',
     },
     storyProgressBar: {
@@ -2654,20 +2670,20 @@ export default function BuildScreen() {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 10,
+      marginBottom: screenHeight * 0.012,
     },
     budgetRuleLabel: {
       color: '#F5DEB3',
-      fontSize: 13,
+      fontSize: Math.round(screenWidth * 0.033),
       fontWeight: '700',
     },
     budgetDaysLeft: {
       color: '#888',
-      fontSize: 11,
+      fontSize: Math.round(screenWidth * 0.028),
       backgroundColor: 'rgba(255,255,255,0.1)',
-      paddingHorizontal: 8,
+      paddingHorizontal: screenWidth * 0.02,
       paddingVertical: 3,
-      borderRadius: 10,
+      borderRadius: Math.round(screenWidth * 0.025),
     },
     budgetCategoriesRow: {
       flexDirection: 'row',
@@ -2677,8 +2693,8 @@ export default function BuildScreen() {
     budgetCategoryCard: {
       flex: 1,
       backgroundColor: 'rgba(255,255,255,0.08)',
-      borderRadius: 10,
-      padding: 10,
+      borderRadius: Math.round(screenWidth * 0.025),
+      padding: Math.round(screenWidth * 0.025),
       alignItems: 'center',
     },
     budgetCategoryHeader: {
@@ -2689,16 +2705,16 @@ export default function BuildScreen() {
     },
     budgetCategoryName: {
       color: '#AAA',
-      fontSize: 10,
+      fontSize: Math.round(screenWidth * 0.025),
       fontWeight: '600',
       textTransform: 'uppercase',
     },
     budgetCategoryPercent: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
     },
     budgetCategoryLimit: {
-      fontSize: 9,
+      fontSize: Math.round(screenWidth * 0.023),
       color: '#666',
       marginTop: 2,
     },
@@ -2722,13 +2738,13 @@ export default function BuildScreen() {
     },
     budgetCompactLabel: {
       color: '#F5DEB3',
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       fontWeight: '600',
     },
     budgetCompactStats: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
+      gap: Math.round(screenWidth * 0.03),
       flex: 1,
       justifyContent: 'center',
     },
@@ -2746,10 +2762,10 @@ export default function BuildScreen() {
       borderColor: '#4CAF50',
     },
     budgetCompactIcon: {
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
     },
     budgetCompactPercent: {
-      fontSize: 13,
+      fontSize: Math.round(screenWidth * 0.033),
       fontWeight: 'bold',
     },
     budgetCompactActions: {
@@ -2759,13 +2775,13 @@ export default function BuildScreen() {
     },
     budgetCompactDays: {
       color: '#888',
-      fontSize: 11,
+      fontSize: Math.round(screenWidth * 0.028),
       fontWeight: '600',
     },
     endWeekBtnCompact: {
-      width: 28,
-      height: 28,
-      borderRadius: 14,
+      width: Math.round(screenWidth * 0.07),
+      height: Math.round(screenWidth * 0.07),
+      borderRadius: Math.round(screenWidth * 0.035),
       backgroundColor: '#E74C3C',
       justifyContent: 'center',
       alignItems: 'center',
@@ -2774,7 +2790,7 @@ export default function BuildScreen() {
       flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
-      marginHorizontal: 12,
+      marginHorizontal: Math.round(screenWidth * 0.03),
     },
     savingsCompactBar: {
       flex: 1,
@@ -2795,8 +2811,8 @@ export default function BuildScreen() {
     },
     budgetBarLabel: {
       color: '#F5DEB3',
-      fontSize: 10,
-      width: 85,
+      fontSize: Math.round(screenWidth * 0.025),
+      width: Math.round(screenWidth * 0.21),
     },
     budgetBarTrack: {
       flex: 1,
@@ -2819,8 +2835,8 @@ export default function BuildScreen() {
     },
     budgetBarLimit: {
       color: '#888',
-      fontSize: 9,
-      width: 30,
+      fontSize: Math.round(screenWidth * 0.023),
+      width: Math.round(screenWidth * 0.075),
       textAlign: 'right',
     },
     // Level 2 - Goal Progress Styles
@@ -2831,11 +2847,11 @@ export default function BuildScreen() {
       paddingVertical: 4,
     },
     goalProgressIcon: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
     },
     goalProgressName: {
       color: '#F5DEB3',
-      fontSize: 11,
+      fontSize: Math.round(screenWidth * 0.028),
       marginBottom: 2,
     },
     goalProgressTrack: {
@@ -2850,38 +2866,38 @@ export default function BuildScreen() {
     },
     goalProgressAmount: {
       color: '#888',
-      fontSize: 10,
-      minWidth: 70,
+      fontSize: Math.round(screenWidth * 0.025),
+      minWidth: Math.round(screenWidth * 0.175),
       textAlign: 'right',
     },
     allocateButton: {
       backgroundColor: '#3498DB',
-      paddingVertical: 8,
-      paddingHorizontal: 16,
+      paddingVertical: screenHeight * 0.01,
+      paddingHorizontal: screenWidth * 0.04,
       borderRadius: 8,
       alignSelf: 'center',
       marginTop: 8,
     },
     allocateButtonText: {
       color: '#FFF',
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       fontWeight: '600',
     },
     // Goal Allocation Modal Styles
     goalAllocationItem: {
       backgroundColor: 'rgba(255,255,255,0.05)',
-      borderRadius: 12,
-      padding: 12,
+      borderRadius: Math.round(screenWidth * 0.03),
+      padding: Math.round(screenWidth * 0.03),
     },
     quickAllocateBtn: {
       backgroundColor: '#3498DB',
       paddingVertical: 6,
-      paddingHorizontal: 10,
+      paddingHorizontal: Math.round(screenWidth * 0.025),
       borderRadius: 6,
     },
     quickAllocateBtnText: {
       color: '#FFF',
-      fontSize: 11,
+      fontSize: Math.round(screenWidth * 0.028),
       fontWeight: '600',
     },
     imageBackground: {
@@ -2930,17 +2946,17 @@ export default function BuildScreen() {
       height: 90, // Full sprite height
     },
     characterFace: {
-      fontSize: 24,
+      fontSize: Math.round(screenWidth * 0.06),
     },
     // Closet Modal - Character Selection Styles
     characterOption: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: 'rgba(255,255,255,0.05)',
-      borderRadius: 16,
-      padding: 12,
+      borderRadius: Math.round(screenWidth * 0.04),
+      padding: Math.round(screenWidth * 0.03),
       borderWidth: 3,
-      gap: 12,
+      gap: Math.round(screenWidth * 0.03),
     },
     characterOptionSelected: {
       backgroundColor: 'rgba(155, 89, 182, 0.1)',
@@ -2957,8 +2973,8 @@ export default function BuildScreen() {
       borderRadius: 12,
     },
     characterPreviewContainer: {
-      width: 64,
-      height: 80,
+      width: Math.round(screenWidth * 0.16),
+      height: Math.round(screenWidth * 0.20),
       borderRadius: 12,
       overflow: 'hidden',
       justifyContent: 'center',
@@ -2973,28 +2989,28 @@ export default function BuildScreen() {
       flex: 1,
     },
     characterOptionName: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       marginBottom: 4,
     },
     characterOptionDesc: {
-      fontSize: 13,
+      fontSize: Math.round(screenWidth * 0.033),
     },
     characterSelectedBadge: {
-      width: 28,
-      height: 28,
-      borderRadius: 14,
+      width: Math.round(screenWidth * 0.07),
+      height: Math.round(screenWidth * 0.07),
+      borderRadius: Math.round(screenWidth * 0.035),
       justifyContent: 'center',
       alignItems: 'center',
     },
     floatingButton: {
       position: 'absolute',
-      bottom: 100,
-      right: 20,
+      bottom: screenHeight * 0.12,
+      right: screenWidth * 0.05,
       backgroundColor: '#FF9800',
-      width: 60,
-      height: 60,
-      borderRadius: 30,
+      width: Math.round(screenWidth * 0.15),
+      height: Math.round(screenWidth * 0.15),
+      borderRadius: Math.round(screenWidth * 0.075),
       justifyContent: 'center',
       alignItems: 'center',
       shadowColor: '#000',
@@ -3007,11 +3023,11 @@ export default function BuildScreen() {
     },
     endWeekButton: {
       position: 'absolute',
-      bottom: 35,
-      left: 20,
+      bottom: screenHeight * 0.04,
+      left: screenWidth * 0.05,
       backgroundColor: '#E74C3C',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+      paddingHorizontal: screenWidth * 0.04,
+      paddingVertical: screenHeight * 0.015,
       borderRadius: 24,
       flexDirection: 'row',
       alignItems: 'center',
@@ -3026,15 +3042,15 @@ export default function BuildScreen() {
     },
     endWeekButtonText: {
       color: '#FFF',
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       fontWeight: 'bold',
     },
     endWeekButtonInline: {
-      marginTop: 12,
+      marginTop: screenHeight * 0.015,
       backgroundColor: '#E74C3C',
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-      borderRadius: 20,
+      paddingHorizontal: screenWidth * 0.04,
+      paddingVertical: screenHeight * 0.012,
+      borderRadius: Math.round(screenWidth * 0.05),
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
@@ -3047,29 +3063,29 @@ export default function BuildScreen() {
     },
     endWeekButtonTextInline: {
       color: '#FFF',
-      fontSize: 13,
+      fontSize: Math.round(screenWidth * 0.033),
       fontWeight: '600',
     },
     instructionBanner: {
       position: 'absolute',
-      bottom: 30,
-      left: 20,
-      right: 20,
+      bottom: screenHeight * 0.035,
+      left: screenWidth * 0.05,
+      right: screenWidth * 0.05,
       backgroundColor: 'rgba(0,0,0,0.85)',
-      paddingHorizontal: 20,
-      paddingVertical: 14,
+      paddingHorizontal: screenWidth * 0.05,
+      paddingVertical: screenHeight * 0.017,
       borderRadius: 12,
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
+      gap: screenWidth * 0.03,
       borderWidth: 1,
       borderColor: 'rgba(255,255,255,0.2)',
     },
     instructionText: {
       flex: 1,
       color: '#fff',
-      fontSize: 13,
-      lineHeight: 18,
+      fontSize: Math.round(screenWidth * 0.033),
+      lineHeight: Math.round(screenWidth * 0.045),
     },
     instructionHighlight: {
       color: '#FF9800',
@@ -3080,14 +3096,14 @@ export default function BuildScreen() {
       backgroundColor: 'rgba(0,0,0,0.7)',
       justifyContent: 'center',
       alignItems: 'center',
-      padding: 20,
+      padding: screenWidth * 0.05,
     },
     modalContent: {
       width: '100%',
-      maxWidth: 400,
+      maxWidth: screenWidth * 0.95,
       backgroundColor: colors.card,
       borderRadius: 20,
-      padding: 24,
+      padding: screenWidth * 0.06,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.3,
@@ -3097,13 +3113,13 @@ export default function BuildScreen() {
     modalHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 20,
-      gap: 12,
+      marginBottom: screenHeight * 0.025,
+      gap: Math.round(screenWidth * 0.03),
     },
     modalIcon: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
+      width: Math.round(screenWidth * 0.14),
+      height: Math.round(screenWidth * 0.14),
+      borderRadius: Math.round(screenWidth * 0.07),
       backgroundColor: '#FF9800',
       justifyContent: 'center',
       alignItems: 'center',
@@ -3112,40 +3128,40 @@ export default function BuildScreen() {
       flex: 1,
     },
     modalTitle: {
-      fontSize: 22,
+      fontSize: Math.round(screenWidth * 0.055),
       fontWeight: 'bold',
       color: colors.text,
       marginBottom: 4,
     },
     modalSubtitle: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: colors.textSecondary,
     },
     resultRow: {
       flexDirection: 'row',
       alignItems: 'center',
       paddingVertical: 6,
-      paddingHorizontal: 12,
+      paddingHorizontal: Math.round(screenWidth * 0.03),
       backgroundColor: 'rgba(255,255,255,0.05)',
       borderRadius: 8,
     },
     quickAmountsContainer: {
-      marginBottom: 16,
+      marginBottom: screenHeight * 0.02,
     },
     quickAmountsLabel: {
-      fontSize: 13,
+      fontSize: Math.round(screenWidth * 0.033),
       color: colors.textSecondary,
-      marginBottom: 10,
+      marginBottom: screenHeight * 0.012,
     },
     quickAmountsRow: {
       flexDirection: 'row',
-      gap: 10,
+      gap: Math.round(screenWidth * 0.025),
     },
     quickAmountButton: {
       flex: 1,
       backgroundColor: colors.background,
-      paddingVertical: 12,
-      borderRadius: 10,
+      paddingVertical: screenHeight * 0.015,
+      borderRadius: Math.round(screenWidth * 0.025),
       alignItems: 'center',
       borderWidth: 1,
       borderColor: colors.border,
@@ -3163,10 +3179,10 @@ export default function BuildScreen() {
       color: '#fff',
     },
     inputContainer: {
-      marginBottom: 16,
+      marginBottom: screenHeight * 0.02,
     },
     inputLabel: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       fontWeight: '600',
       color: colors.text,
       marginBottom: 8,
@@ -3174,25 +3190,25 @@ export default function BuildScreen() {
     input: {
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 12,
-      padding: 14,
-      fontSize: 16,
+      borderRadius: Math.round(screenWidth * 0.03),
+      padding: Math.round(screenWidth * 0.035),
+      fontSize: Math.round(screenWidth * 0.04),
       color: colors.text,
       backgroundColor: colors.background,
     },
     textArea: {
-      height: 80,
+      height: screenHeight * 0.1,
       textAlignVertical: 'top',
     },
     buttonContainer: {
       flexDirection: 'row',
-      gap: 12,
+      gap: Math.round(screenWidth * 0.03),
       marginTop: 8,
     },
     button: {
       flex: 1,
-      padding: 16,
-      borderRadius: 12,
+      padding: Math.round(screenWidth * 0.04),
+      borderRadius: Math.round(screenWidth * 0.03),
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -3203,7 +3219,7 @@ export default function BuildScreen() {
       backgroundColor: '#FF9800',
     },
     buttonText: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       fontWeight: 'bold',
     },
     cancelButtonText: {
@@ -3215,58 +3231,58 @@ export default function BuildScreen() {
     // Travel Modal Styles
     travelModalContent: {
       width: '90%',
-      maxWidth: 350,
+      maxWidth: screenWidth * 0.9,
       backgroundColor: colors.card,
       borderRadius: 24,
-      padding: 20,
+      padding: screenWidth * 0.05,
       alignItems: 'center',
     },
     travelTitle: {
-      fontSize: 24,
+      fontSize: Math.round(screenWidth * 0.06),
       fontWeight: 'bold',
       color: colors.text,
-      marginBottom: 8,
+      marginBottom: screenHeight * 0.01,
     },
     travelSubtitle: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: colors.textSecondary,
-      marginBottom: 20,
+      marginBottom: screenHeight * 0.025,
     },
     destinationButton: {
       width: '100%',
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.background,
-      padding: 16,
-      borderRadius: 16,
-      marginBottom: 12,
+      padding: Math.round(screenWidth * 0.04),
+      borderRadius: Math.round(screenWidth * 0.04),
+      marginBottom: Math.round(screenHeight * 0.015),
       borderWidth: 2,
       borderColor: colors.border,
     },
     destinationIcon: {
-      fontSize: 32,
-      marginRight: 16,
+      fontSize: Math.round(screenWidth * 0.08),
+      marginRight: Math.round(screenWidth * 0.04),
     },
     destinationInfo: {
       flex: 1,
     },
     destinationName: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: colors.text,
     },
     destinationDesc: {
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       color: colors.textSecondary,
       marginTop: 2,
     },
     travelCancelButton: {
       marginTop: 8,
-      padding: 12,
+      padding: Math.round(screenWidth * 0.03),
     },
     travelCancelText: {
       color: colors.textSecondary,
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
     },
     // Achievement Modal styles
     achievementModalOverlay: {
@@ -3274,14 +3290,14 @@ export default function BuildScreen() {
       backgroundColor: 'rgba(0,0,0,0.85)',
       justifyContent: 'center',
       alignItems: 'center',
-      padding: 20,
+      padding: screenWidth * 0.05,
     },
     achievementModalContent: {
       width: '85%',
-      maxWidth: 340,
+      maxWidth: screenWidth * 0.85,
       backgroundColor: '#1a1a2e',
       borderRadius: 24,
-      padding: 32,
+      padding: screenWidth * 0.08,
       alignItems: 'center',
       borderWidth: 3,
       borderColor: '#FFD700',
@@ -3293,70 +3309,70 @@ export default function BuildScreen() {
     },
     achievementGlow: {
       position: 'absolute',
-      top: -50,
-      width: 200,
-      height: 200,
+      top: -screenHeight * 0.06,
+      width: Math.round(screenWidth * 0.5),
+      height: Math.round(screenWidth * 0.5),
       backgroundColor: '#FFD700',
-      borderRadius: 100,
+      borderRadius: Math.round(screenWidth * 0.25),
       opacity: 0.1,
     },
     achievementUnlockedText: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       fontWeight: 'bold',
       color: '#FFD700',
-      marginBottom: 16,
+      marginBottom: screenHeight * 0.02,
       letterSpacing: 2,
     },
     achievementIcon: {
-      fontSize: 64,
-      marginBottom: 16,
+      fontSize: Math.round(screenWidth * 0.16),
+      marginBottom: screenHeight * 0.02,
     },
     achievementTitle: {
-      fontSize: 24,
+      fontSize: Math.round(screenWidth * 0.06),
       fontWeight: 'bold',
       color: '#FFFFFF',
       textAlign: 'center',
       marginBottom: 8,
     },
     achievementDescription: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: '#B0B0B0',
       textAlign: 'center',
-      marginBottom: 20,
-      lineHeight: 20,
+      marginBottom: screenHeight * 0.025,
+      lineHeight: Math.round(screenWidth * 0.05),
     },
     achievementPoints: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: 'rgba(255, 215, 0, 0.2)',
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-      borderRadius: 20,
-      marginBottom: 20,
+      paddingHorizontal: screenWidth * 0.04,
+      paddingVertical: screenHeight * 0.01,
+      borderRadius: Math.round(screenWidth * 0.05),
+      marginBottom: screenHeight * 0.025,
       gap: 8,
     },
     achievementPointsText: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: '#FFD700',
     },
     achievementCloseButton: {
       backgroundColor: '#FFD700',
-      paddingHorizontal: 40,
-      paddingVertical: 14,
+      paddingHorizontal: screenWidth * 0.1,
+      paddingVertical: screenHeight * 0.017,
       borderRadius: 25,
     },
     achievementCloseText: {
       color: '#1a1a2e',
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       fontWeight: 'bold',
     },
     // Map indicator styles
     mapIndicatorContainer: {
       position: 'absolute',
-      top: 10,
-      left: 10,
-      right: 10,
+      top: screenHeight * 0.012,
+      left: screenWidth * 0.025,
+      right: screenWidth * 0.025,
       flexDirection: 'row',
       flexWrap: 'wrap',
       gap: 8,
@@ -3364,9 +3380,9 @@ export default function BuildScreen() {
     },
     locationMarker: {
       backgroundColor: 'rgba(255, 152, 0, 0.9)',
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 12,
+      paddingHorizontal: Math.round(screenWidth * 0.03),
+      paddingVertical: screenHeight * 0.01,
+      borderRadius: Math.round(screenWidth * 0.03),
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
@@ -3375,7 +3391,7 @@ export default function BuildScreen() {
     },
     locationMarkerText: {
       color: '#FFF',
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       fontWeight: '700',
     },
     // Placeholder map background
@@ -3387,17 +3403,17 @@ export default function BuildScreen() {
       alignItems: 'center',
     },
     placeholderMapText: {
-      fontSize: 64,
-      marginBottom: 16,
+      fontSize: Math.round(screenWidth * 0.16),
+      marginBottom: screenHeight * 0.02,
     },
     placeholderMapTitle: {
-      fontSize: 24,
+      fontSize: Math.round(screenWidth * 0.06),
       fontWeight: 'bold',
       color: '#FFF',
       marginBottom: 8,
     },
     placeholderMapHint: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: 'rgba(255,255,255,0.7)',
     },
   });
@@ -4579,25 +4595,25 @@ export default function BuildScreen() {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: 20,
-      paddingVertical: 16,
+      paddingHorizontal: screenWidth * 0.05,
+      paddingVertical: screenHeight * 0.02,
       borderBottomWidth: 1,
       borderBottomColor: 'rgba(255,255,255,0.1)',
     },
     title: {
-      fontSize: 20,
+      fontSize: Math.round(screenWidth * 0.05),
       fontWeight: 'bold',
       color: '#F5DEB3',
     },
     body: {
-      paddingHorizontal: 20,
-      paddingVertical: 12,
+      paddingHorizontal: screenWidth * 0.05,
+      paddingVertical: screenHeight * 0.015,
     },
     sectionLabel: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       fontWeight: '600',
       color: '#D4C4A8',
-      marginBottom: 10,
+      marginBottom: screenHeight * 0.012,
       marginTop: 8,
     },
     section: {
@@ -4606,7 +4622,7 @@ export default function BuildScreen() {
     modeRow: {
       flexDirection: 'row',
       gap: 8,
-      marginBottom: 12,
+      marginBottom: screenHeight * 0.015,
     },
     modeChip: {
       flex: 1,
@@ -4614,8 +4630,8 @@ export default function BuildScreen() {
       alignItems: 'center',
       justifyContent: 'center',
       gap: 4,
-      paddingVertical: 10,
-      borderRadius: 10,
+      paddingVertical: screenHeight * 0.012,
+      borderRadius: Math.round(screenWidth * 0.025),
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
       borderWidth: 2,
       borderColor: '#5A5A7A',
@@ -4625,10 +4641,10 @@ export default function BuildScreen() {
       backgroundColor: 'rgba(245, 222, 179, 0.15)',
     },
     modeChipIcon: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
     },
     modeChipLabel: {
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       color: '#888',
       fontWeight: '600',
     },
@@ -4639,34 +4655,34 @@ export default function BuildScreen() {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 10,
+      marginBottom: screenHeight * 0.012,
     },
     sliderLabel: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: '#F5DEB3',
     },
     sliderControls: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
+      gap: Math.round(screenWidth * 0.025),
     },
     adjBtn: {
-      width: 30,
-      height: 30,
-      borderRadius: 15,
+      width: Math.round(screenWidth * 0.08),
+      height: Math.round(screenWidth * 0.08),
+      borderRadius: Math.round(screenWidth * 0.04),
       backgroundColor: 'rgba(90, 90, 122, 0.8)',
       justifyContent: 'center',
       alignItems: 'center',
     },
     sliderValue: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       fontWeight: 'bold',
-      width: 42,
+      width: Math.round(screenWidth * 0.105),
       textAlign: 'center',
     },
     totalText: {
       textAlign: 'center',
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: '#4CAF50',
       fontWeight: '600',
       marginTop: 4,
@@ -4675,27 +4691,27 @@ export default function BuildScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
-      marginBottom: 10,
+      marginBottom: screenHeight * 0.012,
     },
     goalNameInput: {
       flex: 1,
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
       borderRadius: 8,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+      paddingHorizontal: Math.round(screenWidth * 0.03),
+      paddingVertical: screenHeight * 0.01,
       color: '#FFF',
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       borderWidth: 1,
       borderColor: '#5A5A7A',
     },
     goalAmtInput: {
-      width: 80,
+      width: Math.round(screenWidth * 0.2),
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
       borderRadius: 8,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+      paddingHorizontal: Math.round(screenWidth * 0.03),
+      paddingVertical: screenHeight * 0.01,
       color: '#FFF',
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       borderWidth: 1,
       borderColor: '#5A5A7A',
       textAlign: 'center',
@@ -4709,17 +4725,17 @@ export default function BuildScreen() {
     },
     addGoalText: {
       color: '#4CAF50',
-      fontSize: 13,
+      fontSize: Math.round(screenWidth * 0.033),
     },
     savingsRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 20,
-      marginVertical: 10,
+      gap: Math.round(screenWidth * 0.05),
+      marginVertical: screenHeight * 0.012,
     },
     savingsBigValue: {
-      fontSize: 32,
+      fontSize: Math.round(screenWidth * 0.08),
       fontWeight: 'bold',
       color: '#F5DEB3',
     },
@@ -4730,7 +4746,7 @@ export default function BuildScreen() {
       marginTop: 8,
     },
     quickBtn: {
-      paddingHorizontal: 12,
+      paddingHorizontal: Math.round(screenWidth * 0.03),
       paddingVertical: 6,
       borderRadius: 8,
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
@@ -4742,7 +4758,7 @@ export default function BuildScreen() {
       backgroundColor: 'rgba(245, 222, 179, 0.2)',
     },
     quickBtnText: {
-      fontSize: 13,
+      fontSize: Math.round(screenWidth * 0.033),
       color: '#888',
       fontWeight: '600',
     },
@@ -4751,10 +4767,10 @@ export default function BuildScreen() {
       alignItems: 'center',
       justifyContent: 'center',
       gap: 8,
-      marginHorizontal: 20,
-      marginVertical: 16,
-      paddingVertical: 14,
-      borderRadius: 12,
+      marginHorizontal: screenWidth * 0.05,
+      marginVertical: screenHeight * 0.02,
+      paddingVertical: screenHeight * 0.017,
+      borderRadius: Math.round(screenWidth * 0.03),
       backgroundColor: '#4CAF50',
     },
     applyBtnDisabled: {
@@ -4762,7 +4778,7 @@ export default function BuildScreen() {
       opacity: 0.5,
     },
     applyBtnText: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       fontWeight: 'bold',
       color: '#FFF',
     },
@@ -5441,15 +5457,15 @@ export default function BuildScreen() {
     overlay: {
       flex: 1,
       backgroundColor: 'rgba(0,0,0,0.6)',
-      paddingTop: 60,
+      paddingTop: screenHeight * 0.07,
     },
     backButton: {
       position: 'absolute',
-      top: 50,
-      left: 20,
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+      top: screenHeight * 0.06,
+      left: screenWidth * 0.05,
+      width: Math.round(screenWidth * 0.11),
+      height: Math.round(screenWidth * 0.11),
+      borderRadius: Math.round(screenWidth * 0.055),
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
       justifyContent: 'center',
       alignItems: 'center',
@@ -5459,10 +5475,10 @@ export default function BuildScreen() {
     },
     titleContainer: {
       alignItems: 'center',
-      marginBottom: 20,
+      marginBottom: screenHeight * 0.025,
     },
     title: {
-      fontSize: 32,
+      fontSize: Math.round(screenWidth * 0.08),
       fontWeight: 'bold',
       color: '#F5DEB3',
       textShadowColor: '#000',
@@ -5470,7 +5486,7 @@ export default function BuildScreen() {
       textShadowRadius: 0,
     },
     subtitle: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: '#D4C4A8',
       marginTop: 8,
     },
@@ -5478,40 +5494,40 @@ export default function BuildScreen() {
       flex: 1,
     },
     scrollContent: {
-      paddingHorizontal: 20,
-      paddingBottom: 40,
+      paddingHorizontal: screenWidth * 0.05,
+      paddingBottom: screenHeight * 0.05,
     },
     modeSelection: {
-      gap: 12,
+      gap: Math.round(screenHeight * 0.015),
     },
     modeButton: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
-      padding: 16,
-      borderRadius: 12,
+      padding: Math.round(screenWidth * 0.04),
+      borderRadius: Math.round(screenWidth * 0.03),
       borderWidth: 2,
       borderColor: '#5A5A7A',
-      gap: 12,
+      gap: Math.round(screenWidth * 0.03),
     },
     modeIcon: {
-      fontSize: 32,
+      fontSize: Math.round(screenWidth * 0.08),
     },
     modeInfo: {
       flex: 1,
     },
     modeName: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: '#F5DEB3',
     },
     modeDesc: {
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       color: '#D4C4A8',
       marginTop: 4,
     },
     configSection: {
-      gap: 16,
+      gap: Math.round(screenHeight * 0.02),
     },
     changeTypeButton: {
       flexDirection: 'row',
@@ -5521,26 +5537,26 @@ export default function BuildScreen() {
       paddingVertical: 8,
     },
     changeTypeText: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: '#F5DEB3',
     },
     configTitle: {
-      fontSize: 22,
+      fontSize: Math.round(screenWidth * 0.055),
       fontWeight: 'bold',
       color: '#F5DEB3',
       textAlign: 'center',
     },
     configSubtitle: {
-      fontSize: 13,
+      fontSize: Math.round(screenWidth * 0.033),
       color: '#D4C4A8',
       textAlign: 'center',
-      lineHeight: 18,
+      lineHeight: Math.round(screenWidth * 0.045),
       marginBottom: 8,
     },
     sliderContainer: {
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: Math.round(screenWidth * 0.03),
+      padding: Math.round(screenWidth * 0.04),
       borderWidth: 2,
       borderColor: '#5A5A7A',
     },
@@ -5548,15 +5564,15 @@ export default function BuildScreen() {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 12,
+      marginBottom: screenHeight * 0.015,
     },
     sliderLabel: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: '#F5DEB3',
       fontWeight: '600',
     },
     sliderValue: {
-      fontSize: 20,
+      fontSize: Math.round(screenWidth * 0.05),
       fontWeight: 'bold',
       color: '#FF9800',
     },
@@ -5576,9 +5592,9 @@ export default function BuildScreen() {
       gap: 20,
     },
     sliderBtn: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+      width: Math.round(screenWidth * 0.1),
+      height: Math.round(screenWidth * 0.1),
+      borderRadius: Math.round(screenWidth * 0.05),
       backgroundColor: 'rgba(255,255,255,0.2)',
       justifyContent: 'center',
       alignItems: 'center',
@@ -5588,7 +5604,7 @@ export default function BuildScreen() {
       justifyContent: 'center',
       alignItems: 'center',
       backgroundColor: 'rgba(76, 175, 80, 0.2)',
-      padding: 12,
+      padding: Math.round(screenWidth * 0.03),
       borderRadius: 8,
       gap: 8,
     },
@@ -5596,12 +5612,12 @@ export default function BuildScreen() {
       backgroundColor: 'rgba(231, 76, 60, 0.2)',
     },
     totalText: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       fontWeight: 'bold',
       color: '#F5DEB3',
     },
     totalWarning: {
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       color: '#E74C3C',
     },
     startButton: {
@@ -5609,7 +5625,7 @@ export default function BuildScreen() {
       justifyContent: 'center',
       alignItems: 'center',
       backgroundColor: '#4CAF50',
-      padding: 16,
+      padding: screenWidth * 0.04,
       borderRadius: 12,
       gap: 10,
       marginTop: 8,
@@ -5618,7 +5634,7 @@ export default function BuildScreen() {
       backgroundColor: 'rgba(76, 175, 80, 0.3)',
     },
     startButtonText: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: '#FFF',
     },
@@ -5636,9 +5652,9 @@ export default function BuildScreen() {
       flex: 2,
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
       borderRadius: 8,
-      padding: 12,
+      padding: Math.round(screenWidth * 0.03),
       color: '#FFF',
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       borderWidth: 2,
       borderColor: '#5A5A7A',
     },
@@ -5646,9 +5662,9 @@ export default function BuildScreen() {
       flex: 1,
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
       borderRadius: 8,
-      padding: 12,
+      padding: Math.round(screenWidth * 0.03),
       color: '#FFF',
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       borderWidth: 2,
       borderColor: '#5A5A7A',
     },
@@ -5659,7 +5675,7 @@ export default function BuildScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: 12,
+      padding: Math.round(screenWidth * 0.03),
       gap: 8,
       borderWidth: 2,
       borderColor: '#4CAF50',
@@ -5667,14 +5683,14 @@ export default function BuildScreen() {
       borderRadius: 8,
     },
     addGoalText: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: '#4CAF50',
       fontWeight: '600',
     },
     savingsTargetContainer: {
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
       borderRadius: 16,
-      padding: 24,
+      padding: screenWidth * 0.06,
       borderWidth: 2,
       borderColor: '#5A5A7A',
       alignItems: 'center',
@@ -5682,13 +5698,13 @@ export default function BuildScreen() {
     savingsInputRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 20,
-      marginBottom: 20,
+      gap: screenWidth * 0.05,
+      marginBottom: screenHeight * 0.025,
     },
     savingsAdjustBtn: {
-      width: 50,
-      height: 50,
-      borderRadius: 25,
+      width: Math.round(screenWidth * 0.125),
+      height: Math.round(screenWidth * 0.125),
+      borderRadius: Math.round(screenWidth * 0.0625),
       backgroundColor: 'rgba(255,255,255,0.2)',
       justifyContent: 'center',
       alignItems: 'center',
@@ -5698,12 +5714,12 @@ export default function BuildScreen() {
       alignItems: 'flex-end',
     },
     savingsValue: {
-      fontSize: 56,
+      fontSize: Math.round(screenWidth * 0.14),
       fontWeight: 'bold',
       color: '#FF9800',
     },
     savingsPercent: {
-      fontSize: 24,
+      fontSize: Math.round(screenWidth * 0.06),
       fontWeight: 'bold',
       color: '#FF9800',
       marginBottom: 10,
@@ -5711,12 +5727,12 @@ export default function BuildScreen() {
     quickSelectRow: {
       flexDirection: 'row',
       gap: 8,
-      marginBottom: 16,
+      marginBottom: screenHeight * 0.02,
     },
     quickSelectBtn: {
-      paddingVertical: 8,
-      paddingHorizontal: 14,
-      borderRadius: 20,
+      paddingVertical: screenHeight * 0.01,
+      paddingHorizontal: Math.round(screenWidth * 0.035),
+      borderRadius: Math.round(screenWidth * 0.05),
       backgroundColor: 'rgba(255,255,255,0.1)',
       borderWidth: 1,
       borderColor: 'rgba(255,255,255,0.2)',
@@ -5726,7 +5742,7 @@ export default function BuildScreen() {
       borderColor: '#FF9800',
     },
     quickSelectText: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: '#D4C4A8',
       fontWeight: '600',
     },
@@ -5738,28 +5754,28 @@ export default function BuildScreen() {
       alignItems: 'center',
     },
     difficultyLabel: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: '#D4C4A8',
     },
     difficultyValue: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       fontWeight: 'bold',
     },
     sliderInputField: {
-      fontSize: 20,
+      fontSize: Math.round(screenWidth * 0.05),
       fontWeight: 'bold',
       color: '#FF9800',
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
       borderRadius: 8,
       borderWidth: 1,
       borderColor: '#5A5A7A',
-      paddingHorizontal: 8,
+      paddingHorizontal: screenWidth * 0.02,
       paddingVertical: 4,
-      minWidth: 50,
+      minWidth: Math.round(screenWidth * 0.125),
       textAlign: 'center',
     },
     savingsValueInput: {
-      fontSize: 56,
+      fontSize: Math.round(screenWidth * 0.14),
       fontWeight: 'bold',
       color: '#FF9800',
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
@@ -5767,38 +5783,38 @@ export default function BuildScreen() {
       borderWidth: 1,
       borderColor: '#5A5A7A',
       paddingHorizontal: 8,
-      minWidth: 75,
+      minWidth: Math.round(screenWidth * 0.19),
       textAlign: 'center',
     },
     durationContainer: {
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
       borderRadius: 16,
-      padding: 20,
+      padding: screenWidth * 0.05,
       borderWidth: 2,
       borderColor: '#5A5A7A',
       alignItems: 'center',
     },
     durationTitle: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: '#F5DEB3',
       marginBottom: 4,
     },
     durationSubtitle: {
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       color: '#D4C4A8',
       textAlign: 'center',
-      marginBottom: 12,
+      marginBottom: screenHeight * 0.015,
     },
     durationInputRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 20,
-      marginBottom: 16,
+      gap: Math.round(screenWidth * 0.05),
+      marginBottom: screenHeight * 0.02,
     },
     weeksInput: {
-      fontSize: 40,
+      fontSize: Math.round(screenWidth * 0.1),
       fontWeight: 'bold',
       color: '#FF9800',
       backgroundColor: 'rgba(30, 30, 50, 0.8)',
@@ -5806,11 +5822,11 @@ export default function BuildScreen() {
       borderWidth: 1,
       borderColor: '#5A5A7A',
       paddingHorizontal: 10,
-      minWidth: 55,
+      minWidth: Math.round(screenWidth * 0.14),
       textAlign: 'center',
     },
     weeksLabel: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: '#FF9800',
       marginLeft: 4,
@@ -5818,7 +5834,7 @@ export default function BuildScreen() {
     },
     durationNote: {
       color: '#D4C4A8',
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       marginTop: 8,
       textAlign: 'center',
     },
@@ -5828,47 +5844,47 @@ export default function BuildScreen() {
   const transportStyles = StyleSheet.create({
     transportModalContent: {
       width: '95%',
-      maxWidth: 400,
+      maxWidth: screenWidth * 0.95,
       backgroundColor: colors.card,
       borderRadius: 24,
-      padding: 20,
+      padding: screenWidth * 0.05,
       maxHeight: '85%',
     },
     transportHeader: {
       alignItems: 'center',
-      marginBottom: 20,
-      paddingBottom: 16,
+      marginBottom: screenHeight * 0.025,
+      paddingBottom: screenHeight * 0.02,
       borderBottomWidth: 1,
       borderBottomColor: 'rgba(255,255,255,0.1)',
     },
     transportTitle: {
-      fontSize: 24,
+      fontSize: Math.round(screenWidth * 0.06),
       fontWeight: 'bold',
       color: colors.text,
-      marginBottom: 8,
+      marginBottom: screenHeight * 0.01,
     },
     transportSubtitle: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: colors.textSecondary,
       textAlign: 'center',
     },
     modeSelection: {
-      gap: 12,
+      gap: Math.round(screenHeight * 0.015),
     },
     modeButton: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.background,
-      padding: 16,
-      borderRadius: 16,
+      padding: Math.round(screenWidth * 0.04),
+      borderRadius: Math.round(screenWidth * 0.04),
       borderWidth: 2,
       borderColor: colors.border,
-      gap: 12,
+      gap: Math.round(screenWidth * 0.03),
     },
     modeIconContainer: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
+      width: Math.round(screenWidth * 0.14),
+      height: Math.round(screenWidth * 0.14),
+      borderRadius: Math.round(screenWidth * 0.07),
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -5876,17 +5892,17 @@ export default function BuildScreen() {
       flex: 1,
     },
     modeName: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: colors.text,
     },
     modeDesc: {
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       color: colors.textSecondary,
       marginTop: 2,
     },
     inputSection: {
-      gap: 16,
+      gap: Math.round(screenHeight * 0.02),
     },
     backToModes: {
       flexDirection: 'row',
@@ -5895,7 +5911,7 @@ export default function BuildScreen() {
       paddingVertical: 8,
     },
     backToModesText: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: '#3498DB',
     },
     selectedModeHeader: {
@@ -5905,19 +5921,19 @@ export default function BuildScreen() {
       marginBottom: 8,
     },
     modeIconSmall: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+      width: Math.round(screenWidth * 0.1),
+      height: Math.round(screenWidth * 0.1),
+      borderRadius: Math.round(screenWidth * 0.05),
       justifyContent: 'center',
       alignItems: 'center',
     },
     selectedModeName: {
-      fontSize: 20,
+      fontSize: Math.round(screenWidth * 0.05),
       fontWeight: 'bold',
       color: colors.text,
     },
     inputLabel: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: colors.textSecondary,
       marginBottom: 8,
     },
@@ -5925,24 +5941,24 @@ export default function BuildScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.background,
-      borderRadius: 16,
+      borderRadius: Math.round(screenWidth * 0.04),
       borderWidth: 2,
       borderColor: colors.border,
-      paddingHorizontal: 16,
+      paddingHorizontal: Math.round(screenWidth * 0.04),
       paddingVertical: 4,
     },
     currencySymbol: {
-      fontSize: 28,
+      fontSize: Math.round(screenWidth * 0.07),
       fontWeight: 'bold',
       color: '#FF9800',
-      marginRight: 8,
+      marginRight: screenWidth * 0.02,
     },
     amountInput: {
       flex: 1,
-      fontSize: 32,
+      fontSize: Math.round(screenWidth * 0.08),
       fontWeight: 'bold',
       color: colors.text,
-      paddingVertical: 12,
+      paddingVertical: screenHeight * 0.015,
     },
     quickAmounts: {
       flexDirection: 'row',
@@ -5951,9 +5967,9 @@ export default function BuildScreen() {
       justifyContent: 'center',
     },
     quickAmountBtn: {
-      paddingVertical: 10,
-      paddingHorizontal: 16,
-      borderRadius: 20,
+      paddingVertical: screenHeight * 0.012,
+      paddingHorizontal: Math.round(screenWidth * 0.04),
+      borderRadius: Math.round(screenWidth * 0.05),
       backgroundColor: colors.background,
       borderWidth: 1,
       borderColor: colors.border,
@@ -5972,8 +5988,8 @@ export default function BuildScreen() {
     },
     confirmButton: {
       backgroundColor: '#3498DB',
-      paddingVertical: 16,
-      borderRadius: 16,
+      paddingVertical: screenHeight * 0.02,
+      borderRadius: Math.round(screenWidth * 0.04),
       alignItems: 'center',
       marginTop: 8,
     },
@@ -5984,29 +6000,29 @@ export default function BuildScreen() {
       backgroundColor: 'rgba(52, 152, 219, 0.3)',
     },
     confirmButtonText: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: '#FFF',
     },
     fuelQuestion: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       fontWeight: '600',
       color: colors.text,
       textAlign: 'center',
       marginVertical: 8,
     },
     fuelOptions: {
-      gap: 12,
+      gap: Math.round(screenHeight * 0.015),
     },
     fuelOptionBtn: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.background,
-      padding: 16,
-      borderRadius: 12,
+      padding: Math.round(screenWidth * 0.04),
+      borderRadius: Math.round(screenWidth * 0.03),
       borderWidth: 2,
       borderColor: colors.border,
-      gap: 12,
+      gap: Math.round(screenWidth * 0.03),
     },
     fuelOptionActive: {
       backgroundColor: '#4CAF50',
@@ -6017,7 +6033,7 @@ export default function BuildScreen() {
       borderColor: '#666',
     },
     fuelOptionText: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       color: colors.text,
     },
     fuelOptionTextActive: {
@@ -6025,18 +6041,18 @@ export default function BuildScreen() {
       fontWeight: '600',
     },
     fuelAmountSection: {
-      marginTop: 16,
-      paddingTop: 16,
+      marginTop: screenHeight * 0.02,
+      paddingTop: screenHeight * 0.02,
       borderTopWidth: 1,
       borderTopColor: 'rgba(255,255,255,0.1)',
     },
     cancelButton: {
-      marginTop: 16,
-      paddingVertical: 12,
+      marginTop: screenHeight * 0.02,
+      paddingVertical: screenHeight * 0.015,
       alignItems: 'center',
     },
     cancelButtonText: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       color: colors.textSecondary,
     },
   });
@@ -6051,16 +6067,16 @@ export default function BuildScreen() {
     overlay: {
       flex: 1,
       backgroundColor: 'rgba(0,0,0,0.6)',
-      paddingHorizontal: 20,
-      paddingTop: 60,
+      paddingHorizontal: screenWidth * 0.05,
+      paddingTop: screenHeight * 0.07,
     },
     backButton: {
       position: 'absolute',
-      top: 50,
-      left: 20,
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+      top: screenHeight * 0.06,
+      left: screenWidth * 0.05,
+      width: Math.round(screenWidth * 0.11),
+      height: Math.round(screenWidth * 0.11),
+      borderRadius: Math.round(screenWidth * 0.055),
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
       justifyContent: 'center',
       alignItems: 'center',
@@ -6070,10 +6086,10 @@ export default function BuildScreen() {
     },
     titleContainer: {
       alignItems: 'center',
-      marginBottom: 30,
+      marginBottom: screenHeight * 0.035,
     },
     title: {
-      fontSize: 32,
+      fontSize: Math.round(screenWidth * 0.08),
       fontWeight: 'bold',
       color: '#F5DEB3',
       textShadowColor: '#000',
@@ -6081,7 +6097,7 @@ export default function BuildScreen() {
       textShadowRadius: 0,
     },
     subtitle: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       color: '#D4C4A8',
       marginTop: 8,
       textShadowColor: '#000',
@@ -6094,9 +6110,9 @@ export default function BuildScreen() {
     levelButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      padding: 16,
+      padding: Math.round(screenWidth * 0.04),
       borderWidth: 4,
-      gap: 12,
+      gap: Math.round(screenWidth * 0.03),
     },
     levelUnlocked: {
       backgroundColor: '#2D2D44',
@@ -6114,21 +6130,21 @@ export default function BuildScreen() {
       opacity: 0.7,
     },
     levelIconContainer: {
-      width: 50,
-      height: 50,
-      borderRadius: 25,
+      width: Math.round(screenWidth * 0.125),
+      height: Math.round(screenWidth * 0.125),
+      borderRadius: Math.round(screenWidth * 0.0625),
       backgroundColor: 'rgba(0,0,0,0.3)',
       justifyContent: 'center',
       alignItems: 'center',
     },
     levelIcon: {
-      fontSize: 28,
+      fontSize: Math.round(screenWidth * 0.07),
     },
     levelInfo: {
       flex: 1,
     },
     levelName: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       fontWeight: 'bold',
       color: '#F5DEB3',
       textShadowColor: '#000',
@@ -6136,7 +6152,7 @@ export default function BuildScreen() {
       textShadowRadius: 0,
     },
     levelDesc: {
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       color: '#D4C4A8',
       marginTop: 4,
     },
@@ -6149,7 +6165,7 @@ export default function BuildScreen() {
       alignSelf: 'flex-start',
     },
     goalText: {
-      fontSize: 11,
+      fontSize: Math.round(screenWidth * 0.028),
       color: '#4CAF50',
       fontWeight: '600',
     },
@@ -6160,17 +6176,17 @@ export default function BuildScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
-      padding: 16,
-      marginTop: 24,
+      padding: Math.round(screenWidth * 0.04),
+      marginTop: screenHeight * 0.03,
       borderWidth: 2,
       borderColor: '#5A5A7A',
-      gap: 12,
+      gap: Math.round(screenWidth * 0.03),
     },
     infoText: {
       flex: 1,
-      fontSize: 13,
+      fontSize: Math.round(screenWidth * 0.033),
       color: '#D4C4A8',
-      lineHeight: 18,
+      lineHeight: Math.round(screenWidth * 0.045),
     },
   });
 
@@ -6299,15 +6315,15 @@ export default function BuildScreen() {
       flex: 1,
       backgroundColor: 'rgba(0, 0, 0, 0.65)',
       justifyContent: 'flex-end',
-      paddingBottom: 40,
+      paddingBottom: screenHeight * 0.05,
     },
     closeButton: {
       position: 'absolute',
-      top: 16,
-      left: 16,
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+      top: screenHeight * 0.02,
+      left: screenWidth * 0.04,
+      width: Math.round(screenWidth * 0.11),
+      height: Math.round(screenWidth * 0.11),
+      borderRadius: Math.round(screenWidth * 0.055),
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
       justifyContent: 'center',
       alignItems: 'center',
@@ -6317,17 +6333,17 @@ export default function BuildScreen() {
     },
     levelBadge: {
       position: 'absolute',
-      top: 22,
+      top: screenHeight * 0.028,
       alignSelf: 'center',
       backgroundColor: 'rgba(45, 45, 68, 0.95)',
-      paddingHorizontal: 20,
-      paddingVertical: 8,
-      borderRadius: 20,
+      paddingHorizontal: screenWidth * 0.05,
+      paddingVertical: screenHeight * 0.01,
+      borderRadius: Math.round(screenWidth * 0.05),
       borderWidth: 2,
       borderColor: '#5A5A7A',
     },
     levelBadgeText: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       fontWeight: 'bold',
       color: '#F5DEB3',
       textShadowColor: '#000',
@@ -6339,13 +6355,13 @@ export default function BuildScreen() {
       marginBottom: -10,
     },
     characterImage: {
-      width: 200,
-      height: 200,
+      width: Math.round(screenWidth * 0.5),
+      height: Math.round(screenWidth * 0.5),
     },
     dialogueContainer: {
-      paddingHorizontal: 16,
+      paddingHorizontal: screenWidth * 0.04,
       alignItems: 'center',
-      marginBottom: 180,
+      marginBottom: screenHeight * 0.22,
     },
     dialogueBox: {
       width: '100%',
@@ -6355,35 +6371,35 @@ export default function BuildScreen() {
       borderLeftColor: '#5A5A7A',
       borderBottomColor: '#1A1A2E',
       borderRightColor: '#1A1A2E',
-      paddingHorizontal: 20,
-      paddingTop: 20,
-      paddingBottom: 12,
-      minHeight: 130,
+      paddingHorizontal: screenWidth * 0.05,
+      paddingTop: screenHeight * 0.025,
+      paddingBottom: screenHeight * 0.015,
+      minHeight: screenHeight * 0.16,
     },
     dialogueText: {
-      fontSize: 17,
+      fontSize: Math.round(screenWidth * 0.043),
       color: '#F5DEB3',
-      lineHeight: 26,
+      lineHeight: Math.round(screenWidth * 0.065),
       fontWeight: '500',
       textShadowColor: '#000',
       textShadowOffset: { width: 1, height: 1 },
       textShadowRadius: 0,
-      minHeight: 60,
+      minHeight: screenHeight * 0.075,
     },
     cursor: {
       color: '#F5DEB3',
-      fontSize: 17,
+      fontSize: Math.round(screenWidth * 0.043),
     },
     dialogueFooter: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginTop: 12,
+      marginTop: screenHeight * 0.015,
     },
     navButton: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
+      width: Math.round(screenWidth * 0.09),
+      height: Math.round(screenWidth * 0.09),
+      borderRadius: Math.round(screenWidth * 0.045),
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -6393,19 +6409,19 @@ export default function BuildScreen() {
     dotsContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: Math.round(screenWidth * 0.015),
     },
     dot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
+      width: Math.round(screenWidth * 0.02),
+      height: Math.round(screenWidth * 0.02),
+      borderRadius: Math.round(screenWidth * 0.01),
       backgroundColor: '#555',
     },
     dotActive: {
       backgroundColor: '#F5DEB3',
-      width: 10,
-      height: 10,
-      borderRadius: 5,
+      width: Math.round(screenWidth * 0.025),
+      height: Math.round(screenWidth * 0.025),
+      borderRadius: Math.round(screenWidth * 0.0125),
     },
     dotCompleted: {
       backgroundColor: '#8B7355',
@@ -6416,7 +6432,7 @@ export default function BuildScreen() {
       gap: 4,
     },
     tapHint: {
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       color: '#F5DEB3',
       fontWeight: '600',
     },
@@ -6425,10 +6441,10 @@ export default function BuildScreen() {
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: '#F5DEB3',
-      paddingVertical: 14,
-      paddingHorizontal: 32,
+      paddingVertical: screenHeight * 0.017,
+      paddingHorizontal: screenWidth * 0.08,
       borderRadius: 8,
-      marginTop: 16,
+      marginTop: screenHeight * 0.02,
       gap: 8,
       borderWidth: 3,
       borderTopColor: '#FFF8DC',
@@ -6442,7 +6458,7 @@ export default function BuildScreen() {
       elevation: 4,
     },
     startButtonText: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: '#1a1a2e',
     },
@@ -6607,27 +6623,27 @@ export default function BuildScreen() {
       flex: 1,
       backgroundColor: 'rgba(0, 0, 0, 0.7)',
       justifyContent: 'flex-end',
-      paddingBottom: 40,
+      paddingBottom: screenHeight * 0.05,
     },
     celebrationBadge: {
       position: 'absolute',
-      top: 30,
+      top: screenHeight * 0.035,
       alignSelf: 'center',
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: 'rgba(45, 45, 68, 0.95)',
-      paddingHorizontal: 24,
-      paddingVertical: 10,
-      borderRadius: 24,
+      paddingHorizontal: screenWidth * 0.06,
+      paddingVertical: screenHeight * 0.012,
+      borderRadius: Math.round(screenWidth * 0.06),
       borderWidth: 2,
       borderColor: '#FFD700',
-      gap: 10,
+      gap: Math.round(screenWidth * 0.025),
     },
     celebrationEmoji: {
-      fontSize: 22,
+      fontSize: Math.round(screenWidth * 0.055),
     },
     celebrationText: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       fontWeight: 'bold',
       color: '#FFD700',
       textShadowColor: '#000',
@@ -6639,11 +6655,11 @@ export default function BuildScreen() {
       marginBottom: -10,
     },
     characterImage: {
-      width: 220,
-      height: 220,
+      width: Math.round(screenWidth * 0.55),
+      height: Math.round(screenWidth * 0.55),
     },
     dialogueContainer: {
-      paddingHorizontal: 16,
+      paddingHorizontal: screenWidth * 0.04,
       alignItems: 'center',
     },
     dialogueBox: {
@@ -6654,35 +6670,35 @@ export default function BuildScreen() {
       borderLeftColor: '#FFD700',
       borderBottomColor: '#B8860B',
       borderRightColor: '#B8860B',
-      paddingHorizontal: 20,
-      paddingTop: 20,
-      paddingBottom: 12,
-      minHeight: 130,
+      paddingHorizontal: screenWidth * 0.05,
+      paddingTop: screenHeight * 0.025,
+      paddingBottom: screenHeight * 0.015,
+      minHeight: screenHeight * 0.16,
     },
     dialogueText: {
-      fontSize: 17,
+      fontSize: Math.round(screenWidth * 0.043),
       color: '#FFD700',
-      lineHeight: 26,
+      lineHeight: Math.round(screenWidth * 0.065),
       fontWeight: '500',
       textShadowColor: '#000',
       textShadowOffset: { width: 1, height: 1 },
       textShadowRadius: 0,
-      minHeight: 60,
+      minHeight: screenHeight * 0.075,
     },
     cursor: {
       color: '#FFD700',
-      fontSize: 17,
+      fontSize: Math.round(screenWidth * 0.043),
     },
     dialogueFooter: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginTop: 12,
+      marginTop: screenHeight * 0.015,
     },
     navButton: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
+      width: Math.round(screenWidth * 0.09),
+      height: Math.round(screenWidth * 0.09),
+      borderRadius: Math.round(screenWidth * 0.045),
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -6692,19 +6708,19 @@ export default function BuildScreen() {
     dotsContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: Math.round(screenWidth * 0.015),
     },
     dot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
+      width: Math.round(screenWidth * 0.02),
+      height: Math.round(screenWidth * 0.02),
+      borderRadius: Math.round(screenWidth * 0.01),
       backgroundColor: '#555',
     },
     dotActive: {
       backgroundColor: '#FFD700',
-      width: 10,
-      height: 10,
-      borderRadius: 5,
+      width: Math.round(screenWidth * 0.025),
+      height: Math.round(screenWidth * 0.025),
+      borderRadius: Math.round(screenWidth * 0.0125),
     },
     dotCompleted: {
       backgroundColor: '#B8860B',
@@ -6715,7 +6731,7 @@ export default function BuildScreen() {
       gap: 4,
     },
     tapHint: {
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       color: '#FFD700',
       fontWeight: '600',
     },
@@ -6724,10 +6740,10 @@ export default function BuildScreen() {
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: '#FFD700',
-      paddingVertical: 14,
-      paddingHorizontal: 32,
+      paddingVertical: screenHeight * 0.017,
+      paddingHorizontal: screenWidth * 0.08,
       borderRadius: 8,
-      marginTop: 16,
+      marginTop: screenHeight * 0.02,
       gap: 8,
       borderWidth: 3,
       borderTopColor: '#FFF8DC',
@@ -6741,7 +6757,7 @@ export default function BuildScreen() {
       elevation: 4,
     },
     finishButtonText: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: '#1a1a2e',
     },
@@ -6845,18 +6861,18 @@ export default function BuildScreen() {
       alignItems: 'center',
     },
     menuButtonsContainer: {
-      paddingHorizontal: 20,
-      gap: 12,
+      paddingHorizontal: screenWidth * 0.05,
+      gap: Math.round(screenHeight * 0.015),
       width: '85%',
-      maxWidth: 320,
+      maxWidth: screenWidth * 0.82,
     },
     menuButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 14,
-      paddingHorizontal: 20,
-      gap: 12,
+      paddingVertical: screenHeight * 0.017,
+      paddingHorizontal: screenWidth * 0.05,
+      gap: Math.round(screenWidth * 0.03),
       // RPG-style box with pixel border effect
       backgroundColor: '#2D2D44',
       borderWidth: 4,
@@ -6901,23 +6917,23 @@ export default function BuildScreen() {
       borderRightColor: '#2A3A5C',
     },
     menuButtonIcon: {
-      width: 32,
-      height: 32,
+      width: Math.round(screenWidth * 0.08),
+      height: Math.round(screenWidth * 0.08),
       justifyContent: 'center',
       alignItems: 'center',
     },
     menuButtonText: {
       flex: 1,
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
-      color: '#F5DEB3', // Wheat color - classic RPG text
+      color: '#F5DEB3',
       textShadowColor: '#000',
       textShadowOffset: { width: 1, height: 1 },
       textShadowRadius: 0,
       letterSpacing: 1,
     },
     menuButtonSubtext: {
-      fontSize: 10,
+      fontSize: Math.round(screenWidth * 0.025),
       color: '#D4C4A8',
       textShadowColor: '#000',
       textShadowOffset: { width: 1, height: 1 },
@@ -6933,17 +6949,17 @@ export default function BuildScreen() {
   const howToPlayStyles = StyleSheet.create({
     section: {
       backgroundColor: colors.background,
-      padding: 16,
+      padding: Math.round(screenWidth * 0.04),
       borderRadius: 12,
     },
     sectionTitle: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       marginBottom: 8,
     },
     sectionText: {
-      fontSize: 14,
-      lineHeight: 20,
+      fontSize: Math.round(screenWidth * 0.035),
+      lineHeight: Math.round(screenWidth * 0.05),
     },
   });
   
@@ -6952,12 +6968,12 @@ export default function BuildScreen() {
     // ===== Tutorial header (replaces normal header in tutorial mode) =====
     tutorialHeader: {
       backgroundColor: 'rgba(26, 26, 46, 0.97)',
-      paddingHorizontal: 10,
-      paddingTop: 6,
-      paddingBottom: 4,
+      paddingHorizontal: screenWidth * 0.025,
+      paddingTop: screenHeight * 0.007,
+      paddingBottom: screenHeight * 0.005,
       borderBottomWidth: 1,
       borderBottomColor: 'rgba(255, 152, 0, 0.35)',
-      height: 120,
+      height: screenHeight * 0.15,
       overflow: 'hidden',
     },
     tutorialRow1: {
@@ -6967,21 +6983,21 @@ export default function BuildScreen() {
       flex: 1,
     },
     koinMini: {
-      width: 38,
-      height: 38,
+      width: Math.round(screenWidth * 0.095),
+      height: Math.round(screenWidth * 0.095),
     },
     tutorialTextArea: {
       flex: 1,
     },
     tutorialTitle: {
-      fontSize: 13,
+      fontSize: Math.round(screenWidth * 0.033),
       fontWeight: 'bold',
       color: '#FF9800',
     },
     tutorialMessage: {
-      fontSize: 11,
+      fontSize: Math.round(screenWidth * 0.028),
       color: '#CCC',
-      lineHeight: 14,
+      lineHeight: Math.round(screenWidth * 0.035),
       marginTop: 1,
     },
     tutorialRow2: {
@@ -6992,7 +7008,7 @@ export default function BuildScreen() {
     },
     tutorialHint: {
       flex: 1,
-      fontSize: 10,
+      fontSize: Math.round(screenWidth * 0.025),
       color: '#FFB74D',
       fontStyle: 'italic',
     },
@@ -7035,7 +7051,7 @@ export default function BuildScreen() {
       gap: 3,
     },
     btnNextText: {
-      fontSize: 11,
+      fontSize: Math.round(screenWidth * 0.028),
       fontWeight: 'bold',
       color: '#FFF',
     },
@@ -7045,23 +7061,23 @@ export default function BuildScreen() {
       backgroundColor: 'rgba(0, 0, 0, 0.85)',
       justifyContent: 'center',
       alignItems: 'center',
-      padding: 20,
+      padding: screenWidth * 0.05,
     },
     koinContainer: {
-      marginBottom: -20,
+      marginBottom: -screenHeight * 0.025,
       zIndex: 10,
     },
     koinImage: {
-      width: 180,
-      height: 180,
+      width: Math.round(screenWidth * 0.45),
+      height: Math.round(screenWidth * 0.45),
     },
     speechBubble: {
       backgroundColor: '#FFFDE7',
-      borderRadius: 24,
-      padding: 24,
-      paddingTop: 32,
+      borderRadius: Math.round(screenWidth * 0.06),
+      padding: Math.round(screenWidth * 0.06),
+      paddingTop: Math.round(screenWidth * 0.08),
       width: '100%',
-      maxWidth: 340,
+      maxWidth: screenWidth * 0.85,
       alignItems: 'center',
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 4 },
@@ -7082,18 +7098,18 @@ export default function BuildScreen() {
       borderBottomColor: '#FFFDE7',
     },
     speechTitle: {
-      fontSize: 20,
+      fontSize: Math.round(screenWidth * 0.05),
       fontWeight: 'bold',
       color: '#2C3E50',
       textAlign: 'center',
-      marginBottom: 12,
+      marginBottom: screenHeight * 0.015,
     },
     speechMessage: {
-      fontSize: 15,
+      fontSize: Math.round(screenWidth * 0.038),
       color: '#5D6D7E',
       textAlign: 'center',
-      lineHeight: 22,
-      marginBottom: 20,
+      lineHeight: Math.round(screenWidth * 0.055),
+      marginBottom: screenHeight * 0.025,
     },
     progressDots: {
       flexDirection: 'row',
@@ -7123,14 +7139,14 @@ export default function BuildScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 14,
-      paddingHorizontal: 20,
+      paddingVertical: screenHeight * 0.017,
+      paddingHorizontal: screenWidth * 0.05,
       borderRadius: 12,
       backgroundColor: '#F5F5F5',
       gap: 6,
     },
     backButtonText: {
-      fontSize: 15,
+      fontSize: Math.round(screenWidth * 0.038),
       fontWeight: '600',
       color: '#666',
     },
@@ -7139,23 +7155,23 @@ export default function BuildScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 14,
-      paddingHorizontal: 24,
+      paddingVertical: screenHeight * 0.017,
+      paddingHorizontal: screenWidth * 0.06,
       borderRadius: 12,
       backgroundColor: '#FF9800',
       gap: 8,
     },
     nextButtonText: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       fontWeight: 'bold',
       color: '#FFF',
     },
     skipButton: {
-      marginTop: 16,
-      paddingVertical: 8,
+      marginTop: screenHeight * 0.02,
+      paddingVertical: screenHeight * 0.01,
     },
     skipButtonText: {
-      fontSize: 13,
+      fontSize: Math.round(screenWidth * 0.033),
       color: '#999',
       textDecorationLine: 'underline',
     },
