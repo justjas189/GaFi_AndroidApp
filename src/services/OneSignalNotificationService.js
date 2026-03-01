@@ -8,10 +8,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import DebugUtils from '../utils/DebugUtils';
 
 // ─── OneSignal App ID & REST API Key ────────────────────────────────────────
-// The App ID is loaded at init in App.js. The REST API key is used for
-// server-to-device pushes (Level Up, etc.). Replace with your actual key.
-const ONESIGNAL_APP_ID = '2f15e79a-b878-4ac7-a918-9d6d8bc28d60';
-const ONESIGNAL_REST_API_KEY = 'os_v2_app_f4k6pgvypbfmpkiytvwyxqunmb2yookacehea54gxzblreriqpciwgypd7gwxopjngt4pma2rt453s7m2jfdi4u5l5gvqsp575eyeia'; // Set this in your .env or constants
+// Both values are loaded from environment variables.
+// Set EXPO_PUBLIC_ONESIGNAL_APP_ID and ONESIGNAL_REST_API_KEY in your .env file.
+const ONESIGNAL_APP_ID = process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID;
+const ONESIGNAL_REST_API_KEY = process.env.ONESIGNAL_REST_API_KEY;
 
 // ─── Notification Preference Keys ───────────────────────────────────────────
 const PREF_KEYS = {
