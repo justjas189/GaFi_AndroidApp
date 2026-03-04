@@ -5,6 +5,8 @@ import { Calendar } from 'react-native-calendars';
 import { Ionicons } from '@expo/vector-icons';
 import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
+import { getCategoryIcon } from '../../utils/categoryIcons';
+import { normalizeCategory } from '../../utils/categoryUtils';
 
 const CalendarScreen = ({ navigation }) => {
  
@@ -72,28 +74,23 @@ const CalendarScreen = ({ navigation }) => {
     </TouchableOpacity>
   );
 
-  const getCategoryIcon = (category) => {
-    const categoryMap = {
-      food: 'restaurant-outline',
-      transportation: 'car-outline',
-      entertainment: 'game-controller-outline',
-      shopping: 'bag-outline',
-      utilities: 'flash-outline',
-      others: 'ellipsis-horizontal-outline'
-    };
-    return categoryMap[category.toLowerCase()] || 'ellipsis-horizontal-outline';
-  };
-
   const getCategoryColor = (category) => {
+    // Canonical names mirror ExpenseScreen's categoryColors — single source of truth.
     const colorMap = {
-      food: '#FF6B6B',
-      transportation: '#4ECDC4',
-      entertainment: '#45B7D1',
-      shopping: '#96CEB4',
-      utilities: '#FFEAA7',
-      others: '#DDA0DD'
+      'Food & Dining':  '#FF9800',
+      'Transport':      '#2196F3',
+      'Shopping':       '#E91E63',
+      'Groceries':      '#8BC34A',
+      'Entertainment':  '#9C27B0',
+      'Electronics':    '#00BCD4',
+      'School Supplies':'#3F51B5',
+      'Utilities':      '#607D8B',
+      'Health':         '#4CAF50',
+      'Education':      '#673AB7',
+      'Other':          '#795548',
+      'No Spend Day':   '#2ECC71',
     };
-    return colorMap[category.toLowerCase()] || '#DDA0DD';
+    return colorMap[normalizeCategory(category)] || '#795548';
   };
 
   return (
@@ -118,7 +115,10 @@ const CalendarScreen = ({ navigation }) => {
             selectedDayTextColor: theme.colors.card,
             todayTextColor: theme.colors.primary,
             dayTextColor: theme.colors.text,
-            textDisabledColor: theme.colors.secondaryText,
+            // Trailing/leading days (prev/next month) get a very faint color.
+            // The library's Date logic determines which days are out-of-month —
+            // no manual day-count hardcoding needed.
+            textDisabledColor: isDarkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.13)',
             dotColor: theme.colors.primary,
             selectedDotColor: theme.colors.card,
             arrowColor: theme.colors.primary,
@@ -174,43 +174,11 @@ const CalendarScreen = ({ navigation }) => {
               </View>
               <Text style={[styles.noExpensesTitle, { color: theme.colors.text }]}>No expenses yet</Text>
               <Text style={[styles.noExpensesText, { color: theme.colors.text }]}>Start tracking your daily expenses</Text>
-              <TouchableOpacity 
-                style={[styles.addExpenseButton, { backgroundColor: theme.colors.primary }]}
-                onPress={() => {
-                  navigation.navigate('MainTabs', { 
-                    screen: 'Expenses',
-                    params: { 
-                      showForm: true,
-                      preselectedDate: selected 
-                    }
-                  });
-                }}
-              >
-                <Ionicons name="add" size={20} color={theme.colors.background} />
-                <Text style={[styles.addExpenseButtonText, { color: theme.colors.background }]}>Add Expense</Text>
-              </TouchableOpacity>
             </View>
           )}
         </View>
       ) : null}
 
-      <TouchableOpacity 
-        style={[styles.addButton, { 
-          backgroundColor: theme.colors.primary,
-          shadowColor: theme.colors.text,
-        }]}
-        onPress={() => {
-          navigation.navigate('MainTabs', { 
-            screen: 'Expenses',
-            params: { 
-              showForm: true,
-              preselectedDate: selected || currentDate 
-            }
-          });
-        }}
-      >
-        <Ionicons name="add" size={24} color="#FFF" />
-      </TouchableOpacity>
     </SafeAreaView>
   );
 };
@@ -375,19 +343,21 @@ const styles = StyleSheet.create({
     color: 'white',
   },
   emptyState: {
-    flex: 1,
+    flexDirection: 'column',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 40,
     paddingBottom: 100, // Account for tab bar navigation
   },
   emptyStateIcon: {
+    flexDirection: 'column',
     width: 80,
     height: 80,
     borderRadius: 40,
+    marginTop: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 0,
   },
   noExpensesTitle: {
     fontSize: 20,
@@ -398,36 +368,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     opacity: 0.6,
     textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: 20,
   },
-  addExpenseButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 25,
-  },
-  addExpenseButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  addButton: {
-    position: 'absolute',
-    right: 20,
-    bottom: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 8,
-    zIndex: 999,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-  },
+
 });
 
 export default CalendarScreen;

@@ -6,6 +6,7 @@ import { supabase } from '../config/supabase';
 import { analyzeExpenses, getRecommendations } from '../config/nvidia';
 import { BudgetDatabaseService } from '../services/BudgetDatabaseService_NEW';
 import { normalizeCategory } from '../utils/categoryUtils';
+import notificationService from '../services/OneSignalNotificationService';
 
 export const DataContext = createContext();
 
@@ -220,7 +221,8 @@ export const DataProvider = ({ children }) => {
         .from('expenses')
         .select('*')
         .eq('user_id', userId)
-        .order('date', { ascending: false });
+        .order('date', { ascending: false })
+        .range(0, 9999);
 
       if (expensesError) {
         console.error('Expenses load error:', expensesError);
@@ -370,6 +372,17 @@ export const DataProvider = ({ children }) => {
       }
 
       console.log('Expense recorded successfully:', result);
+
+      // ── Check budget thresholds for notification alerts ──
+      try {
+        await notificationService.checkBudgetThresholds(
+          budget,
+          parseFloat(expense.amount),
+          normalizedCategory
+        );
+      } catch (alertError) {
+        console.warn('Budget alert check failed (non-critical):', alertError);
+      }
 
       // Refresh local state by reloading all data
       await loadData();

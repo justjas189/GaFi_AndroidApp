@@ -1,5 +1,5 @@
 import React, { useState, useRef, useContext, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ImageBackground, Dimensions, TouchableWithoutFeedback, Animated, Modal, Text, TextInput, TouchableOpacity, Alert, ScrollView, Easing, Image } from 'react-native';
+import { View, StyleSheet, ImageBackground, Dimensions, TouchableWithoutFeedback, Animated, Modal, Text, TextInput, TouchableOpacity, Alert, ScrollView, Easing, Image, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
@@ -10,9 +10,10 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { collisionSystem } from '../../utils/CollisionSystem';
 import { AchievementService } from '../../services/AchievementService';
 import gameDatabaseService from '../../services/GameDatabaseService';
+import { normalizeCategory } from '../../utils/categoryUtils';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const { width, height } = Dimensions.get('window');
+const { width: INITIAL_WIDTH, height: INITIAL_HEIGHT } = Dimensions.get('window');
 const CHARACTER_SIZE = 48;
 
 // Quick amount options for canteen
@@ -24,14 +25,14 @@ const MAPS = {
     id: 'school',
     name: 'School Campus',
     icon: '🏫',
-    image: require('../../../assets/Game_Graphics/maps/Map004.png'),
-    spawnPoint: { x: width / 2, y: height * 0.5 },
+    image: require('../../../assets/Game_Graphics/maps/School/Map004.png'),
+    spawnPoint: { xPct: 0.30, yPct: 0.55 },
     locations: [
       {
         id: 'canteen',
         name: 'Canteen',
         icon: '🍔',
-        bounds: { left: 0.35, right: 0.90, top: 0.85, bottom: 0.90 },
+        bounds: { left: 0.65, right: 0.90, top: 0.85, bottom: 0.92 },
         action: 'expense',
         category: 'Food & Dining',
       },
@@ -41,14 +42,14 @@ const MAPS = {
         icon: '🚪',
         bounds: { left: 0.10, right: 0.20, top: 0.65, bottom: 0.75 },
         action: 'travel',
-        destinations: ['dorm', 'mall'],
+        destinations: ['dorm', 'mall_1f'],
         exitSpawnPoint: { x: 0.15, y: 0.70 }, // Spawn point for arriving at this exit
       },
       {
         id: 'library',
         name: 'Library',
         icon: '📚',
-        bounds: { left: 0.48, right: 0.88, top: 0.48, bottom: 0.65 },
+        bounds: { left: 0.68, right: 0.88, top: 0.48, bottom: 0.69 },
         action: 'expense',
         category: 'School Supplies',
       },
@@ -59,7 +60,7 @@ const MAPS = {
     name: 'Home',
     icon: '🏠',
     image: require('../../../assets/Game_Graphics/maps/Home/Map002.png'),
-    spawnPoint: { x: width / 2, y: height * 0.5 },
+    spawnPoint: { xPct: 0.5, yPct: 0.5 },
     locations: [
       {
         id: 'door',
@@ -67,7 +68,7 @@ const MAPS = {
         icon: '🚪',
         bounds: { left: 0.35, right: 0.65, top: 0.92, bottom: 1 },
         action: 'travel',
-        destinations: ['school', 'mall'],
+        destinations: ['school', 'mall_1f'],
         exitSpawnPoint: { x: 0.50, y: 0.88 }, // Spawn point for arriving at this exit
       },
       {
@@ -86,27 +87,28 @@ const MAPS = {
       }
     ],
   },
-  mall: {
-    id: 'mall',
-    name: 'Shopping Mall',
+  // Mall 1st Floor (Map006) - stores + exit + escalator up
+  mall_1f: {
+    id: 'mall_1f',
+    name: 'Mall - 1F',
     icon: '🏬',
-    image: require('../../../assets/Game_Graphics/maps/Map003.png'),
-    spawnPoint: { x: width / 2, y: height * 0.5 },
+    image: require('../../../assets/Game_Graphics/maps/Mall/Map006.png'),
+    spawnPoint: { xPct: 0.5, yPct: 0.5 },
     locations: [
       {
         id: 'entrance',
         name: 'Mall Exit',
         icon: '🚪',
-        bounds: { left: 0.10, right: 0.35, top: 0.75, bottom: 0.85 },
+        bounds: { left: 0.70, right: 1.0, top: 0.82, bottom: 1.0 },
         action: 'travel',
         destinations: ['school', 'dorm'],
-        exitSpawnPoint: { x: 0.22, y: 0.78 }, // Spawn point for arriving at this exit
+        exitSpawnPoint: { x: 0.82, y: 0.88 },
       },
       {
         id: 'clothing_store',
         name: 'Clothing Store',
         icon: '👕',
-        bounds: { left: 0.10, right: 0.32, top: 0.37, bottom: 0.72 },
+        bounds: { left: 0.10, right: 0.32, top: 0.37, bottom: 0.55 },
         action: 'expense',
         category: 'Shopping',
       },
@@ -114,47 +116,170 @@ const MAPS = {
         id: 'electronics',
         name: 'Electronics',
         icon: '📱',
-        bounds: { left: 0.68, right: 0.90, top: 0.37, bottom: 0.72 },
+        bounds: { left: 0.68, right: 0.90, top: 0.58, bottom: 0.71 },
         action: 'expense',
         category: 'Electronics',
-      },
-      {
-        id: 'food_court',
-        name: 'Food Court',
-        icon: '🍕',
-        bounds: { left: 0.63, right: 0.85, top: 0.75, bottom: 1
-          
-         },
-        action: 'expense',
-        category: 'Food & Dining',
       },
       {
         id: 'grocery_store',
         name: 'Grocery Store',
         icon: '🛒',
-        bounds: { left: 0.73, right: 0.88, top: 0.20, bottom: 0.35
-          
-         },
+        bounds: { left: 0.73, right: 0.88, top: 0.20, bottom: 0.35 },
         action: 'expense',
         category: 'Groceries',
-      }
+      },
+      {
+        id: 'escalator_2f',
+        name: 'Escalator to 2F',
+        icon: '⬆️',
+        bounds: { left: 0.18, right: 0.39, top: 0.75, bottom: 0.92 },
+        action: 'floor_change',
+        targetFloor: 'mall_2f',
+        exitSpawnPoint: { x: 0.15, y: 0.92 },
+      },
     ],
   },
+  // Mall 2nd Floor (Map007) - food court, cafe, escalators up/down
+  mall_2f: {
+    id: 'mall_2f',
+    name: 'Mall - 2F',
+    icon: '🏬',
+    image: require('../../../assets/Game_Graphics/maps/Mall/Map007.png'),
+    spawnPoint: { xPct: 0.5, yPct: 0.5 },
+    locations: [
+      {
+        id: 'escalator_down_1f',
+        name: 'Escalator to 1F',
+        icon: '⬇️',
+        bounds: { left: 0.18, right: 0.40, top: 0.80, bottom: 1.0 },
+        action: 'floor_change',
+        targetFloor: 'mall_1f',
+        exitSpawnPoint: { x: 0.18, y: 0.96 },
+      },
+      {
+        id: 'food_court',
+        name: 'Food Court',
+        icon: '🍕',
+        bounds: { left: 0.45, right: 0.85, top: 0.13, bottom: 0.27 },
+        action: 'expense',
+        category: 'Food & Dining',
+      },
+      {
+        id: 'cafe',
+        name: 'Cafe',
+        icon: '☕',
+        bounds: { left: 0.45, right: 0.71, top: 0.83, bottom: 0.95 },
+        action: 'expense',
+        category: 'Food & Dining',
+      },
+      {
+        id: 'escalator_up_3f',
+        name: 'Escalator to 3F',
+        icon: '⬆️',
+        bounds: { left: 0.18, right: 0.39, top: 0.05, bottom: 0.20 },
+        action: 'floor_change',
+        targetFloor: 'mall_3f',
+        exitSpawnPoint: { x: 0.15, y: 0.22 },
+      },
+    ],
+  },
+  // Mall 3rd Floor (Map008) - gym, entertainment hub, escalator down
+  mall_3f: {
+    id: 'mall_3f',
+    name: 'Mall - 3F',
+    icon: '🏬',
+    image: require('../../../assets/Game_Graphics/maps/Mall/Map008.png'),
+    spawnPoint: { xPct: 0.32, yPct: 0.5 },
+    locations: [
+      {
+        id: 'escalator_down_2f',
+        name: 'Escalator to 2F',
+        icon: '⬇️',
+        bounds: { left: 0.10, right: 0.40, top: 0.82, bottom: 1.0 },
+        action: 'floor_change',
+        targetFloor: 'mall_2f',
+        exitSpawnPoint: { x: 0.18, y: 0.96 },
+      },
+      {
+        id: 'gym',
+        name: 'Gym',
+        icon: '💪',
+        bounds: { left: 0.72, right: 0.88, top: 0.59, bottom: 0.75 },
+        action: 'expense',
+        category: 'Health',
+      },
+      {
+        id: 'entertainment_hub',
+        name: 'Entertainment Hub',
+        icon: '🎮',
+        bounds: { left: 0.35, right: 0.65, top: 0.10, bottom: 0.18 },
+        action: 'expense',
+        category: 'Entertainment',
+      },
+    ],
+  },
+};
+
+// ─── NPC Sprite Assets ───────────────────────────────────────────────────────
+const NPC_SPRITES = {
+  Library_Worker: require('../../../assets/Game_Graphics/Character_Animation/Workers/Library_Worker.png'),
+  Food_Worker:    require('../../../assets/Game_Graphics/Character_Animation/Workers/Food_Worker.png'),
+  Clothing_Worker:require('../../../assets/Game_Graphics/Character_Animation/Workers/Clothing_Worker.png'),
+  Grocery_Worker: require('../../../assets/Game_Graphics/Character_Animation/Workers/Grocery_Worker.png'),
+  Cafe_Worker:    require('../../../assets/Game_Graphics/Character_Animation/Workers/Cafe_Worker.png'),
+  Games_Worker:   require('../../../assets/Game_Graphics/Character_Animation/Workers/Games_Worker.png'),
+  Gym_Worker:     require('../../../assets/Game_Graphics/Character_Animation/Workers/Gym_Worker.png'),
+};
+
+// ─── NPC Placement Config ────────────────────────────────────────────────────
+// To reposition an NPC, simply change its tileX / tileY values.
+// Directions: 'right' | 'up' | 'left' | 'down'
+// All maps are 11 tiles wide × 24 tiles tall (48 px per tile).
+const NPC_POSITIONS = {
+  school: [
+    { id: 'library_worker',  sprite: 'Library_Worker',  tileX: 10, tileY: 15, direction: 'left'  },
+    { id: 'canteen_worker',  sprite: 'Food_Worker',     tileX: 10, tileY: 21, direction: 'left'  },
+  ],
+  mall_1f: [
+    { id: 'clothing_worker', sprite: 'Clothing_Worker', tileX: 1, tileY: 12, direction: 'right' },
+    { id: 'grocery_worker',  sprite: 'Grocery_Worker',  tileX: 10, tileY: 5,  direction: 'left'  },
+  ],
+  mall_2f: [
+    { id: 'foodcourt_worker',sprite: 'Food_Worker',     tileX: 7, tileY: 4,  direction: 'down'  },
+    { id: 'cafe_worker',     sprite: 'Cafe_Worker',     tileX: 6, tileY: 21, direction: 'right' },
+  ],
+  mall_3f: [
+    { id: 'games_worker',    sprite: 'Games_Worker',    tileX: 5, tileY: 3,  direction: 'down'  },
+    { id: 'gym_worker',      sprite: 'Gym_Worker',      tileX: 10, tileY: 16, direction: 'left'  },
+  ],
 };
 
 export default function BuildScreen() {
   const { colors } = useTheme();
   const { user } = useContext(AuthContext);
   const { addExpense, expenses } = useContext(DataContext);
+
+  // ─── Responsive dimensions ─────────────────────────────────────────
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+
+  // Helper: resolve a percentage-based spawn point to actual pixels
+  const resolveSpawn = useCallback(
+    (sp, w = screenWidth, h = screenHeight) => ({
+      x: w * (sp.xPct ?? 0.5),
+      y: h * (sp.yPct ?? 0.5),
+    }),
+    [screenWidth, screenHeight],
+  );
   
   // Current map state
   const [currentMapId, setCurrentMapId] = useState('dorm');
   const currentMap = MAPS[currentMapId];
   
-  // Character position
-  const [characterPosition, setCharacterPosition] = useState(currentMap.spawnPoint);
-  const animatedX = useRef(new Animated.Value(currentMap.spawnPoint.x - CHARACTER_SIZE / 2)).current;
-  const animatedY = useRef(new Animated.Value(currentMap.spawnPoint.y - CHARACTER_SIZE / 2)).current;
+  // Character position — resolve spawn point from percentages using initial screen size
+  const initialSpawn = { x: INITIAL_WIDTH * (currentMap.spawnPoint.xPct ?? 0.5), y: INITIAL_HEIGHT * (currentMap.spawnPoint.yPct ?? 0.5) };
+  const [characterPosition, setCharacterPosition] = useState(initialSpawn);
+  const animatedX = useRef(new Animated.Value(initialSpawn.x - CHARACTER_SIZE / 2)).current;
+  const animatedY = useRef(new Animated.Value(initialSpawn.y - CHARACTER_SIZE / 2)).current;
   const [isWalking, setIsWalking] = useState(false);
   const [todaySpending, setTodaySpending] = useState(0);
   const walkingPulse = useRef(new Animated.Value(1)).current;
@@ -186,53 +311,176 @@ export default function BuildScreen() {
   const [showHowToPlay, setShowHowToPlay] = useState(false); // Legacy - not used anymore
   const [tutorialStep, setTutorialStep] = useState(0);
   const [tutorialActive, setTutorialActive] = useState(false); // In-game tutorial mode
+  const [tutorialCompleted, setTutorialCompleted] = useState(false); // Persisted — gates Story Mode
+  const [tutorialConditions, setTutorialConditions] = useState(new Set()); // Tracks step completion conditions
+  const [tutorialViewedCar, setTutorialViewedCar] = useState(false); // Track if car transport was viewed in tutorial
+  
+  // Abandon / End Session modal state
+  const [showAbandonModal, setShowAbandonModal] = useState(false);
   
   // Koin Tutorial Guide Image
   const KOIN_TUTORIAL_IMAGE = require('../../../assets/mascot/koin_tutorial.png');
   
-  // In-game Tutorial steps configuration
+  // Helper: mark a tutorial condition as met and auto-advance if it matches current step
+  const markTutorialCondition = (conditionKey) => {
+    setTutorialConditions(prev => {
+      const next = new Set(prev);
+      next.add(conditionKey);
+      return next;
+    });
+    // Auto-advance: if this condition matches the current step (and it's not step 0), move forward
+    const currentStep = TUTORIAL_STEPS[tutorialStep];
+    if (currentStep && currentStep.conditionKey === conditionKey && tutorialStep > 0) {
+      // Small delay so the user sees the action complete before the overlay advances
+      setTimeout(() => {
+        setTutorialStep(prev => {
+          const nextIdx = prev + 1;
+          if (nextIdx < TUTORIAL_STEPS.length) {
+            gameDatabaseService.saveTutorialProgress({ currentStep: nextIdx, stepsCompleted: Array.from({ length: nextIdx }, (_, i) => String(i)), tutorialCompleted: false });
+            return nextIdx;
+          }
+          return prev;
+        });
+      }, 600);
+    }
+  };
+  
+  // Helper: check if current tutorial step's condition is met
+  const isTutorialStepComplete = () => {
+    const step = TUTORIAL_STEPS[tutorialStep];
+    if (!step) return false;
+    if (step.nextAlwaysEnabled) return true;
+    if (step.conditionKey && tutorialConditions.has(step.conditionKey)) return true;
+    return false;
+  };
+  
+  // In-game Tutorial steps configuration — step-by-step, action-gated
   const TUTORIAL_STEPS = [
     {
-      title: "Welcome! 👋",
-      message: "Hi! I'm Koin, your financial buddy! Let me show you around!",
-      highlight: null,
-      position: 'center',
-    },
-    {
-      title: "This is your room! 🏠",
-      message: "You start at Home. Tap anywhere on the map to walk around!",
-      highlight: 'map',
-      position: 'top',
-    },
-    {
-      title: "The Closet 👔",
-      message: "See this closet? Walk here to change your character's look!",
-      highlight: 'closet',
-      position: 'right',
-    },
-    {
-      title: "The Notebook 📓",
-      message: "Walk to the Notebook to quickly log any expense! You can also mark 'No Spend' days here.",
-      highlight: 'notebook',
-      position: 'left',
-    },
-    {
-      title: "Exit Door 🚪",
-      message: "Walk to doors to travel between Home, School, and the Mall!",
-      highlight: 'door',
-      position: 'bottom',
-    },
-    {
+      id: 'budget_intro',
       title: "Budget Tracker 📊",
-      message: "Your spending shows here. In Story Mode, follow the 50/30/20 budget rule!",
-      highlight: 'header',
+      message: "Hi! I'm Koin, your financial buddy! See the Budget Tracker at the top? It shows your daily spending and weekly budget. Keep an eye on it!",
+      nextAlwaysEnabled: true,
+      conditionKey: null,
       position: 'bottom',
+      highlight: 'header',
     },
     {
-      title: "You're all set! 🌟",
-      message: "Explore, record expenses, and become a money master! Good luck!",
+      id: 'walk_around',
+      title: "Move Around! 🏠",
+      message: "This is your room! Tap anywhere on the screen to walk your character around. Try it now!",
+      nextAlwaysEnabled: false,
+      conditionKey: 'walked',
+      position: 'top',
+      highlight: 'map',
+    },
+    {
+      id: 'closet',
+      title: "The Closet 👔",
+      message: "Walk to the Closet and check it out! Tap on the closet area to open it.",
+      nextAlwaysEnabled: false,
+      conditionKey: 'closet_opened',
+      position: 'right',
+      highlight: 'closet',
+    },
+    {
+      id: 'notebook_and_log',
+      title: "The Notebook 📓",
+      message: "Walk to the Notebook, open it, and try logging an expense! Enter any amount and description, then tap Log. Don't worry — this is just practice!",
+      nextAlwaysEnabled: false,
+      conditionKey: 'notebook_expense_logged',
+      position: 'left',
+      highlight: 'notebook',
+    },
+    {
+      id: 'exit_door',
+      title: "The Exit Door 🚪",
+      message: "Walk to the Exit Door to see the places you can go! Choose School and learn about transport expenses.",
+      nextAlwaysEnabled: false,
+      conditionKey: 'arrived_at_school',
+      position: 'bottom',
+      highlight: 'door',
+    },
+    {
+      id: 'school_intro',
+      title: "Welcome to School! 🏫",
+      message: "This is the School Campus! See the NPCs here? You can approach the Librarian to buy school supplies, or the Canteen staff to buy food. Walk to either one and log an expense — this is just practice!",
+      nextAlwaysEnabled: false,
+      conditionKey: 'school_expense_logged',
+      position: 'top',
       highlight: null,
+    },
+    {
+      id: 'go_to_mall',
+      title: "The Mall 🏬",
+      message: "Great job! Now let's visit the Mall! Walk to the School Exit and travel there.",
+      nextAlwaysEnabled: false,
+      conditionKey: 'arrived_at_mall',
       position: 'center',
+      highlight: null,
+    },
+    {
+      id: 'mall_1f_intro',
+      title: "Mall - 1st Floor 🏬",
+      message: "Welcome to the Mall! On the 1st floor, you'll find the Clothing Store 👕, Electronics 📱, and Grocery Store 🛒. Feel free to approach any NPC to log a practice expense, or just look around!",
+      nextAlwaysEnabled: true,
+      conditionKey: null,
+      position: 'top',
+      highlight: null,
+    },
+    {
+      id: 'go_to_2f',
+      title: "Go to 2nd Floor ⬆️",
+      message: "Now let's explore more! Walk to the Escalator to go up to the 2nd floor.",
+      nextAlwaysEnabled: false,
+      conditionKey: 'arrived_at_mall_2f',
+      position: 'bottom',
+      highlight: null,
+    },
+    {
+      id: 'mall_2f_intro',
+      title: "Mall - 2nd Floor 🍕",
+      message: "The 2nd floor has the Food Court 🍕 and a Cafe ☕. You can approach the NPCs to log practice expenses if you'd like!",
+      nextAlwaysEnabled: true,
+      conditionKey: null,
+      position: 'top',
+      highlight: null,
+    },
+    {
+      id: 'go_to_3f',
+      title: "Go to 3rd Floor ⬆️",
+      message: "One more floor to go! Walk to the Escalator to reach the 3rd floor.",
+      nextAlwaysEnabled: false,
+      conditionKey: 'arrived_at_mall_3f',
+      position: 'bottom',
+      highlight: null,
+    },
+    {
+      id: 'mall_3f_intro',
+      title: "Mall - 3rd Floor 🎮",
+      message: "The 3rd floor has the Entertainment Hub 🎮 and the Gym 💪. Feel free to log a practice expense or just explore!",
+      nextAlwaysEnabled: true,
+      conditionKey: null,
+      position: 'top',
+      highlight: null,
+    },
+    {
+      id: 'go_down_escalator',
+      title: "Going Down ⬇️",
+      message: "You can also go back down! Walk to the Escalator to go down to the 2nd floor. Use escalators anytime to move between mall floors.",
+      nextAlwaysEnabled: false,
+      conditionKey: 'went_down_escalator',
+      position: 'bottom',
+      highlight: null,
+    },
+    {
+      id: 'tutorial_done',
+      title: "You're All Set! 🌟",
+      message: "Amazing job! You've learned all the basics — budgeting, traveling, logging expenses, and navigating mall floors. Now go start Story Mode and become a financial master!",
+      nextAlwaysEnabled: true,
+      conditionKey: null,
+      position: 'center',
+      highlight: null,
     },
   ];
   
@@ -242,6 +490,8 @@ export default function BuildScreen() {
     setGameMode('tutorial');
     setTutorialActive(true);
     setTutorialStep(0);
+    setTutorialConditions(new Set());
+    setTutorialViewedCar(false);
     setCurrentMapId('dorm'); // Always start tutorial at home
     // Persist tutorial start to Supabase
     gameDatabaseService.saveTutorialProgress({ currentStep: 0, stepsCompleted: [], tutorialCompleted: false });
@@ -252,8 +502,15 @@ export default function BuildScreen() {
   const endTutorial = () => {
     setTutorialActive(false);
     setTutorialStep(0);
+    setTutorialConditions(new Set());
+    setTutorialViewedCar(false);
     setShowMainMenu(true);
     setGameMode(null);
+    setTutorialCompleted(true);
+    // Persist to AsyncStorage for quick local check
+    if (user?.id) {
+      AsyncStorage.setItem(`tutorialCompleted_${user.id}`, 'true');
+    }
     // Persist tutorial completion to Supabase
     gameDatabaseService.saveTutorialProgress({ currentStep: 0, stepsCompleted: [], tutorialCompleted: true });
     gameDatabaseService.logActivity({ activityType: 'tutorial_step', details: { step: 'done', action: 'completed' } });
@@ -283,7 +540,12 @@ export default function BuildScreen() {
     'Electronics': 0,
     'Transport': 0,
     'Entertainment': 0,
-    'Other': 0
+    'Groceries': 0,
+    'School Supplies': 0,
+    'Utilities': 0,
+    'Health': 0,
+    'Education': 0,
+    'Other': 0,
   });
   
   // Level 2 (Goal Setting) - Savings goals tracking
@@ -329,26 +591,35 @@ export default function BuildScreen() {
     1: [
       { text: "Hey there, adventurer! I'm Koin, your financial buddy!" },
       { text: "Welcome to Level 1: Budget Basics! This is where your journey begins." },
-      { text: "You'll learn the 50/30/20 rule — the golden rule of budgeting!" },
-      { text: "50% of your budget goes to Needs — food, transport, school supplies..." },
-      { text: "30% goes to Wants — shopping, entertainment, electronics..." },
-      { text: "And 20% should be saved! That's the secret to building wealth." },
+      { text: "Ever heard of the 50/30/20 rule? It's one of the most popular budgeting strategies out there — and for good reason!" },
+      { text: "The idea is simple: split your money into three buckets so you always know where it's going." },
+      { text: "50% goes to Needs — the essentials like food, transport, and school supplies." },
+      { text: "30% goes to Wants — the fun stuff like shopping, entertainment, and gadgets." },
+      { text: "And 20% goes straight to Savings — this is how you build a safety net and grow your wealth over time." },
+      { text: "Why does this matter? Because without a plan, money disappears fast. The 50/30/20 rule gives you control!" },
       { text: "You have 7 days. Stay within the budget limits, and you'll pass this level. Good luck!" },
     ],
     2: [
       { text: "You made it to Level 2! I knew you had it in you!" },
-      { text: "This time, we're learning about Goal Setting!" },
-      { text: "I'll give you three savings goals: Emergency Fund, Fun Money, and Future Savings." },
-      { text: "Your mission? Allocate money towards these goals throughout the week." },
-      { text: "You need to reach at least 80% of your target to pass!" },
-      { text: "Remember, every peso saved is a step toward your dreams. Let's go!" },
+      { text: "This time, we're diving into Goal Setting — one of the most powerful money habits you can build." },
+      { text: "In real life, people set short-term, mid-term, and long-term financial goals." },
+      { text: "Short-term goals are things you save for within weeks or months — like an emergency fund or a small treat." },
+      { text: "Mid-term goals take a few months to a year — maybe a new gadget or a trip." },
+      { text: "Long-term goals are the big dreams — college funds, a car, or even your first home!" },
+      { text: "Since we only have one week, I'll give you two goals to focus on: an Emergency Fund and Fun Money." },
+      { text: "Your Emergency Fund will be 15% of your budget — because unexpected expenses can happen anytime!" },
+      { text: "Fun Money will be 5% — a small reward for yourself, because balance matters." },
+      { text: "Reach at least 80% of your target to pass. Every peso counts — let's go!" },
     ],
     3: [
       { text: "Welcome to the final challenge... Level 3: Super Saver!" },
       { text: "You've learned budgeting. You've learned goal setting. Now it's time for the ultimate test." },
+      { text: "This level is all about building the habit of saving — and understanding why it truly matters." },
+      { text: "Savings aren't just extra money sitting around. They're your safety net when life throws surprises at you." },
+      { text: "A medical emergency, a broken phone, an unexpected school expense — savings protect you from all of that." },
+      { text: "Beyond emergencies, savings give you freedom — the freedom to chase opportunities without financial stress." },
       { text: "Your mission: Save at least 30% of your weekly budget!" },
-      { text: "This means spending wisely and resisting unnecessary purchases." },
-      { text: "Think before every spend — do you NEED it, or just WANT it?" },
+      { text: "This means spending wisely and resisting unnecessary purchases. Think before every spend — do you NEED it, or just WANT it?" },
       { text: "Complete this, and you'll truly be a financial master. I believe in you!" },
     ],
   };
@@ -359,6 +630,7 @@ export default function BuildScreen() {
   const [customBudgetRules, setCustomBudgetRules] = useState({ needs: 50, wants: 30, savings: 20 });
   const [customGoals, setCustomGoals] = useState([{ name: '', target: '' }]);
   const [customSavingsTarget, setCustomSavingsTarget] = useState('20');
+  const [customWeeks, setCustomWeeks] = useState(1);
   const [showCustomSettingsModal, setShowCustomSettingsModal] = useState(false);
   const [settingsModeType, setSettingsModeType] = useState(null); // tracks which type is selected inside the settings modal
   
@@ -417,6 +689,62 @@ export default function BuildScreen() {
       icon: '👩‍💼',
       color: '#8E44AD',
     },
+    ash_ketchum: {
+      name: 'Ash Ketchum',
+      description: 'Gotta save \'em all! A trainer of budgets',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Ash Ketchum.png'),
+      icon: '🧢',
+      color: '#E53935',
+    },
+    bruce_lee: {
+      name: 'Bruce Lee',
+      description: 'Disciplined finances, disciplined life',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Bruce Lee.png'),
+      icon: '🥋',
+      color: '#FFC107',
+    },
+    chef_stephen: {
+      name: 'Chef Stephen',
+      description: 'Cooking up smart savings recipes',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Chef Stephen.png'),
+      icon: '👨‍🍳',
+      color: '#FF7043',
+    },
+    detective_carol: {
+      name: 'Detective Carol',
+      description: 'Investigating every peso spent',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Detective Carol.png'),
+      icon: '🕵️',
+      color: '#5C6BC0',
+    },
+    lily: {
+      name: 'Lily',
+      description: 'A cheerful saver with a green thumb',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Lily.png'),
+      icon: '🌸',
+      color: '#66BB6A',
+    },
+    mira: {
+      name: 'Mira',
+      description: 'A tech-savvy student tracking every cent',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Mira.png'),
+      icon: '💜',
+      color: '#AB47BC',
+    },
+    nurse_joy: {
+      name: 'Nurse Joy',
+      description: 'Healing your finances back to health',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Nurse Joy.png'),
+      icon: '👩‍⚕️',
+      color: '#EC407A',
+    },
+    policeman: {
+      name: 'Officer Dan',
+      description: 'Keeping your spending in check',
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Policeman.png'),
+      icon: '👮',
+      color: '#1565C0',
+    },
   };
   
   // Sprite frame configuration (24 frames total: 6 per direction)
@@ -432,6 +760,39 @@ export default function BuildScreen() {
     },
   };
 
+  // Content area dimensions (for accurate bounds detection)
+  const [contentSize, setContentSize] = useState({ width: screenWidth, height: screenHeight });
+
+  // ─── NPC helpers ────────────────────────────────────────────────────
+  // Returns true if the tile at (tileX, tileY) is occupied by an NPC on the current map
+  const isNPCTile = useCallback((tileX, tileY) => {
+    const npcs = NPC_POSITIONS[currentMapId];
+    if (!npcs) return false;
+    return npcs.some(n => n.tileX === tileX && n.tileY === tileY);
+  }, [currentMapId]);
+
+  // Like collisionSystem.findNearestPassablePosition but also excludes NPC tiles
+  const findNearestPassableExcludingNPCs = useCallback((targetX, targetY) => {
+    if (!collisionSystem.initialized) return { x: targetX, y: targetY };
+    const targetTile = collisionSystem.pixelsToTiles(targetX, targetY, contentSize.width, contentSize.height);
+    if (collisionSystem.isPassable(targetTile.x, targetTile.y) && !isNPCTile(targetTile.x, targetTile.y)) {
+      return { x: targetX, y: targetY };
+    }
+    for (let radius = 1; radius <= 5; radius++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        for (let dy = -radius; dy <= radius; dy++) {
+          if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue;
+          const cx = targetTile.x + dx;
+          const cy = targetTile.y + dy;
+          if (collisionSystem.isPassable(cx, cy) && !isNPCTile(cx, cy)) {
+            return collisionSystem.tilesToPixels(cx, cy, contentSize.width, contentSize.height);
+          }
+        }
+      }
+    }
+    return { x: targetX, y: targetY };
+  }, [contentSize.width, contentSize.height, isNPCTile]);
+
   // Achievement tracking state
   const [showAchievementModal, setShowAchievementModal] = useState(false);
   const [newAchievement, setNewAchievement] = useState(null);
@@ -443,6 +804,10 @@ export default function BuildScreen() {
     shoppingCount: 0,
     electronicsCount: 0
   });
+
+  // Cached active sessions (populated during hydration, consumed when user selects a level)
+  const cachedActiveStoryRef = useRef(null);
+  const cachedActiveCustomRef = useRef(null);
   
   // Story Level Configurations - Restructured
   // Level 1: Budgeting (50/30/20 rule)
@@ -463,7 +828,7 @@ export default function BuildScreen() {
     },
     2: {
       name: 'Goal Setter',
-      description: 'Set savings goals and allocate money towards them. Reach at least 80% of your goal!',
+      description: 'Allocate money to your Emergency Fund (15%) and Fun Money (5%). Reach at least 80% of your goal!',
       type: 'goals',
       icon: '🎯',
       minGoalProgress: 0.80, // Must reach 80% of goal
@@ -474,8 +839,8 @@ export default function BuildScreen() {
       description: 'The ultimate challenge! Save at least 30% of your weekly budget.',
       type: 'saving',
       icon: '👑',
-      savingsGoal: 0.40, // 40% savings required
-      goalText: 'Save 40% of your budget',
+      savingsGoal: 0.30, // 30% savings required
+      goalText: 'Save 30% of your budget',
     },
   };
   
@@ -488,12 +853,13 @@ export default function BuildScreen() {
     'Shopping': 'wants',
     'Electronics': 'wants',
     'Entertainment': 'wants',
-    'Other': 'wants'
+    'Other': 'wants',
+    'Utilities': 'needs',
+    'Health': 'needs',
+    'Education': 'needs',
   };
+    
   
-  // Content area dimensions (for accurate bounds detection)
-  const [contentSize, setContentSize] = useState({ width: width, height: height });
-
   // Handle layout to get actual content dimensions
   const handleContentLayout = (event) => {
     const { width: w, height: h } = event.nativeEvent.layout;
@@ -505,7 +871,7 @@ export default function BuildScreen() {
   useEffect(() => {
     console.log('🗺️ Initializing collision system for map:', currentMapId);
     collisionSystem.initialize(currentMapId);
-    if ((currentMapId === 'dorm' || currentMapId === 'mall' || currentMapId === 'school') && collisionSystem.initialized) {
+    if (collisionSystem.initialized) {
       console.log(`✅ Collision system ready for ${currentMapId} map`);
       // Debug: print passability map to console
       collisionSystem.debugPrintPassabilityMap();
@@ -514,15 +880,28 @@ export default function BuildScreen() {
     // Reset character to spawn point when map changes
     const newMap = MAPS[currentMapId];
     if (newMap) {
-      const spawnX = newMap.spawnPoint.x - CHARACTER_SIZE / 2;
-      const spawnY = newMap.spawnPoint.y - CHARACTER_SIZE / 2;
+      const halfChar = getCharSize() / 2;
+      const spawn = resolveSpawn(newMap.spawnPoint, contentSize.width, contentSize.height);
+      const spawnX = spawn.x - halfChar;
+      const spawnY = spawn.y - halfChar;
       console.log('📍 Resetting character to spawn point:', spawnX, spawnY);
       animatedX.setValue(spawnX);
       animatedY.setValue(spawnY);
-      setCharacterPosition(newMap.spawnPoint);
+      setCharacterPosition(spawn);
       setCurrentLocation('Hallway 🚶');
     }
   }, [currentMapId]);
+
+  // Get the on-screen character size that matches the displayed tile size.
+  // Uses the same "contain" scale math as the ImageBackground.
+  const getCharSize = () => {
+    if (!collisionSystem.initialized) return CHARACTER_SIZE;
+    const mapPixelW = collisionSystem.mapWidth * collisionSystem.tileSize;
+    const mapPixelH = collisionSystem.mapHeight * collisionSystem.tileSize;
+    const scale = Math.min(contentSize.width / mapPixelW, contentSize.height / mapPixelH);
+    const size = collisionSystem.tileSize * scale;
+    return size > 0 ? size : CHARACTER_SIZE;
+  };
 
   // Fetch today's spending — re-runs whenever DataContext expenses change
   useEffect(() => {
@@ -541,7 +920,7 @@ export default function BuildScreen() {
         const progress = await gameDatabaseService.loadGameProgress();
         if (!progress) return;
 
-        const { userLevels, character, tutorial, activeStory, activeCustom, unlockedLevels: unlocked } = progress;
+        const { userLevels, character, tutorial, activeStory, activeCustom, unlockedLevels: unlocked, introSeen } = progress;
 
         // 1. Unlocked story levels
         if (unlocked && unlocked.length > 0) {
@@ -549,9 +928,26 @@ export default function BuildScreen() {
         }
 
         // 1b. Check if Custom Mode was previously unlocked
-        const cmUnlocked = await AsyncStorage.getItem(`customModeUnlocked_${user.id}`);
-        if (cmUnlocked === 'true') {
+        // Primary source: Supabase user_levels (survives logout / device switch)
+        if (userLevels?.story_level_3_completed) {
           setCustomModeUnlocked(true);
+          // Keep AsyncStorage in sync for offline/fast access
+          AsyncStorage.setItem(`customModeUnlocked_${user.id}`, 'true').catch(() => {});
+        } else {
+          // Fallback: check AsyncStorage (legacy / offline)
+          const cmUnlocked = await AsyncStorage.getItem(`customModeUnlocked_${user.id}`);
+          if (cmUnlocked === 'true') {
+            setCustomModeUnlocked(true);
+          }
+        }
+
+        // 1c. Sync intro-seen flags from DB → AsyncStorage (cross-device persistence)
+        if (introSeen) {
+          for (const lvl of [1, 2, 3]) {
+            if (introSeen[lvl]) {
+              await AsyncStorage.setItem(`level_intro_seen_${user.id}_${lvl}`, 'true');
+            }
+          }
         }
 
         // 2. Character selection
@@ -566,88 +962,28 @@ export default function BuildScreen() {
           });
         }
 
-        // 3. Resume active story session (if any)
-        if (activeStory) {
-          const levelConfig = STORY_LEVELS[activeStory.level];
-          if (levelConfig) {
-            setGameMode('story');
-            setActiveSessionId(activeStory.id);
-            setStoryLevel(activeStory.level);
-            setWeeklyBudget(activeStory.weekly_budget || 0);
-            setStoryStartDate(new Date(activeStory.start_date));
-            setStoryEndDate(new Date(activeStory.end_date));
-            setWeeklySpending(activeStory.weekly_spending || 0);
-            if (activeStory.category_spending) setCategorySpending(activeStory.category_spending);
-            if (activeStory.needs_spent != null || activeStory.wants_spent != null) {
-              setBudgetCategories({
-                needs:   { budget: activeStory.needs_budget || 0, spent: activeStory.needs_spent || 0 },
-                wants:   { budget: activeStory.wants_budget || 0, spent: activeStory.wants_spent || 0 },
-                savings: { budget: activeStory.savings_budget || 0, spent: 0 },
-              });
-            }
-            if (activeStory.goals_data) {
-              setSavingsGoals(activeStory.goals_data);
-              // Rebuild allocations from goals_data if they have allocations
-              const allocs = {};
-              activeStory.goals_data.forEach(g => { allocs[g.id] = g.allocated || 0; });
-              setGoalAllocations(allocs);
-            }
-            setShowMainMenu(false);
-            setCurrentMapId('dorm');
-            console.log(`🔄 Resumed active story session ${activeStory.id} (Level ${activeStory.level})`);
-          }
-        }
-        // 4. Resume active custom session (if any and no active story)
-        else if (activeCustom) {
-          setGameMode('custom');
-          setActiveSessionId(activeCustom.id);
-          setWeeklyBudget(activeCustom.weekly_budget || 0);
-          setStoryStartDate(new Date(activeCustom.start_date));
-          setStoryEndDate(new Date(activeCustom.end_date));
-          setWeeklySpending(activeCustom.weekly_spending || 0);
-          if (activeCustom.category_spending) setCategorySpending(activeCustom.category_spending);
-          if (activeCustom.custom_rules) setCustomBudgetRules(activeCustom.custom_rules);
-          // Restore mode type and storyLevel so the correct HUD renders
-          const modeType = activeCustom.mode_type;
-          if (modeType) setCustomModeType(modeType);
-          if (modeType === 'budgeting') {
-            setStoryLevel(1);
-            // Restore budget categories from DB
-            const rules = activeCustom.custom_rules || { needs: 50, wants: 30, savings: 20 };
-            setBudgetCategories({
-              needs:   { budget: (activeCustom.weekly_budget || 0) * (rules.needs / 100), spent: parseFloat(activeCustom.needs_spent) || 0 },
-              wants:   { budget: (activeCustom.weekly_budget || 0) * (rules.wants / 100), spent: parseFloat(activeCustom.wants_spent) || 0 },
-              savings: { budget: (activeCustom.weekly_budget || 0) * (rules.savings / 100), spent: 0 },
-            });
-          } else if (modeType === 'goals') {
-            setStoryLevel(2);
-            if (activeCustom.custom_goals) {
-              const goals = activeCustom.custom_goals.map((g, i) => ({
-                id: `custom_${i}`, name: g.name, icon: ['🎯','💎','🌟','🎁','✨'][i % 5], target: g.target || 0
-              }));
-              setSavingsGoals(goals);
-              const allocs = {};
-              goals.forEach(g => { allocs[g.id] = 0; });
-              if (activeCustom.goals_progress) {
-                activeCustom.goals_progress.forEach(gp => {
-                  const matchGoal = goals.find(g => g.name === gp.name);
-                  if (matchGoal) allocs[matchGoal.id] = gp.allocated || 0;
-                });
-              }
-              setGoalAllocations(allocs);
-            }
-          } else if (modeType === 'saving') {
-            setStoryLevel(3);
-            if (activeCustom.custom_savings_target != null) {
-              setCustomSavingsTarget(String(activeCustom.custom_savings_target));
-            }
-          }
-          setShowMainMenu(false);
-          setCurrentMapId('dorm');
-          console.log(`🔄 Resumed active custom session ${activeCustom.id} (${modeType})`);
+        // 3. Tutorial completion — hydrate from DB or AsyncStorage
+        if (tutorial?.tutorial_completed) {
+          setTutorialCompleted(true);
+        } else {
+          // Fallback to AsyncStorage
+          const tcLocal = await AsyncStorage.getItem(`tutorialCompleted_${user.id}`);
+          if (tcLocal === 'true') setTutorialCompleted(true);
         }
 
-        console.log('✅ Game progress hydrated from Supabase');
+        // 4. Cache active story session for later resumption (DO NOT auto-navigate)
+        if (activeStory) {
+          cachedActiveStoryRef.current = activeStory;
+          console.log(`📦 Cached active story session ${activeStory.id} (Level ${activeStory.level})`);
+        }
+        // 5. Cache active custom session for later resumption (DO NOT auto-navigate)
+        if (activeCustom) {
+          cachedActiveCustomRef.current = activeCustom;
+          console.log(`📦 Cached active custom session ${activeCustom.id} (${activeCustom.mode_type})`);
+        }
+
+        // Always stay on Main Menu — user chooses when to resume
+        console.log('✅ Game progress hydrated from Supabase (staying on Main Menu)');
       } catch (err) {
         console.error('❌ Failed to hydrate game progress:', err.message);
       }
@@ -657,14 +993,38 @@ export default function BuildScreen() {
   }, [user?.id]);
 
   // Load unlocked skins from store purchases - runs when screen is focused
+  // Merges Supabase (source of truth) + AsyncStorage (local cache)
   const loadUnlockedSkins = useCallback(async () => {
     try {
       if (!user?.id) return;
+
+      const defaults = ['girl', 'jasper'];
+      let dbSkins = [];
+      let localSkins = [];
+
+      // 1. Load from Supabase (source of truth)
+      try {
+        const dbData = await gameDatabaseService.loadStorePurchases();
+        if (dbData?.unlockedCharacters && dbData.unlockedCharacters.length > 0) {
+          dbSkins = dbData.unlockedCharacters;
+        }
+      } catch (e) {
+        console.warn('⚠️ Could not load skins from Supabase:', e.message);
+      }
+
+      // 2. Load from AsyncStorage (local cache / legacy)
       const unlockedSkinsKey = `unlocked_skins_${user.id}`;
       const savedSkins = await AsyncStorage.getItem(unlockedSkinsKey);
       if (savedSkins) {
-        setUnlockedSkins(JSON.parse(savedSkins));
+        localSkins = JSON.parse(savedSkins);
       }
+
+      // 3. Merge all sources
+      const merged = Array.from(new Set([...defaults, ...dbSkins, ...localSkins]));
+      setUnlockedSkins(merged);
+
+      // 4. Keep AsyncStorage in sync with the merged result
+      await AsyncStorage.setItem(unlockedSkinsKey, JSON.stringify(merged));
     } catch (error) {
       console.error('Error loading unlocked skins:', error);
     }
@@ -752,7 +1112,7 @@ export default function BuildScreen() {
       
       const { data, error } = await supabase
         .from('expenses')
-        .select('amount, date')
+        .select('amount, date, category')
         .eq('user_id', user?.id)
         .gte('date', startDateStr)
         .lte('date', endDateStr);
@@ -760,6 +1120,36 @@ export default function BuildScreen() {
       if (data) {
         const total = data.reduce((sum, expense) => sum + expense.amount, 0);
         setWeeklySpending(total);
+        
+        // Re-derive per-category spending from actual expense data
+        // This ensures budgetCategories stay accurate after reload.
+        // IMPORTANT: DB may store categories in lowercase (via BudgetDatabaseService),
+        // so we normalise to Title Case before looking up CATEGORY_BUDGET_MAP.
+        const derivedCategorySpending = {};
+        let derivedNeedsSpent = 0;
+        let derivedWantsSpent = 0;
+        data.forEach(expense => {
+          const cat = normalizeCategory(expense.category); // Title-Case normalisation
+          derivedCategorySpending[cat] = (derivedCategorySpending[cat] || 0) + expense.amount;
+          const budgetType = CATEGORY_BUDGET_MAP[cat] || 'wants';
+          if (budgetType === 'needs') derivedNeedsSpent += expense.amount;
+          else if (budgetType === 'wants') derivedWantsSpent += expense.amount;
+        });
+        
+        // Update categorySpending with derived values
+        setCategorySpending(prev => ({ ...prev, ...derivedCategorySpending }));
+        
+        // Update budgetCategories needs/wants spent (preserves budget limits)
+        const isLevelBudgeting =
+          (gameMode === 'story' && STORY_LEVELS[storyLevel]?.type === 'budgeting') ||
+          (gameMode === 'custom' && customModeType === 'budgeting');
+        if (isLevelBudgeting) {
+          setBudgetCategories(prev => ({
+            needs:   { ...prev.needs,   spent: derivedNeedsSpent },
+            wants:   { ...prev.wants,   spent: derivedWantsSpent },
+            savings: { ...prev.savings, spent: prev.savings.spent },
+          }));
+        }
         
         // Check if week is complete and evaluate level
         const now = new Date();
@@ -903,6 +1293,10 @@ export default function BuildScreen() {
     
     setShowLevelComplete(true);
 
+    // Clear cached active sessions since this one is now completed
+    if (gameMode === 'story') cachedActiveStoryRef.current = null;
+    if (gameMode === 'custom') cachedActiveCustomRef.current = null;
+
     // ── Persist level completion to Supabase ──
     const xpEarned = passed ? (storyLevel === 1 ? 100 : storyLevel === 2 ? 150 : 200) : 0;
     const starsEarned = passed ? (results.type === 'budgeting'
@@ -941,6 +1335,14 @@ export default function BuildScreen() {
 
   // Start Story Mode with a specific level
   const startStoryLevel = async (level) => {
+    // Guard: if an active session already exists for this level, resume it instead
+    const existingSession = await gameDatabaseService.findActiveStorySession(level);
+    if (existingSession) {
+      console.log(`⚠️ Active session found for level ${level} — resuming instead of creating new`);
+      resumeStorySession(existingSession);
+      return;
+    }
+
     // Get user's monthly budget from DataContext/Supabase
     try {
       const { data: budgetData, error } = await supabase
@@ -991,11 +1393,10 @@ export default function BuildScreen() {
       } else if (levelConfig.type === 'goals') {
         // Level 2: Set up savings goals
         setSavingsGoals([
-          { id: 'emergency', name: 'Emergency Fund', icon: '🏥', target: calculatedWeeklyBudget * 0.10 },
+          { id: 'emergency', name: 'Emergency Fund', icon: '🏥', target: calculatedWeeklyBudget * 0.15 },
           { id: 'wants', name: 'Fun Money', icon: '🎮', target: calculatedWeeklyBudget * 0.05 },
-          { id: 'future', name: 'Future Savings', icon: '🎓', target: calculatedWeeklyBudget * 0.05 },
         ]);
-        setGoalAllocations({ emergency: 0, wants: 0, future: 0 });
+        setGoalAllocations({ emergency: 0, wants: 0 });
       }
       
       // Close intro and start game
@@ -1019,9 +1420,8 @@ export default function BuildScreen() {
         wantsBudget: levelConfig.type === 'budgeting' ? calculatedWeeklyBudget * 0.30 : null,
         savingsBudget: levelConfig.type === 'budgeting' ? calculatedWeeklyBudget * 0.20 : null,
         goalsData: levelConfig.type === 'goals' ? [
-          { id: 'emergency', name: 'Emergency Fund', target: calculatedWeeklyBudget * 0.10 },
+          { id: 'emergency', name: 'Emergency Fund', target: calculatedWeeklyBudget * 0.15 },
           { id: 'wants', name: 'Fun Money', target: calculatedWeeklyBudget * 0.05 },
-          { id: 'future', name: 'Future Savings', target: calculatedWeeklyBudget * 0.05 },
         ] : null,
         savingsGoalPercent: levelConfig.type === 'saving' ? 30 : null,
       });
@@ -1146,9 +1546,9 @@ export default function BuildScreen() {
   const isInCanteenArea = (x, y) => {
     const canteenBounds = {
       left: 0,
-      right: width * 0.45,
-      top: height * 0.50,
-      bottom: height / 0.15,
+      right: contentSize.width * 0.45,
+      top: contentSize.height * 0.50,
+      bottom: contentSize.height / 0.15,
       colors: red,
     };
     return (
@@ -1202,14 +1602,11 @@ export default function BuildScreen() {
     switch (location.action) {
       case 'expense':
         setExpenseCategory(location.category || 'Other');
-        Alert.alert(
-          `Welcome to ${location.name}! ${location.icon}`,
-          'Ready to record your purchase?',
-          [
-            { text: 'Yes', onPress: () => setShowExpenseModal(true) },
-            { text: 'Not now', style: 'cancel' },
-          ]
-        );
+        // Directly open the expense modal without an alert prompt
+        if (tutorialActive && gameMode === 'tutorial') {
+          markTutorialCondition('expense_opened');
+        }
+        setShowExpenseModal(true);
         break;
       case 'travel':
         console.log('🚪 Opening travel modal with destinations:', location.destinations);
@@ -1218,6 +1615,10 @@ export default function BuildScreen() {
         break;
       case 'closet':
         console.log('👔 Opening closet for character selection');
+        // Tutorial: mark closet opened condition
+        if (tutorialActive && gameMode === 'tutorial') {
+          markTutorialCondition('closet_opened');
+        }
         setShowClosetModal(true);
         break;
       case 'notebook':
@@ -1226,6 +1627,10 @@ export default function BuildScreen() {
         break;
       case 'info':
         Alert.alert(`${location.name} ${location.icon}`, location.message || 'Nothing here.');
+        break;
+      case 'floor_change':
+        console.log(`🔄 Floor change triggered: going to ${location.targetFloor}`);
+        changeFloor(location.targetFloor);
         break;
       default:
         console.log('⚠️ Unknown action:', location.action);
@@ -1250,6 +1655,10 @@ export default function BuildScreen() {
     setTransportMode(mode);
     if (mode === 'car') {
       setDidBuyFuel(null); // Reset fuel question when switching to car
+      // Tutorial: mark that user has viewed car transport
+      if (tutorialActive && gameMode === 'tutorial') {
+        setTutorialViewedCar(true);
+      }
     }
   };
 
@@ -1288,6 +1697,15 @@ export default function BuildScreen() {
 
     // ── Optimistic UI: travel immediately (closes transport modal inside travelToMap) ──
     travelToMap(savedDestination);
+
+    // ── Tutorial mode: skip all DB saves, just mark conditions ──
+    if (tutorialActive && gameMode === 'tutorial') {
+      // Mark arrival conditions
+      if (savedDestination === 'school') markTutorialCondition('arrived_at_school');
+      if (savedDestination === 'mall_1f' || savedDestination.startsWith('mall')) markTutorialCondition('arrived_at_mall');
+      console.log('🎓 Tutorial: Skipped transport expense save (practice mode)');
+      return;
+    }
 
     // ── Background: record transport expense and persist to Supabase ──
     try {
@@ -1410,18 +1828,20 @@ export default function BuildScreen() {
     
     if (exitLocation && exitLocation.exitSpawnPoint) {
       // Spawn at the exit point (percentage-based coordinates)
-      spawnX = width * exitLocation.exitSpawnPoint.x;
-      spawnY = height * exitLocation.exitSpawnPoint.y;
+      spawnX = contentSize.width * exitLocation.exitSpawnPoint.x;
+      spawnY = contentSize.height * exitLocation.exitSpawnPoint.y;
     } else {
       // Fallback to default spawn point
-      spawnX = newMap.spawnPoint.x;
-      spawnY = newMap.spawnPoint.y;
+      const fallback = resolveSpawn(newMap.spawnPoint, contentSize.width, contentSize.height);
+      spawnX = fallback.x;
+      spawnY = fallback.y;
     }
     
     const spawn = { x: spawnX, y: spawnY };
     setCharacterPosition(spawn);
-    animatedX.setValue(spawn.x - CHARACTER_SIZE / 2);
-    animatedY.setValue(spawn.y - CHARACTER_SIZE / 2);
+    const halfChar = getCharSize() / 2;
+    animatedX.setValue(spawn.x - halfChar);
+    animatedY.setValue(spawn.y - halfChar);
     setCharacterDirection('down'); // Face down when arriving
     setCurrentLocation(`${newMap.name} ${newMap.icon}`);
     
@@ -1449,16 +1869,7 @@ export default function BuildScreen() {
     });
     gameDatabaseService.incrementUserLevelStats({ mapsTraveled: 1 });
     
-    // Show arrival message with transport info
-    const transportInfo = transportMode === 'commute' 
-      ? (parseFloat(fareAmount) > 0 ? ` (Fare: ₱${fareAmount})` : '')
-      : (didBuyFuel ? ` (Fuel: ₱${fuelAmount})` : '');
-    
-    Alert.alert(
-      `📍 ${newMap.name}`,
-      `You arrived at the ${newMap.name.toLowerCase()}!${transportInfo}`,
-      [{ text: 'OK' }]
-    );
+    // Arrival message removed - no alert needed
     
     // Reset transport state
     setSelectedDestination(null);
@@ -1466,6 +1877,57 @@ export default function BuildScreen() {
     setFareAmount('');
     setDidBuyFuel(null);
     setFuelAmount('');
+  };
+
+  // Change floor within the mall (no transport cost)
+  const changeFloor = (floorId) => {
+    const newMap = MAPS[floorId];
+    if (!newMap) return;
+
+    const previousMapId = currentMapId;
+    setCurrentMapId(floorId);
+
+    // Find the escalator on the destination floor that leads back to where we came from
+    const arrivalEscalator = newMap.locations.find(loc =>
+      loc.action === 'floor_change' && loc.targetFloor === previousMapId
+    );
+
+    let spawnX, spawnY;
+    if (arrivalEscalator && arrivalEscalator.exitSpawnPoint) {
+      spawnX = contentSize.width * arrivalEscalator.exitSpawnPoint.x;
+      spawnY = contentSize.height * arrivalEscalator.exitSpawnPoint.y;
+    } else {
+      const fallback = resolveSpawn(newMap.spawnPoint, contentSize.width, contentSize.height);
+      spawnX = fallback.x;
+      spawnY = fallback.y;
+    }
+
+    const spawn = { x: spawnX, y: spawnY };
+    setCharacterPosition(spawn);
+    const halfChar = getCharSize() / 2;
+    animatedX.setValue(spawn.x - halfChar);
+    animatedY.setValue(spawn.y - halfChar);
+    setCharacterDirection('down');
+    setCurrentLocation(`${newMap.name} ${newMap.icon}`);
+
+    // Log floor change activity (fire-and-forget)
+    gameDatabaseService.logActivity({
+      activityType: 'floor_change',
+      mapId: floorId,
+      details: { from: previousMapId, to: floorId },
+      sessionId: activeSessionId,
+    });
+
+    // Tutorial: mark floor change conditions
+    if (tutorialActive && gameMode === 'tutorial') {
+      if (floorId === 'mall_2f') markTutorialCondition('arrived_at_mall_2f');
+      if (floorId === 'mall_3f') markTutorialCondition('arrived_at_mall_3f');
+      // Track going down an escalator (from higher to lower floor)
+      if ((previousMapId === 'mall_3f' && floorId === 'mall_2f') ||
+          (previousMapId === 'mall_2f' && floorId === 'mall_1f')) {
+        markTutorialCondition('went_down_escalator');
+      }
+    }
   };
 
   // Reference to store the current movement path
@@ -1524,8 +1986,8 @@ export default function BuildScreen() {
         const nextX = currentX + dir.x;
         const nextY = currentY + dir.y;
         
-        // Check if the next tile is passable
-        if (collisionSystem.isPassable(nextX, nextY)) {
+        // Check if the next tile is passable (also block NPC tiles)
+        if (collisionSystem.isPassable(nextX, nextY) && !isNPCTile(nextX, nextY)) {
           // Check directional blocking from current tile
           if (!collisionSystem.isDirectionBlocked(currentX, currentY, dir.name)) {
             currentX = nextX;
@@ -1553,13 +2015,14 @@ export default function BuildScreen() {
 
   // Move one tile along the path
   const moveOneStep = (targetPixelX, targetPixelY, onComplete) => {
-    const targetX = targetPixelX - CHARACTER_SIZE / 2;
-    const targetY = targetPixelY - CHARACTER_SIZE / 2;
+    const halfChar = getCharSize() / 2;
+    const targetX = targetPixelX - halfChar;
+    const targetY = targetPixelY - halfChar;
     
     // Get current position from the animated value's current value
     // Using __getValue() to get current value without stopping animation
-    const currentX = animatedX.__getValue() + CHARACTER_SIZE / 2;
-    const currentY = animatedY.__getValue() + CHARACTER_SIZE / 2;
+    const currentX = animatedX.__getValue() + halfChar;
+    const currentY = animatedY.__getValue() + halfChar;
     
     // Calculate direction based on movement
     const deltaX = targetPixelX - currentX;
@@ -1616,8 +2079,9 @@ export default function BuildScreen() {
     
     // Get current animated position values
     let currentX, currentY;
-    animatedX.stopAnimation(value => { currentX = value + CHARACTER_SIZE / 2; });
-    animatedY.stopAnimation(value => { currentY = value + CHARACTER_SIZE / 2; });
+    const halfChar = getCharSize() / 2;
+    animatedX.stopAnimation(value => { currentX = value + halfChar; });
+    animatedY.stopAnimation(value => { currentY = value + halfChar; });
     
     // Update character position to current location
     setCharacterPosition({ x: currentX, y: currentY });
@@ -1665,6 +2129,11 @@ export default function BuildScreen() {
   const handleScreenPress = (event) => {
     const { locationX, locationY } = event.nativeEvent;
     
+    // Tutorial: mark 'walked' condition when user taps to move
+    if (tutorialActive && gameMode === 'tutorial') {
+      markTutorialCondition('walked');
+    }
+    
     console.log('===== TAP DEBUG =====');
     console.log('Current map:', currentMapId);
     console.log('Content dimensions:', contentSize.width, 'x', contentSize.height);
@@ -1683,8 +2152,8 @@ export default function BuildScreen() {
       startPosition = stopCurrentMovement();
     }
 
-    // For maps with collision (dorm, mall, school), use tile-by-tile movement
-    if (collisionSystem.initialized && (currentMapId === 'dorm' || currentMapId === 'mall' || currentMapId === 'school')) {
+    // For maps with collision, use tile-by-tile movement
+    if (collisionSystem.initialized) {
       // Get tile info for debugging
       const tileCoords = collisionSystem.pixelsToTiles(
         locationX, 
@@ -1695,15 +2164,13 @@ export default function BuildScreen() {
       const tileInfo = collisionSystem.getTileInfo(tileCoords.x, tileCoords.y);
       console.log('🧱 Target tile info:', JSON.stringify(tileInfo));
       
-      // Check if destination tile is passable
-      if (!tileInfo.passable) {
-        console.log('🚫 Destination tile is not passable!');
-        // Find nearest passable position
-        const nearestPassable = collisionSystem.findNearestPassablePosition(
+      // Check if destination tile is passable (also treat NPC tiles as blocked)
+      if (!tileInfo.passable || isNPCTile(tileCoords.x, tileCoords.y)) {
+        console.log('🚫 Destination tile is not passable (or occupied by NPC)!');
+        // Find nearest passable position (excluding NPC tiles)
+        const nearestPassable = findNearestPassableExcludingNPCs(
           locationX, 
-          locationY, 
-          contentSize.width, 
-          contentSize.height
+          locationY
         );
         
         // Store the original tap destination (for event checking)
@@ -1759,8 +2226,9 @@ export default function BuildScreen() {
       setIsWalking(true);
       setCurrentLocation(getLocationName(locationX, locationY));
       
-      const targetX = locationX - CHARACTER_SIZE / 2;
-      const targetY = locationY - CHARACTER_SIZE / 2;
+      const halfChar = getCharSize() / 2;
+      const targetX = locationX - halfChar;
+      const targetY = locationY - halfChar;
       
       const currentX = startPosition.x;
       const currentY = startPosition.y;
@@ -1845,6 +2313,42 @@ export default function BuildScreen() {
     
     // NOTE: Level completion is only checked when the week ends (in useEffect),
     // NOT after each allocation. This allows players to keep allocating throughout the week.
+
+    // ── Persist goal allocations to DB ──
+    if (activeSessionId && (gameMode === 'story' || gameMode === 'custom')) {
+      // Build updated allocations map (with this new allocation included)
+      const updatedAllocations = { ...goalAllocations, [goalId]: (goalAllocations[goalId] || 0) + amount };
+      const totalAllocatedNow = Object.values(updatedAllocations).reduce((sum, val) => sum + val, 0);
+
+      if (gameMode === 'story') {
+        // Build goals_data with per-goal allocated amounts for hydration
+        const updatedGoalsData = savingsGoals.map(g => ({
+          id: g.id,
+          name: g.name,
+          icon: g.icon,
+          target: g.target,
+          allocated: updatedAllocations[g.id] || 0,
+        }));
+        gameDatabaseService.updateStorySessionSpending(activeSessionId, {
+          weeklySpending: weeklySpending + amount,
+          totalAllocated: totalAllocatedNow,
+          goalsData: updatedGoalsData,
+          savingsAmount: weeklyBudget - (weeklySpending + amount),
+        });
+      } else {
+        // Custom mode: save goals_progress array for hydration
+        const goalsProgressArr = savingsGoals.map(g => ({
+          name: g.name,
+          target: g.target,
+          allocated: updatedAllocations[g.id] || 0,
+        }));
+        gameDatabaseService.updateCustomSessionSpending(activeSessionId, {
+          weeklySpending: weeklySpending + amount,
+          goalsProgress: goalsProgressArr,
+          savingsAmount: weeklyBudget - (weeklySpending + amount),
+        });
+      }
+    }
   };
 
   const handleSubmitExpense = async () => {
@@ -1874,6 +2378,20 @@ export default function BuildScreen() {
     setShowExpenseModal(false);
     setExpenseAmount('');
     setExpenseNote('');
+
+    // ── Tutorial mode: skip DB save, mark conditions ──
+    if (tutorialActive && gameMode === 'tutorial') {
+      Alert.alert(
+        '🎓 Practice Expense!',
+        `You practiced logging ₱${savedAmount} on ${savedCategory}.\n\nThis wasn't saved — great job learning!`,
+        [{ text: 'OK' }]
+      );
+      // Mark tutorial conditions based on current map
+      if (currentMapId === 'school') markTutorialCondition('school_expense_logged');
+      if (currentMapId.startsWith('mall')) markTutorialCondition('mall_expense_logged');
+      console.log('🎓 Tutorial: Skipped expense save (practice mode)');
+      return;
+    }
 
     // Show quick feedback toast-style (non-blocking)
     Alert.alert(
@@ -1912,7 +2430,8 @@ export default function BuildScreen() {
         }));
         
         // Level 1 (Budgeting): Update 50/30/20 category budgets
-        if (gameMode === 'story' && STORY_LEVELS[storyLevel]?.type === 'budgeting') {
+        if ((gameMode === 'story' || gameMode === 'custom') &&
+            (STORY_LEVELS[storyLevel]?.type === 'budgeting' || customModeType === 'budgeting')) {
           const budgetType = CATEGORY_BUDGET_MAP[savedCategory] || 'wants';
           setBudgetCategories(prev => ({
             ...prev,
@@ -2005,31 +2524,46 @@ export default function BuildScreen() {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+      paddingHorizontal: screenWidth * 0.04,
+      paddingVertical: screenHeight * 0.015,
       backgroundColor: 'rgba(26, 26, 46, 0.95)',
       borderBottomWidth: 1,
       borderBottomColor: 'rgba(255,255,255,0.1)',
     },
     backToMenuButton: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
+      width: Math.round(screenWidth * 0.09),
+      height: Math.round(screenWidth * 0.09),
+      borderRadius: Math.round(screenWidth * 0.045),
       backgroundColor: '#E67E22',
       justifyContent: 'center',
       alignItems: 'center',
-      marginRight: 12,
+      marginRight: screenWidth * 0.02,
+    },
+    giveUpButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#C62828',
+      paddingHorizontal: Math.round(screenWidth * 0.025),
+      paddingVertical: screenHeight * 0.007,
+      borderRadius: Math.round(screenWidth * 0.035),
+      marginRight: screenWidth * 0.02,
+      gap: 4,
+    },
+    giveUpButtonText: {
+      color: '#FFF',
+      fontSize: Math.round(screenWidth * 0.028),
+      fontWeight: 'bold',
     },
     headerLeft: {
       flex: 1,
     },
     headerTitle: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: '#fff',
     },
     headerSubtitle: {
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       color: '#888',
       marginTop: 2,
     },
@@ -2037,30 +2571,30 @@ export default function BuildScreen() {
       alignItems: 'flex-end',
     },
     spendingLabel: {
-      fontSize: 11,
+      fontSize: Math.round(screenWidth * 0.028),
       color: '#888',
       marginBottom: 2,
     },
     spendingAmount: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: '#FF9800',
     },
     settingsGearButton: {
-      width: 28,
-      height: 28,
-      borderRadius: 14,
+      width: Math.round(screenWidth * 0.07),
+      height: Math.round(screenWidth * 0.07),
+      borderRadius: Math.round(screenWidth * 0.035),
       backgroundColor: 'rgba(90, 90, 122, 0.8)',
       justifyContent: 'center',
       alignItems: 'center',
     },
     locationBadge: {
       position: 'absolute',
-      top: 70,
+      top: screenHeight * 0.085,
       alignSelf: 'center',
       backgroundColor: 'rgba(0,0,0,0.7)',
-      paddingHorizontal: 16,
-      paddingVertical: 8,
+      paddingHorizontal: screenWidth * 0.04,
+      paddingVertical: screenHeight * 0.01,
       borderRadius: 20,
       flexDirection: 'row',
       alignItems: 'center',
@@ -2069,24 +2603,24 @@ export default function BuildScreen() {
     },
     locationText: {
       color: '#fff',
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       fontWeight: '600',
     },
     walkingIndicator: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
+      width: Math.round(screenWidth * 0.02),
+      height: Math.round(screenWidth * 0.02),
+      borderRadius: Math.round(screenWidth * 0.01),
       backgroundColor: '#4CAF50',
     },
     // Story Mode Progress Bar Styles - Top compact strip below header
     storyProgressContainer: {
       position: 'absolute',
-      top: 135,
-      left: 8,
-      right: 8,
+      top: screenHeight * 0.165,
+      left: screenWidth * 0.02,
+      right: screenWidth * 0.02,
       backgroundColor: 'rgba(26, 26, 46, 0.95)',
       borderRadius: 12,
-      padding: 10,
+      padding: screenWidth * 0.025,
       zIndex: 50,
       borderWidth: 1,
       borderColor: 'rgba(255,255,255,0.15)',
@@ -2104,12 +2638,12 @@ export default function BuildScreen() {
     },
     storyProgressLabel: {
       color: '#F5DEB3',
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       fontWeight: '600',
     },
     storyProgressPercent: {
       color: '#4CAF50',
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       fontWeight: 'bold',
     },
     storyProgressBar: {
@@ -2136,20 +2670,20 @@ export default function BuildScreen() {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 10,
+      marginBottom: screenHeight * 0.012,
     },
     budgetRuleLabel: {
       color: '#F5DEB3',
-      fontSize: 13,
+      fontSize: Math.round(screenWidth * 0.033),
       fontWeight: '700',
     },
     budgetDaysLeft: {
       color: '#888',
-      fontSize: 11,
+      fontSize: Math.round(screenWidth * 0.028),
       backgroundColor: 'rgba(255,255,255,0.1)',
-      paddingHorizontal: 8,
+      paddingHorizontal: screenWidth * 0.02,
       paddingVertical: 3,
-      borderRadius: 10,
+      borderRadius: Math.round(screenWidth * 0.025),
     },
     budgetCategoriesRow: {
       flexDirection: 'row',
@@ -2159,8 +2693,8 @@ export default function BuildScreen() {
     budgetCategoryCard: {
       flex: 1,
       backgroundColor: 'rgba(255,255,255,0.08)',
-      borderRadius: 10,
-      padding: 10,
+      borderRadius: Math.round(screenWidth * 0.025),
+      padding: Math.round(screenWidth * 0.025),
       alignItems: 'center',
     },
     budgetCategoryHeader: {
@@ -2171,16 +2705,16 @@ export default function BuildScreen() {
     },
     budgetCategoryName: {
       color: '#AAA',
-      fontSize: 10,
+      fontSize: Math.round(screenWidth * 0.025),
       fontWeight: '600',
       textTransform: 'uppercase',
     },
     budgetCategoryPercent: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
     },
     budgetCategoryLimit: {
-      fontSize: 9,
+      fontSize: Math.round(screenWidth * 0.023),
       color: '#666',
       marginTop: 2,
     },
@@ -2204,13 +2738,13 @@ export default function BuildScreen() {
     },
     budgetCompactLabel: {
       color: '#F5DEB3',
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       fontWeight: '600',
     },
     budgetCompactStats: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
+      gap: Math.round(screenWidth * 0.03),
       flex: 1,
       justifyContent: 'center',
     },
@@ -2228,10 +2762,10 @@ export default function BuildScreen() {
       borderColor: '#4CAF50',
     },
     budgetCompactIcon: {
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
     },
     budgetCompactPercent: {
-      fontSize: 13,
+      fontSize: Math.round(screenWidth * 0.033),
       fontWeight: 'bold',
     },
     budgetCompactActions: {
@@ -2241,13 +2775,13 @@ export default function BuildScreen() {
     },
     budgetCompactDays: {
       color: '#888',
-      fontSize: 11,
+      fontSize: Math.round(screenWidth * 0.028),
       fontWeight: '600',
     },
     endWeekBtnCompact: {
-      width: 28,
-      height: 28,
-      borderRadius: 14,
+      width: Math.round(screenWidth * 0.07),
+      height: Math.round(screenWidth * 0.07),
+      borderRadius: Math.round(screenWidth * 0.035),
       backgroundColor: '#E74C3C',
       justifyContent: 'center',
       alignItems: 'center',
@@ -2256,7 +2790,7 @@ export default function BuildScreen() {
       flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
-      marginHorizontal: 12,
+      marginHorizontal: Math.round(screenWidth * 0.03),
     },
     savingsCompactBar: {
       flex: 1,
@@ -2277,8 +2811,8 @@ export default function BuildScreen() {
     },
     budgetBarLabel: {
       color: '#F5DEB3',
-      fontSize: 10,
-      width: 85,
+      fontSize: Math.round(screenWidth * 0.025),
+      width: Math.round(screenWidth * 0.21),
     },
     budgetBarTrack: {
       flex: 1,
@@ -2301,8 +2835,8 @@ export default function BuildScreen() {
     },
     budgetBarLimit: {
       color: '#888',
-      fontSize: 9,
-      width: 30,
+      fontSize: Math.round(screenWidth * 0.023),
+      width: Math.round(screenWidth * 0.075),
       textAlign: 'right',
     },
     // Level 2 - Goal Progress Styles
@@ -2313,11 +2847,11 @@ export default function BuildScreen() {
       paddingVertical: 4,
     },
     goalProgressIcon: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
     },
     goalProgressName: {
       color: '#F5DEB3',
-      fontSize: 11,
+      fontSize: Math.round(screenWidth * 0.028),
       marginBottom: 2,
     },
     goalProgressTrack: {
@@ -2332,38 +2866,38 @@ export default function BuildScreen() {
     },
     goalProgressAmount: {
       color: '#888',
-      fontSize: 10,
-      minWidth: 70,
+      fontSize: Math.round(screenWidth * 0.025),
+      minWidth: Math.round(screenWidth * 0.175),
       textAlign: 'right',
     },
     allocateButton: {
       backgroundColor: '#3498DB',
-      paddingVertical: 8,
-      paddingHorizontal: 16,
+      paddingVertical: screenHeight * 0.01,
+      paddingHorizontal: screenWidth * 0.04,
       borderRadius: 8,
       alignSelf: 'center',
       marginTop: 8,
     },
     allocateButtonText: {
       color: '#FFF',
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       fontWeight: '600',
     },
     // Goal Allocation Modal Styles
     goalAllocationItem: {
       backgroundColor: 'rgba(255,255,255,0.05)',
-      borderRadius: 12,
-      padding: 12,
+      borderRadius: Math.round(screenWidth * 0.03),
+      padding: Math.round(screenWidth * 0.03),
     },
     quickAllocateBtn: {
       backgroundColor: '#3498DB',
       paddingVertical: 6,
-      paddingHorizontal: 10,
+      paddingHorizontal: Math.round(screenWidth * 0.025),
       borderRadius: 6,
     },
     quickAllocateBtnText: {
       color: '#FFF',
-      fontSize: 11,
+      fontSize: Math.round(screenWidth * 0.028),
       fontWeight: '600',
     },
     imageBackground: {
@@ -2394,11 +2928,11 @@ export default function BuildScreen() {
     // Sprite-based character styles
     characterContainer: {
       position: 'absolute',
-      width: CHARACTER_SIZE,
-      height: CHARACTER_SIZE, // Keep within tile bounds
-      justifyContent: 'center',
+      // width and height set dynamically in renderCharacter to match on-screen tile size
+      justifyContent: 'flex-end', // Anchor sprite at bottom — feet align with tile edge
       alignItems: 'center',
-      zIndex: 999,
+      overflow: 'visible', // Allow sprite to extend above tile bounds
+      zIndex: 1000,
       elevation: 100,
     },
     spriteContainer: {
@@ -2412,17 +2946,17 @@ export default function BuildScreen() {
       height: 90, // Full sprite height
     },
     characterFace: {
-      fontSize: 24,
+      fontSize: Math.round(screenWidth * 0.06),
     },
     // Closet Modal - Character Selection Styles
     characterOption: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: 'rgba(255,255,255,0.05)',
-      borderRadius: 16,
-      padding: 12,
+      borderRadius: Math.round(screenWidth * 0.04),
+      padding: Math.round(screenWidth * 0.03),
       borderWidth: 3,
-      gap: 12,
+      gap: Math.round(screenWidth * 0.03),
     },
     characterOptionSelected: {
       backgroundColor: 'rgba(155, 89, 182, 0.1)',
@@ -2439,8 +2973,8 @@ export default function BuildScreen() {
       borderRadius: 12,
     },
     characterPreviewContainer: {
-      width: 64,
-      height: 80,
+      width: Math.round(screenWidth * 0.16),
+      height: Math.round(screenWidth * 0.20),
       borderRadius: 12,
       overflow: 'hidden',
       justifyContent: 'center',
@@ -2455,28 +2989,28 @@ export default function BuildScreen() {
       flex: 1,
     },
     characterOptionName: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       marginBottom: 4,
     },
     characterOptionDesc: {
-      fontSize: 13,
+      fontSize: Math.round(screenWidth * 0.033),
     },
     characterSelectedBadge: {
-      width: 28,
-      height: 28,
-      borderRadius: 14,
+      width: Math.round(screenWidth * 0.07),
+      height: Math.round(screenWidth * 0.07),
+      borderRadius: Math.round(screenWidth * 0.035),
       justifyContent: 'center',
       alignItems: 'center',
     },
     floatingButton: {
       position: 'absolute',
-      bottom: 100,
-      right: 20,
+      bottom: screenHeight * 0.12,
+      right: screenWidth * 0.05,
       backgroundColor: '#FF9800',
-      width: 60,
-      height: 60,
-      borderRadius: 30,
+      width: Math.round(screenWidth * 0.15),
+      height: Math.round(screenWidth * 0.15),
+      borderRadius: Math.round(screenWidth * 0.075),
       justifyContent: 'center',
       alignItems: 'center',
       shadowColor: '#000',
@@ -2489,11 +3023,11 @@ export default function BuildScreen() {
     },
     endWeekButton: {
       position: 'absolute',
-      bottom: 35,
-      left: 20,
+      bottom: screenHeight * 0.04,
+      left: screenWidth * 0.05,
       backgroundColor: '#E74C3C',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+      paddingHorizontal: screenWidth * 0.04,
+      paddingVertical: screenHeight * 0.015,
       borderRadius: 24,
       flexDirection: 'row',
       alignItems: 'center',
@@ -2508,15 +3042,15 @@ export default function BuildScreen() {
     },
     endWeekButtonText: {
       color: '#FFF',
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       fontWeight: 'bold',
     },
     endWeekButtonInline: {
-      marginTop: 12,
+      marginTop: screenHeight * 0.015,
       backgroundColor: '#E74C3C',
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-      borderRadius: 20,
+      paddingHorizontal: screenWidth * 0.04,
+      paddingVertical: screenHeight * 0.012,
+      borderRadius: Math.round(screenWidth * 0.05),
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
@@ -2529,29 +3063,29 @@ export default function BuildScreen() {
     },
     endWeekButtonTextInline: {
       color: '#FFF',
-      fontSize: 13,
+      fontSize: Math.round(screenWidth * 0.033),
       fontWeight: '600',
     },
     instructionBanner: {
       position: 'absolute',
-      bottom: 30,
-      left: 20,
-      right: 20,
+      bottom: screenHeight * 0.035,
+      left: screenWidth * 0.05,
+      right: screenWidth * 0.05,
       backgroundColor: 'rgba(0,0,0,0.85)',
-      paddingHorizontal: 20,
-      paddingVertical: 14,
+      paddingHorizontal: screenWidth * 0.05,
+      paddingVertical: screenHeight * 0.017,
       borderRadius: 12,
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
+      gap: screenWidth * 0.03,
       borderWidth: 1,
       borderColor: 'rgba(255,255,255,0.2)',
     },
     instructionText: {
       flex: 1,
       color: '#fff',
-      fontSize: 13,
-      lineHeight: 18,
+      fontSize: Math.round(screenWidth * 0.033),
+      lineHeight: Math.round(screenWidth * 0.045),
     },
     instructionHighlight: {
       color: '#FF9800',
@@ -2562,14 +3096,14 @@ export default function BuildScreen() {
       backgroundColor: 'rgba(0,0,0,0.7)',
       justifyContent: 'center',
       alignItems: 'center',
-      padding: 20,
+      padding: screenWidth * 0.05,
     },
     modalContent: {
       width: '100%',
-      maxWidth: 400,
+      maxWidth: screenWidth * 0.95,
       backgroundColor: colors.card,
       borderRadius: 20,
-      padding: 24,
+      padding: screenWidth * 0.06,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.3,
@@ -2579,13 +3113,13 @@ export default function BuildScreen() {
     modalHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 20,
-      gap: 12,
+      marginBottom: screenHeight * 0.025,
+      gap: Math.round(screenWidth * 0.03),
     },
     modalIcon: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
+      width: Math.round(screenWidth * 0.14),
+      height: Math.round(screenWidth * 0.14),
+      borderRadius: Math.round(screenWidth * 0.07),
       backgroundColor: '#FF9800',
       justifyContent: 'center',
       alignItems: 'center',
@@ -2594,40 +3128,40 @@ export default function BuildScreen() {
       flex: 1,
     },
     modalTitle: {
-      fontSize: 22,
+      fontSize: Math.round(screenWidth * 0.055),
       fontWeight: 'bold',
       color: colors.text,
       marginBottom: 4,
     },
     modalSubtitle: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: colors.textSecondary,
     },
     resultRow: {
       flexDirection: 'row',
       alignItems: 'center',
       paddingVertical: 6,
-      paddingHorizontal: 12,
+      paddingHorizontal: Math.round(screenWidth * 0.03),
       backgroundColor: 'rgba(255,255,255,0.05)',
       borderRadius: 8,
     },
     quickAmountsContainer: {
-      marginBottom: 16,
+      marginBottom: screenHeight * 0.02,
     },
     quickAmountsLabel: {
-      fontSize: 13,
+      fontSize: Math.round(screenWidth * 0.033),
       color: colors.textSecondary,
-      marginBottom: 10,
+      marginBottom: screenHeight * 0.012,
     },
     quickAmountsRow: {
       flexDirection: 'row',
-      gap: 10,
+      gap: Math.round(screenWidth * 0.025),
     },
     quickAmountButton: {
       flex: 1,
       backgroundColor: colors.background,
-      paddingVertical: 12,
-      borderRadius: 10,
+      paddingVertical: screenHeight * 0.015,
+      borderRadius: Math.round(screenWidth * 0.025),
       alignItems: 'center',
       borderWidth: 1,
       borderColor: colors.border,
@@ -2645,10 +3179,10 @@ export default function BuildScreen() {
       color: '#fff',
     },
     inputContainer: {
-      marginBottom: 16,
+      marginBottom: screenHeight * 0.02,
     },
     inputLabel: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       fontWeight: '600',
       color: colors.text,
       marginBottom: 8,
@@ -2656,25 +3190,25 @@ export default function BuildScreen() {
     input: {
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 12,
-      padding: 14,
-      fontSize: 16,
+      borderRadius: Math.round(screenWidth * 0.03),
+      padding: Math.round(screenWidth * 0.035),
+      fontSize: Math.round(screenWidth * 0.04),
       color: colors.text,
       backgroundColor: colors.background,
     },
     textArea: {
-      height: 80,
+      height: screenHeight * 0.1,
       textAlignVertical: 'top',
     },
     buttonContainer: {
       flexDirection: 'row',
-      gap: 12,
+      gap: Math.round(screenWidth * 0.03),
       marginTop: 8,
     },
     button: {
       flex: 1,
-      padding: 16,
-      borderRadius: 12,
+      padding: Math.round(screenWidth * 0.04),
+      borderRadius: Math.round(screenWidth * 0.03),
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -2685,7 +3219,7 @@ export default function BuildScreen() {
       backgroundColor: '#FF9800',
     },
     buttonText: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       fontWeight: 'bold',
     },
     cancelButtonText: {
@@ -2697,58 +3231,58 @@ export default function BuildScreen() {
     // Travel Modal Styles
     travelModalContent: {
       width: '90%',
-      maxWidth: 350,
+      maxWidth: screenWidth * 0.9,
       backgroundColor: colors.card,
       borderRadius: 24,
-      padding: 20,
+      padding: screenWidth * 0.05,
       alignItems: 'center',
     },
     travelTitle: {
-      fontSize: 24,
+      fontSize: Math.round(screenWidth * 0.06),
       fontWeight: 'bold',
       color: colors.text,
-      marginBottom: 8,
+      marginBottom: screenHeight * 0.01,
     },
     travelSubtitle: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: colors.textSecondary,
-      marginBottom: 20,
+      marginBottom: screenHeight * 0.025,
     },
     destinationButton: {
       width: '100%',
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.background,
-      padding: 16,
-      borderRadius: 16,
-      marginBottom: 12,
+      padding: Math.round(screenWidth * 0.04),
+      borderRadius: Math.round(screenWidth * 0.04),
+      marginBottom: Math.round(screenHeight * 0.015),
       borderWidth: 2,
       borderColor: colors.border,
     },
     destinationIcon: {
-      fontSize: 32,
-      marginRight: 16,
+      fontSize: Math.round(screenWidth * 0.08),
+      marginRight: Math.round(screenWidth * 0.04),
     },
     destinationInfo: {
       flex: 1,
     },
     destinationName: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: colors.text,
     },
     destinationDesc: {
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       color: colors.textSecondary,
       marginTop: 2,
     },
     travelCancelButton: {
       marginTop: 8,
-      padding: 12,
+      padding: Math.round(screenWidth * 0.03),
     },
     travelCancelText: {
       color: colors.textSecondary,
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
     },
     // Achievement Modal styles
     achievementModalOverlay: {
@@ -2756,14 +3290,14 @@ export default function BuildScreen() {
       backgroundColor: 'rgba(0,0,0,0.85)',
       justifyContent: 'center',
       alignItems: 'center',
-      padding: 20,
+      padding: screenWidth * 0.05,
     },
     achievementModalContent: {
       width: '85%',
-      maxWidth: 340,
+      maxWidth: screenWidth * 0.85,
       backgroundColor: '#1a1a2e',
       borderRadius: 24,
-      padding: 32,
+      padding: screenWidth * 0.08,
       alignItems: 'center',
       borderWidth: 3,
       borderColor: '#FFD700',
@@ -2775,70 +3309,70 @@ export default function BuildScreen() {
     },
     achievementGlow: {
       position: 'absolute',
-      top: -50,
-      width: 200,
-      height: 200,
+      top: -screenHeight * 0.06,
+      width: Math.round(screenWidth * 0.5),
+      height: Math.round(screenWidth * 0.5),
       backgroundColor: '#FFD700',
-      borderRadius: 100,
+      borderRadius: Math.round(screenWidth * 0.25),
       opacity: 0.1,
     },
     achievementUnlockedText: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       fontWeight: 'bold',
       color: '#FFD700',
-      marginBottom: 16,
+      marginBottom: screenHeight * 0.02,
       letterSpacing: 2,
     },
     achievementIcon: {
-      fontSize: 64,
-      marginBottom: 16,
+      fontSize: Math.round(screenWidth * 0.16),
+      marginBottom: screenHeight * 0.02,
     },
     achievementTitle: {
-      fontSize: 24,
+      fontSize: Math.round(screenWidth * 0.06),
       fontWeight: 'bold',
       color: '#FFFFFF',
       textAlign: 'center',
       marginBottom: 8,
     },
     achievementDescription: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: '#B0B0B0',
       textAlign: 'center',
-      marginBottom: 20,
-      lineHeight: 20,
+      marginBottom: screenHeight * 0.025,
+      lineHeight: Math.round(screenWidth * 0.05),
     },
     achievementPoints: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: 'rgba(255, 215, 0, 0.2)',
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-      borderRadius: 20,
-      marginBottom: 20,
+      paddingHorizontal: screenWidth * 0.04,
+      paddingVertical: screenHeight * 0.01,
+      borderRadius: Math.round(screenWidth * 0.05),
+      marginBottom: screenHeight * 0.025,
       gap: 8,
     },
     achievementPointsText: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: '#FFD700',
     },
     achievementCloseButton: {
       backgroundColor: '#FFD700',
-      paddingHorizontal: 40,
-      paddingVertical: 14,
+      paddingHorizontal: screenWidth * 0.1,
+      paddingVertical: screenHeight * 0.017,
       borderRadius: 25,
     },
     achievementCloseText: {
       color: '#1a1a2e',
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       fontWeight: 'bold',
     },
     // Map indicator styles
     mapIndicatorContainer: {
       position: 'absolute',
-      top: 10,
-      left: 10,
-      right: 10,
+      top: screenHeight * 0.012,
+      left: screenWidth * 0.025,
+      right: screenWidth * 0.025,
       flexDirection: 'row',
       flexWrap: 'wrap',
       gap: 8,
@@ -2846,9 +3380,9 @@ export default function BuildScreen() {
     },
     locationMarker: {
       backgroundColor: 'rgba(255, 152, 0, 0.9)',
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 12,
+      paddingHorizontal: Math.round(screenWidth * 0.03),
+      paddingVertical: screenHeight * 0.01,
+      borderRadius: Math.round(screenWidth * 0.03),
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
@@ -2857,7 +3391,7 @@ export default function BuildScreen() {
     },
     locationMarkerText: {
       color: '#FFF',
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       fontWeight: '700',
     },
     // Placeholder map background
@@ -2869,17 +3403,17 @@ export default function BuildScreen() {
       alignItems: 'center',
     },
     placeholderMapText: {
-      fontSize: 64,
-      marginBottom: 16,
+      fontSize: Math.round(screenWidth * 0.16),
+      marginBottom: screenHeight * 0.02,
     },
     placeholderMapTitle: {
-      fontSize: 24,
+      fontSize: Math.round(screenWidth * 0.06),
       fontWeight: 'bold',
       color: '#FFF',
       marginBottom: 8,
     },
     placeholderMapHint: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: 'rgba(255,255,255,0.7)',
     },
   });
@@ -3013,15 +3547,20 @@ export default function BuildScreen() {
         if (tileX < 0 || tileX >= collisionSystem.mapWidth ||
             tileY < 0 || tileY >= collisionSystem.mapHeight) continue;
 
-        // Only render overlay for actual wall tiles (A3/A4 autotiles)
-        // Skip passable tiles and non-wall collision objects (furniture, desks, etc.)
+        // Skip passable tiles — only overlay non-passable tiles (walls, tables, furniture)
         if (collisionSystem.isPassable(tileX, tileY)) continue;
-        if (!collisionSystem.isWallTile(tileX, tileY)) continue;
 
-        // Calculate screen position for this tile
-        const screenX = Math.round(dims.offsetX + tileX * dims.tileDisplaySize);
-        const screenY = Math.round(dims.offsetY + tileY * dims.tileDisplaySize);
-        const tileSize = Math.ceil(dims.tileDisplaySize) + 1; // +1 to cover subpixel rounding gaps
+        // Only render overlays for tiles that need to appear IN FRONT of the character.
+        // Tiles above/same Y don't need overlays — the character naturally renders on top
+        // of the background there. Rendering unnecessary overlays caused visible
+        // distortion because the overlay image couldn't align pixel-perfectly with the
+        // background (different resizeMode pipelines, rounding, etc.).
+        if (tileY <= charTile.y) continue;
+
+        // Calculate screen position for this tile — no rounding so the fractional
+        // position matches the native "contain" layout of the background image.
+        const screenX = dims.offsetX + tileX * dims.tileDisplaySize;
+        const screenY = dims.offsetY + tileY * dims.tileDisplaySize;
 
         overlays.push(
           <View
@@ -3031,23 +3570,26 @@ export default function BuildScreen() {
               position: 'absolute',
               left: screenX,
               top: screenY,
-              width: tileSize,
-              height: tileSize,
+              width: dims.tileDisplaySize,
+              height: dims.tileDisplaySize,
               overflow: 'hidden',
-              zIndex: 1000,
+              zIndex: 1001,
               elevation: 101,
             }}
           >
+            {/* Use the full container size + resizeMode="contain" so the image goes
+                through the exact same native scaling pipeline as the ImageBackground,
+                guaranteeing pixel-perfect alignment. */}
             <Image
               source={currentMap.image}
               style={{
                 position: 'absolute',
-                left: -(tileX * dims.tileDisplaySize),
-                top: -(tileY * dims.tileDisplaySize),
-                width: dims.displayedWidth,
-                height: dims.displayedHeight,
+                left: -screenX,
+                top: -screenY,
+                width: contentSize.width,
+                height: contentSize.height,
               }}
-              resizeMode="stretch"
+              resizeMode="contain"
             />
           </View>
         );
@@ -3055,6 +3597,83 @@ export default function BuildScreen() {
     }
 
     return overlays;
+  };
+
+  // ─── Render NPCs (static workers) on the current map ──────────────
+  const renderNPCs = () => {
+    const npcs = NPC_POSITIONS[currentMapId];
+    if (!npcs || npcs.length === 0 || !collisionSystem.initialized) return null;
+
+    const dims = getMapDisplayDimensions();
+    if (!dims || dims.tileDisplaySize <= 0) return null;
+
+    const charSize = getCharSize();
+    const CHAR_VISUAL_SCALE = 0.9; // Same scale as the player character
+    const FRAME_W = 48;
+    const FRAME_H = 90;
+    const TOTAL_FRAMES = 24;
+    const spriteScale = (charSize * CHAR_VISUAL_SCALE) / FRAME_W;
+    const scaledFrameW = FRAME_W * spriteScale;
+    const scaledFrameH = FRAME_H * spriteScale;
+    const halfChar = charSize / 2;
+
+    // Get character tile for depth sorting
+    const charTile = collisionSystem.pixelsToTiles(
+      characterPosition.x, characterPosition.y,
+      contentSize.width, contentSize.height
+    );
+
+    return npcs.map((npc) => {
+      const spriteSource = NPC_SPRITES[npc.sprite];
+      if (!spriteSource) return null;
+
+      // Idle frame (frame 0) for the NPC's facing direction
+      const dirOffset = SPRITE_CONFIG.directions[npc.direction] ?? SPRITE_CONFIG.directions.down;
+      const npcSpriteX = -(dirOffset * FRAME_W);
+
+      // Convert tile position → screen pixel position (center of tile)
+      const pixelPos = collisionSystem.tilesToPixels(
+        npc.tileX, npc.tileY,
+        contentSize.width, contentSize.height
+      );
+      const npcLeft = pixelPos.x - halfChar;
+      const npcTop  = pixelPos.y - halfChar;
+
+      // Depth: NPC below player → in front; NPC above/same → behind
+      const inFront = npc.tileY > charTile.y;
+      const npcZ = inFront ? 1001 : 999;
+
+      return (
+        <View
+          key={`npc-${npc.id}`}
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            width: charSize,
+            height: charSize,
+            left: npcLeft,
+            top: npcTop,
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            overflow: 'visible',
+            zIndex: npcZ,
+            elevation: inFront ? 101 : 99,
+          }}
+        >
+          <View style={{ width: scaledFrameW, height: scaledFrameH, overflow: 'hidden' }}>
+            <Image
+              source={spriteSource}
+              style={{
+                width: FRAME_W * TOTAL_FRAMES * spriteScale,
+                height: FRAME_H * spriteScale,
+                transform: [{ translateX: npcSpriteX * spriteScale }],
+              }}
+              resizeMode="cover"
+            />
+          </View>
+        </View>
+      );
+    });
   };
 
   // Render map content based on current map
@@ -3067,31 +3686,47 @@ export default function BuildScreen() {
     
     const characterSprite = CHARACTER_SPRITES[selectedCharacter];
     
-    const renderCharacter = () => (
-      <Animated.View
-        style={[
-          styles.characterContainer,
-          {
-            left: animatedX,
-            top: animatedY,
-            transform: [{ scale: walkingPulse }],
-          },
-        ]}
-      >
-        <View style={styles.spriteContainer}>
-          <Image
-            source={characterSprite.sprite}
-            style={[
-              styles.characterSprite,
-              {
-                transform: [{ translateX: spriteX }],
-              },
-            ]}
-            resizeMode="cover"
-          />
-        </View>
-      </Animated.View>
-    );
+    const renderCharacter = () => {
+      const charSize = getCharSize();
+      const CHAR_VISUAL_SCALE = 0.9; // Visual scale: <1 = smaller, 1 = full tile size
+      const FRAME_W = 48;  // Sprite frame width in source image
+      const FRAME_H = 90;  // Sprite frame height in source image
+      const TOTAL_FRAMES = 24;
+      const spriteScale = (charSize * CHAR_VISUAL_SCALE) / FRAME_W;
+      const scaledFrameW = FRAME_W * spriteScale;
+      const scaledFrameH = FRAME_H * spriteScale;
+
+      return (
+        <Animated.View
+          style={[
+            styles.characterContainer,
+            {
+              width: charSize,
+              height: charSize,
+              left: animatedX,
+              top: animatedY,
+              transform: [{ scale: walkingPulse }],
+            },
+          ]}
+        >
+          <View style={{
+            width: scaledFrameW,
+            height: scaledFrameH,
+            overflow: 'hidden',
+          }}>
+            <Image
+              source={characterSprite.sprite}
+              style={{
+                width: FRAME_W * TOTAL_FRAMES * spriteScale,
+                height: FRAME_H * spriteScale,
+                transform: [{ translateX: spriteX * spriteScale }],
+              }}
+              resizeMode="cover"
+            />
+          </View>
+        </Animated.View>
+      );
+    };
     
     if (currentMap.image) {
       return (
@@ -3104,6 +3739,9 @@ export default function BuildScreen() {
             <View style={styles.contentContainer} onLayout={handleContentLayout}>
               {/* Location Collision Overlays - Debug visualization */}
               {renderLocationOverlays()}
+
+              {/* NPC Workers */}
+              {renderNPCs()}
 
               {/* Character with Sprite Animation */}
               {renderCharacter()}
@@ -3130,6 +3768,9 @@ export default function BuildScreen() {
                 <Text style={styles.placeholderMapHint}>Tap to move around</Text>
               </View>
 
+              {/* NPC Workers */}
+              {renderNPCs()}
+
               {/* Character with Sprite Animation */}
               {renderCharacter()}
             </View>
@@ -3139,15 +3780,216 @@ export default function BuildScreen() {
     }
   };
 
+  // ─── Resume helpers (Bug 1 + Bug 3 fix) ──────────────────
+
+  /**
+   * Apply a cached/fetched story session to component state and navigate to gameplay.
+   * This avoids creating a duplicate session.
+   */
+  const resumeStorySession = (session) => {
+    const levelConfig = STORY_LEVELS[session.level];
+    if (!levelConfig) return;
+
+    setGameMode('story');
+    setActiveSessionId(session.id);
+    setStoryLevel(session.level);
+    setWeeklyBudget(session.weekly_budget || 0);
+    setStoryStartDate(new Date(session.start_date));
+    setStoryEndDate(new Date(session.end_date));
+    setWeeklySpending(session.weekly_spending || 0);
+    if (session.category_spending) setCategorySpending(session.category_spending);
+    if (session.needs_spent != null || session.wants_spent != null) {
+      setBudgetCategories({
+        needs:   { budget: session.needs_budget || 0, spent: session.needs_spent || 0 },
+        wants:   { budget: session.wants_budget || 0, spent: session.wants_spent || 0 },
+        savings: { budget: session.savings_budget || 0, spent: 0 },
+      });
+    }
+    if (session.goals_data) {
+      setSavingsGoals(session.goals_data);
+      const allocs = {};
+      session.goals_data.forEach(g => { allocs[g.id] = g.allocated || 0; });
+      setGoalAllocations(allocs);
+    }
+
+    setShowStoryIntro(false);
+    setShowMainMenu(false);
+    setCurrentMapId('dorm');
+    console.log(`🔄 Resumed active story session ${session.id} (Level ${session.level})`);
+  };
+
+  /**
+   * Apply a cached/fetched custom session to component state and navigate to gameplay.
+   */
+  const resumeCustomSession = (session) => {
+    setGameMode('custom');
+    setActiveSessionId(session.id);
+    setWeeklyBudget(session.weekly_budget || 0);
+    setStoryStartDate(new Date(session.start_date));
+    setStoryEndDate(new Date(session.end_date));
+    setWeeklySpending(session.weekly_spending || 0);
+    if (session.category_spending) setCategorySpending(session.category_spending);
+    if (session.custom_rules) {
+      setCustomBudgetRules(session.custom_rules);
+      // Restore weeks from start/end dates
+      const diffMs = new Date(session.end_date) - new Date(session.start_date);
+      const weeksFromDates = Math.round(diffMs / (7 * 24 * 60 * 60 * 1000));
+      setCustomWeeks(weeksFromDates || 1);
+    }
+
+    const modeType = session.mode_type;
+    if (modeType) setCustomModeType(modeType);
+    if (modeType === 'budgeting') {
+      setStoryLevel(1);
+      const rules = session.custom_rules || { needs: 50, wants: 30, savings: 20 };
+      setBudgetCategories({
+        needs:   { budget: (session.weekly_budget || 0) * (rules.needs / 100), spent: parseFloat(session.needs_spent) || 0 },
+        wants:   { budget: (session.weekly_budget || 0) * (rules.wants / 100), spent: parseFloat(session.wants_spent) || 0 },
+        savings: { budget: (session.weekly_budget || 0) * (rules.savings / 100), spent: 0 },
+      });
+    } else if (modeType === 'goals') {
+      setStoryLevel(2);
+      if (session.custom_goals) {
+        const goals = session.custom_goals.map((g, i) => ({
+          id: `custom_${i}`, name: g.name, icon: ['🎯','💎','🌟','🎁','✨'][i % 5], target: g.target || 0
+        }));
+        setSavingsGoals(goals);
+        // Restore customGoals form state so Settings modal shows correct data
+        setCustomGoals(session.custom_goals.map(g => ({ name: g.name, target: String(g.target || '') })));
+        const allocs = {};
+        goals.forEach(g => { allocs[g.id] = 0; });
+        if (session.goals_progress) {
+          session.goals_progress.forEach(gp => {
+            const matchGoal = goals.find(g => g.name === gp.name);
+            if (matchGoal) allocs[matchGoal.id] = gp.allocated || 0;
+          });
+        }
+        setGoalAllocations(allocs);
+      }
+    } else if (modeType === 'saving') {
+      setStoryLevel(3);
+      if (session.custom_savings_target != null) {
+        setCustomSavingsTarget(String(session.custom_savings_target));
+      }
+    }
+
+    setShowCustomSetup(false);
+    setShowMainMenu(false);
+    setCurrentMapId('dorm');
+    console.log(`🔄 Resumed active custom session ${session.id} (${modeType})`);
+  };
+
+  /**
+   * Unified handler when the user taps a story level button.
+   * 1. Checks for an existing active session → resumes if found (Bug 3 fix)
+   * 2. Checks if the level intro has been seen → skips intro if true (Bug 2 fix)
+   * 3. Otherwise shows the intro dialogue
+   */
+  const handleLevelSelect = async (level) => {
+    // 1. Check cached active session first, then fall back to DB query
+    let activeSession = null;
+    const cached = cachedActiveStoryRef.current;
+    if (cached && cached.level === level && cached.status === 'in_progress') {
+      activeSession = cached;
+    } else {
+      // Query DB for an in-progress session for this specific level
+      activeSession = await gameDatabaseService.findActiveStorySession(level);
+    }
+
+    if (activeSession) {
+      // Resume existing session — no data reset
+      resumeStorySession(activeSession);
+      return;
+    }
+
+    // 2. No active session — check if level intro has already been seen
+    const key = `level_intro_seen_${user?.id}_${level}`;
+    const seen = await AsyncStorage.getItem(key);
+    if (seen === 'true') {
+      // Skip intro, start a brand-new level directly
+      startStoryLevel(level);
+    } else {
+      // Show the intro dialogue (first time)
+      openLevelIntro(level);
+    }
+  };
+
   // Handle menu button press
-  const handleStoryMode = () => {
+  const handleStoryMode = async () => {
+    // Gate behind tutorial completion
+    if (!tutorialCompleted) {
+      Alert.alert(
+        '🎓 Tutorial Required',
+        'Please complete the Tutorial first to learn the basics before starting Story Mode!',
+        [
+          { text: 'Start Tutorial', onPress: startTutorial },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+      return;
+    }
     // Clear any leftover tutorial state
     if (tutorialActive) {
       setTutorialActive(false);
       setTutorialStep(0);
     }
+
+    // ── Single Active Session: auto-resume if an in-progress session exists ──
+    let activeSession = cachedActiveStoryRef.current;
+    if (!activeSession) {
+      activeSession = await gameDatabaseService.findAnyActiveStorySession();
+    }
+    if (activeSession && activeSession.status === 'in_progress') {
+      // Bypass level selection — go straight to the active level
+      resumeStorySession(activeSession);
+      return;
+    }
+
+    // No active session — show level selection
     setGameMode('story');
-    setShowStoryIntro(true); // Show level selection instead of going directly to game
+    setShowStoryIntro(true);
+  };
+
+  // ── Abandon / End Session ────────────────────────────────
+  const handleAbandonSession = () => {
+    setShowAbandonModal(true);
+  };
+
+  const handleConfirmAbandon = async () => {
+    setShowAbandonModal(false);
+
+    // Mark the active session as 'abandoned' in the database
+    if (activeSessionId) {
+      if (gameMode === 'story') {
+        await gameDatabaseService.abandonStorySession(activeSessionId);
+        gameDatabaseService.logActivity({
+          activityType: 'session_abandoned',
+          sessionId: activeSessionId,
+          details: { level: storyLevel, mode: 'story' },
+        });
+      } else if (gameMode === 'custom') {
+        await gameDatabaseService.abandonCustomSession(activeSessionId);
+        gameDatabaseService.logActivity({
+          activityType: 'session_abandoned',
+          sessionId: activeSessionId,
+          details: { mode: 'custom', modeType: customModeType },
+        });
+      }
+    }
+
+    // Clear cached active sessions
+    if (gameMode === 'story') cachedActiveStoryRef.current = null;
+    if (gameMode === 'custom') cachedActiveCustomRef.current = null;
+
+    // Reset game state and return to main menu
+    setActiveSessionId(null);
+    setWeeklyBudget(0);
+    setWeeklySpending(0);
+    setStoryStartDate(null);
+    setStoryEndDate(null);
+    setLevelResults(null);
+    setGameMode(null);
+    setShowMainMenu(true);
   };
 
   // Open the Pokémon-style pre-level intro for a given level
@@ -3218,8 +4060,14 @@ export default function BuildScreen() {
   };
 
   // Close intro and start the actual level
-  const handleIntroStartLevel = () => {
+  const handleIntroStartLevel = async () => {
     const level = introLevel;
+
+    // Mark intro as seen — persist to AsyncStorage + DB
+    const key = `level_intro_seen_${user?.id}_${level}`;
+    await AsyncStorage.setItem(key, 'true');
+    gameDatabaseService.markIntroSeen(level); // fire-and-forget DB update
+
     setShowLevelIntro(false);
     setIntroLevel(null);
     setIntroPage(0);
@@ -3239,17 +4087,26 @@ export default function BuildScreen() {
     setIntroDisplayedText('');
   };
 
-  const handleCustomMode = () => {
+  const handleCustomMode = async () => {
     // Clear any leftover tutorial state
     if (tutorialActive) {
       setTutorialActive(false);
       setTutorialStep(0);
     }
-    // If there's already an active custom session, resume it directly
-    if (gameMode === 'custom' && activeSessionId) {
-      setShowMainMenu(false);
+
+    // Check for a cached active custom session first, then DB fallback
+    let activeCustom = cachedActiveCustomRef.current;
+    if (!activeCustom) {
+      activeCustom = await gameDatabaseService.findActiveCustomSession();
+    }
+
+    if (activeCustom) {
+      // Resume existing custom session — no data reset
+      resumeCustomSession(activeCustom);
       return;
     }
+
+    // No active session — show custom setup
     setShowCustomSetup(true);
     setShowMainMenu(false);
   };
@@ -3273,9 +4130,9 @@ export default function BuildScreen() {
       const calculatedWeeklyBudget = monthlyBudget / 4;
       setWeeklyBudget(calculatedWeeklyBudget);
       
-      // Set start and end dates — real-time 168-hour window from NOW
+      // Set start and end dates — duration based on customWeeks
       const startDate = new Date(); // exact moment user pressed Start
-      const endDate = new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000); // exactly 7 days later
+      const endDate = new Date(startDate.getTime() + customWeeks * 7 * 24 * 60 * 60 * 1000); // customWeeks weeks
       
       setStoryStartDate(startDate);
       setStoryEndDate(endDate);
@@ -3350,7 +4207,7 @@ export default function BuildScreen() {
         startDate,
         endDate,
         customGoals: customGoalsForDB,
-        customSavingsTarget: customModeType === 'saving' ? parseFloat(customSavingsTarget) : null,
+        customSavingsTarget: customModeType === 'saving' ? Math.min(parseFloat(customSavingsTarget) || 0, 100) : null,
       });
       if (session) setActiveSessionId(session.id);
       gameDatabaseService.logActivity({ activityType: 'level_start', details: { type: customModeType, mode: 'custom', rules: customBudgetRules }, sessionId: session?.id });
@@ -3427,8 +4284,36 @@ export default function BuildScreen() {
       // For 'saving', customSavingsTarget is already updated via state
     }
 
+    // Update end date based on customWeeks
+    const newEndDate = new Date(storyStartDate.getTime() + customWeeks * 7 * 24 * 60 * 60 * 1000);
+    setStoryEndDate(newEndDate);
+
     setShowCustomSettingsModal(false);
-    console.log(`⚙️ Custom settings applied: mode=${newModeType}`);
+    console.log(`⚙️ Custom settings applied: mode=${newModeType}, weeks=${customWeeks}`);
+
+    // Invalidate cached session so re-entering custom mode fetches fresh data from DB
+    cachedActiveCustomRef.current = null;
+
+    // ── Persist updated custom settings to DB (single call) ──
+    if (activeSessionId) {
+      const updatedGoalsForDB = (newModeType === 'goals')
+        ? customGoals.filter(g => g.name.trim() && parseFloat(g.target) > 0).map(g => ({ name: g.name.trim(), target: parseFloat(g.target) || 0 }))
+        : null;
+      gameDatabaseService.updateCustomSessionSpending(activeSessionId, {
+        weeklySpending,
+        needsSpent: budgetCategories.needs?.spent || 0,
+        wantsSpent: budgetCategories.wants?.spent || 0,
+        savingsAmount: weeklyBudget - weeklySpending,
+        goalsProgress: updatedGoalsForDB
+          ? updatedGoalsForDB.map(g => ({ name: g.name, target: g.target, allocated: goalAllocations[`custom_${updatedGoalsForDB.indexOf(g)}`] || 0 }))
+          : null,
+        customRules: newModeType === 'budgeting' ? customBudgetRules : null,
+        customGoals: (newModeType === 'goals' && updatedGoalsForDB) ? updatedGoalsForDB : null,
+        customSavingsTarget: newModeType === 'saving' ? Math.min(parseFloat(customSavingsTarget) || 0, 100) : null,
+        modeType: newModeType,
+        endDate: newEndDate.toISOString(),
+      });
+    }
   };
 
   // Render Custom Settings Modal (in-game settings for Custom Mode)
@@ -3499,7 +4384,19 @@ export default function BuildScreen() {
                         >
                           <Ionicons name="remove" size={16} color="#FFF" />
                         </TouchableOpacity>
-                        <Text style={[settingsStyles.sliderValue, { color: cat.color }]}>{customBudgetRules[cat.key]}%</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <TextInput
+                            style={[settingsStyles.sliderValue, { color: cat.color, backgroundColor: 'rgba(45,45,68,0.9)', borderRadius: 6, paddingHorizontal: 4, borderWidth: 1, borderColor: '#5A5A7A' }]}
+                            value={String(customBudgetRules[cat.key])}
+                            onChangeText={(text) => {
+                              const val = parseInt(text.replace(/[^0-9]/g, ''));
+                              setCustomBudgetRules(prev => ({ ...prev, [cat.key]: isNaN(val) ? 0 : Math.min(100, val) }));
+                            }}
+                            keyboardType="numeric"
+                            maxLength={3}
+                          />
+                          <Text style={{ color: cat.color, fontWeight: 'bold', fontSize: 16 }}>%</Text>
+                        </View>
                         <TouchableOpacity
                           style={settingsStyles.adjBtn}
                           onPress={() => setCustomBudgetRules(prev => ({ ...prev, [cat.key]: Math.min(100, prev[cat.key] + 5) }))}
@@ -3574,7 +4471,19 @@ export default function BuildScreen() {
                     >
                       <Ionicons name="remove" size={20} color="#FFF" />
                     </TouchableOpacity>
-                    <Text style={settingsStyles.savingsBigValue}>{customSavingsTarget}%</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <TextInput
+                        style={[settingsStyles.savingsBigValue, { backgroundColor: 'rgba(45,45,68,0.9)', borderRadius: 8, paddingHorizontal: 8, borderWidth: 1, borderColor: '#5A5A7A', minWidth: 55, textAlign: 'center' }]}
+                        value={customSavingsTarget}
+                        onChangeText={(text) => {
+                          const cleaned = text.replace(/[^0-9]/g, '');
+                          setCustomSavingsTarget(cleaned === '' ? '0' : String(Math.min(100, parseInt(cleaned))));
+                        }}
+                        keyboardType="numeric"
+                        maxLength={3}
+                      />
+                      <Text style={settingsStyles.savingsBigValue}>%</Text>
+                    </View>
                     <TouchableOpacity
                       style={settingsStyles.adjBtn}
                       onPress={() => setCustomSavingsTarget(prev => Math.min(80, parseInt(prev) + 5).toString())}
@@ -3595,6 +4504,50 @@ export default function BuildScreen() {
                   </View>
                 </View>
               )}
+
+              {/* Duration Settings - shown for all mode types */}
+              <View style={settingsStyles.section}>
+                <Text style={settingsStyles.sectionLabel}>📅 Duration</Text>
+                <View style={settingsStyles.savingsRow}>
+                  <TouchableOpacity
+                    style={settingsStyles.adjBtn}
+                    onPress={() => setCustomWeeks(prev => Math.max(1, prev - 1))}
+                  >
+                    <Ionicons name="remove" size={20} color="#FFF" />
+                  </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <TextInput
+                      style={[settingsStyles.savingsBigValue, { backgroundColor: 'rgba(45,45,68,0.9)', borderRadius: 8, paddingHorizontal: 8, borderWidth: 1, borderColor: '#5A5A7A', minWidth: 50, textAlign: 'center' }]}
+                      value={String(customWeeks)}
+                      onChangeText={(text) => {
+                        const val = parseInt(text.replace(/[^0-9]/g, ''));
+                        setCustomWeeks(isNaN(val) ? 1 : Math.min(52, Math.max(1, val)));
+                      }}
+                      keyboardType="numeric"
+                      maxLength={2}
+                    />
+                    <Text style={[settingsStyles.savingsBigValue, { fontSize: 18, marginLeft: 4 }]}>{customWeeks === 1 ? 'week' : 'weeks'}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={settingsStyles.adjBtn}
+                    onPress={() => setCustomWeeks(prev => Math.min(52, prev + 1))}
+                  >
+                    <Ionicons name="add" size={20} color="#FFF" />
+                  </TouchableOpacity>
+                </View>
+                <View style={settingsStyles.quickRow}>
+                  {[1, 2, 3, 4].map(w => (
+                    <TouchableOpacity
+                      key={w}
+                      style={[settingsStyles.quickBtn, customWeeks === w && settingsStyles.quickBtnActive]}
+                      onPress={() => setCustomWeeks(w)}
+                    >
+                      <Text style={[settingsStyles.quickBtnText, customWeeks === w && { color: '#FFF' }]}>{w}w</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={[settingsStyles.totalText, { color: '#D4C4A8', marginTop: 4 }]}>= {customWeeks * 7} days total</Text>
+              </View>
             </ScrollView>
 
             {/* Apply Button */}
@@ -3642,25 +4595,25 @@ export default function BuildScreen() {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: 20,
-      paddingVertical: 16,
+      paddingHorizontal: screenWidth * 0.05,
+      paddingVertical: screenHeight * 0.02,
       borderBottomWidth: 1,
       borderBottomColor: 'rgba(255,255,255,0.1)',
     },
     title: {
-      fontSize: 20,
+      fontSize: Math.round(screenWidth * 0.05),
       fontWeight: 'bold',
       color: '#F5DEB3',
     },
     body: {
-      paddingHorizontal: 20,
-      paddingVertical: 12,
+      paddingHorizontal: screenWidth * 0.05,
+      paddingVertical: screenHeight * 0.015,
     },
     sectionLabel: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       fontWeight: '600',
       color: '#D4C4A8',
-      marginBottom: 10,
+      marginBottom: screenHeight * 0.012,
       marginTop: 8,
     },
     section: {
@@ -3669,7 +4622,7 @@ export default function BuildScreen() {
     modeRow: {
       flexDirection: 'row',
       gap: 8,
-      marginBottom: 12,
+      marginBottom: screenHeight * 0.015,
     },
     modeChip: {
       flex: 1,
@@ -3677,8 +4630,8 @@ export default function BuildScreen() {
       alignItems: 'center',
       justifyContent: 'center',
       gap: 4,
-      paddingVertical: 10,
-      borderRadius: 10,
+      paddingVertical: screenHeight * 0.012,
+      borderRadius: Math.round(screenWidth * 0.025),
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
       borderWidth: 2,
       borderColor: '#5A5A7A',
@@ -3688,10 +4641,10 @@ export default function BuildScreen() {
       backgroundColor: 'rgba(245, 222, 179, 0.15)',
     },
     modeChipIcon: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
     },
     modeChipLabel: {
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       color: '#888',
       fontWeight: '600',
     },
@@ -3702,34 +4655,34 @@ export default function BuildScreen() {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 10,
+      marginBottom: screenHeight * 0.012,
     },
     sliderLabel: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: '#F5DEB3',
     },
     sliderControls: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
+      gap: Math.round(screenWidth * 0.025),
     },
     adjBtn: {
-      width: 30,
-      height: 30,
-      borderRadius: 15,
+      width: Math.round(screenWidth * 0.08),
+      height: Math.round(screenWidth * 0.08),
+      borderRadius: Math.round(screenWidth * 0.04),
       backgroundColor: 'rgba(90, 90, 122, 0.8)',
       justifyContent: 'center',
       alignItems: 'center',
     },
     sliderValue: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       fontWeight: 'bold',
-      width: 42,
+      width: Math.round(screenWidth * 0.105),
       textAlign: 'center',
     },
     totalText: {
       textAlign: 'center',
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: '#4CAF50',
       fontWeight: '600',
       marginTop: 4,
@@ -3738,27 +4691,27 @@ export default function BuildScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
-      marginBottom: 10,
+      marginBottom: screenHeight * 0.012,
     },
     goalNameInput: {
       flex: 1,
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
       borderRadius: 8,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+      paddingHorizontal: Math.round(screenWidth * 0.03),
+      paddingVertical: screenHeight * 0.01,
       color: '#FFF',
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       borderWidth: 1,
       borderColor: '#5A5A7A',
     },
     goalAmtInput: {
-      width: 80,
+      width: Math.round(screenWidth * 0.2),
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
       borderRadius: 8,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+      paddingHorizontal: Math.round(screenWidth * 0.03),
+      paddingVertical: screenHeight * 0.01,
       color: '#FFF',
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       borderWidth: 1,
       borderColor: '#5A5A7A',
       textAlign: 'center',
@@ -3772,17 +4725,17 @@ export default function BuildScreen() {
     },
     addGoalText: {
       color: '#4CAF50',
-      fontSize: 13,
+      fontSize: Math.round(screenWidth * 0.033),
     },
     savingsRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 20,
-      marginVertical: 10,
+      gap: Math.round(screenWidth * 0.05),
+      marginVertical: screenHeight * 0.012,
     },
     savingsBigValue: {
-      fontSize: 32,
+      fontSize: Math.round(screenWidth * 0.08),
       fontWeight: 'bold',
       color: '#F5DEB3',
     },
@@ -3793,7 +4746,7 @@ export default function BuildScreen() {
       marginTop: 8,
     },
     quickBtn: {
-      paddingHorizontal: 12,
+      paddingHorizontal: Math.round(screenWidth * 0.03),
       paddingVertical: 6,
       borderRadius: 8,
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
@@ -3805,7 +4758,7 @@ export default function BuildScreen() {
       backgroundColor: 'rgba(245, 222, 179, 0.2)',
     },
     quickBtnText: {
-      fontSize: 13,
+      fontSize: Math.round(screenWidth * 0.033),
       color: '#888',
       fontWeight: '600',
     },
@@ -3814,10 +4767,10 @@ export default function BuildScreen() {
       alignItems: 'center',
       justifyContent: 'center',
       gap: 8,
-      marginHorizontal: 20,
-      marginVertical: 16,
-      paddingVertical: 14,
-      borderRadius: 12,
+      marginHorizontal: screenWidth * 0.05,
+      marginVertical: screenHeight * 0.02,
+      paddingVertical: screenHeight * 0.017,
+      borderRadius: Math.round(screenWidth * 0.03),
       backgroundColor: '#4CAF50',
     },
     applyBtnDisabled: {
@@ -3825,7 +4778,7 @@ export default function BuildScreen() {
       opacity: 0.5,
     },
     applyBtnText: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       fontWeight: 'bold',
       color: '#FFF',
     },
@@ -3867,7 +4820,7 @@ export default function BuildScreen() {
                   storyStyles.levelButton,
                   isUnlocked ? storyStyles.levelUnlocked : storyStyles.levelLocked,
                 ]}
-                onPress={() => isUnlocked && openLevelIntro(level)}
+                onPress={() => isUnlocked && handleLevelSelect(level)}
                 activeOpacity={isUnlocked ? 0.7 : 1}
                 disabled={!isUnlocked}
               >
@@ -4014,7 +4967,19 @@ export default function BuildScreen() {
                 <View style={customStyles.sliderContainer}>
                   <View style={customStyles.sliderHeader}>
                     <Text style={customStyles.sliderLabel}>🏠 Needs (Food, Transport)</Text>
-                    <Text style={customStyles.sliderValue}>{customBudgetRules.needs}%</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <TextInput
+                        style={customStyles.sliderInputField}
+                        value={String(customBudgetRules.needs)}
+                        onChangeText={(text) => {
+                          const val = parseInt(text.replace(/[^0-9]/g, ''));
+                          setCustomBudgetRules(prev => ({ ...prev, needs: isNaN(val) ? 0 : Math.min(100, val) }));
+                        }}
+                        keyboardType="numeric"
+                        maxLength={3}
+                      />
+                      <Text style={customStyles.sliderValue}>%</Text>
+                    </View>
                   </View>
                   <View style={customStyles.sliderTrack}>
                     <View 
@@ -4041,7 +5006,19 @@ export default function BuildScreen() {
                 <View style={customStyles.sliderContainer}>
                   <View style={customStyles.sliderHeader}>
                     <Text style={customStyles.sliderLabel}>🎮 Wants (Shopping, Entertainment)</Text>
-                    <Text style={customStyles.sliderValue}>{customBudgetRules.wants}%</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <TextInput
+                        style={customStyles.sliderInputField}
+                        value={String(customBudgetRules.wants)}
+                        onChangeText={(text) => {
+                          const val = parseInt(text.replace(/[^0-9]/g, ''));
+                          setCustomBudgetRules(prev => ({ ...prev, wants: isNaN(val) ? 0 : Math.min(100, val) }));
+                        }}
+                        keyboardType="numeric"
+                        maxLength={3}
+                      />
+                      <Text style={customStyles.sliderValue}>%</Text>
+                    </View>
                   </View>
                   <View style={customStyles.sliderTrack}>
                     <View 
@@ -4068,7 +5045,19 @@ export default function BuildScreen() {
                 <View style={customStyles.sliderContainer}>
                   <View style={customStyles.sliderHeader}>
                     <Text style={customStyles.sliderLabel}>💰 Savings</Text>
-                    <Text style={customStyles.sliderValue}>{customBudgetRules.savings}%</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <TextInput
+                        style={customStyles.sliderInputField}
+                        value={String(customBudgetRules.savings)}
+                        onChangeText={(text) => {
+                          const val = parseInt(text.replace(/[^0-9]/g, ''));
+                          setCustomBudgetRules(prev => ({ ...prev, savings: isNaN(val) ? 0 : Math.min(100, val) }));
+                        }}
+                        keyboardType="numeric"
+                        maxLength={3}
+                      />
+                      <Text style={customStyles.sliderValue}>%</Text>
+                    </View>
                   </View>
                   <View style={customStyles.sliderTrack}>
                     <View 
@@ -4104,6 +5093,59 @@ export default function BuildScreen() {
                   {budgetValid && (
                     <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
                   )}
+                </View>
+
+                {/* Duration Selector */}
+                <View style={customStyles.durationContainer}>
+                  <Text style={customStyles.durationTitle}>📅 Duration</Text>
+                  <Text style={customStyles.durationSubtitle}>How many weeks should this challenge last?</Text>
+                  <View style={customStyles.durationInputRow}>
+                    <TouchableOpacity
+                      style={customStyles.savingsAdjustBtn}
+                      onPress={() => setCustomWeeks(prev => Math.max(1, prev - 1))}
+                    >
+                      <Ionicons name="remove" size={24} color="#FFF" />
+                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+                      <TextInput
+                        style={customStyles.weeksInput}
+                        value={String(customWeeks)}
+                        onChangeText={(text) => {
+                          const val = parseInt(text.replace(/[^0-9]/g, ''));
+                          setCustomWeeks(isNaN(val) ? 1 : Math.min(52, Math.max(1, val)));
+                        }}
+                        keyboardType="numeric"
+                        maxLength={2}
+                      />
+                      <Text style={customStyles.weeksLabel}>{customWeeks === 1 ? 'week' : 'weeks'}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={customStyles.savingsAdjustBtn}
+                      onPress={() => setCustomWeeks(prev => Math.min(52, prev + 1))}
+                    >
+                      <Ionicons name="add" size={24} color="#FFF" />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={customStyles.quickSelectRow}>
+                    {[1, 2, 3, 4].map((w) => (
+                      <TouchableOpacity
+                        key={w}
+                        style={[
+                          customStyles.quickSelectBtn,
+                          customWeeks === w && customStyles.quickSelectActive
+                        ]}
+                        onPress={() => setCustomWeeks(w)}
+                      >
+                        <Text style={[
+                          customStyles.quickSelectText,
+                          customWeeks === w && customStyles.quickSelectTextActive
+                        ]}>
+                          {w}w
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <Text style={customStyles.durationNote}>= {customWeeks * 7} days total</Text>
                 </View>
 
                 {/* Start Button */}
@@ -4187,6 +5229,59 @@ export default function BuildScreen() {
                   </TouchableOpacity>
                 )}
 
+                {/* Duration Selector */}
+                <View style={customStyles.durationContainer}>
+                  <Text style={customStyles.durationTitle}>📅 Duration</Text>
+                  <Text style={customStyles.durationSubtitle}>How many weeks should this challenge last?</Text>
+                  <View style={customStyles.durationInputRow}>
+                    <TouchableOpacity
+                      style={customStyles.savingsAdjustBtn}
+                      onPress={() => setCustomWeeks(prev => Math.max(1, prev - 1))}
+                    >
+                      <Ionicons name="remove" size={24} color="#FFF" />
+                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+                      <TextInput
+                        style={customStyles.weeksInput}
+                        value={String(customWeeks)}
+                        onChangeText={(text) => {
+                          const val = parseInt(text.replace(/[^0-9]/g, ''));
+                          setCustomWeeks(isNaN(val) ? 1 : Math.min(52, Math.max(1, val)));
+                        }}
+                        keyboardType="numeric"
+                        maxLength={2}
+                      />
+                      <Text style={customStyles.weeksLabel}>{customWeeks === 1 ? 'week' : 'weeks'}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={customStyles.savingsAdjustBtn}
+                      onPress={() => setCustomWeeks(prev => Math.min(52, prev + 1))}
+                    >
+                      <Ionicons name="add" size={24} color="#FFF" />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={customStyles.quickSelectRow}>
+                    {[1, 2, 3, 4].map((w) => (
+                      <TouchableOpacity
+                        key={w}
+                        style={[
+                          customStyles.quickSelectBtn,
+                          customWeeks === w && customStyles.quickSelectActive
+                        ]}
+                        onPress={() => setCustomWeeks(w)}
+                      >
+                        <Text style={[
+                          customStyles.quickSelectText,
+                          customWeeks === w && customStyles.quickSelectTextActive
+                        ]}>
+                          {w}w
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <Text style={customStyles.durationNote}>= {customWeeks * 7} days total</Text>
+                </View>
+
                 {/* Start Button */}
                 <TouchableOpacity
                   style={[customStyles.startButton, !goalsValid && customStyles.startButtonDisabled]}
@@ -4226,7 +5321,16 @@ export default function BuildScreen() {
                     </TouchableOpacity>
                     
                     <View style={customStyles.savingsValueContainer}>
-                      <Text style={customStyles.savingsValue}>{customSavingsTarget}</Text>
+                      <TextInput
+                        style={customStyles.savingsValueInput}
+                        value={customSavingsTarget}
+                        onChangeText={(text) => {
+                          const cleaned = text.replace(/[^0-9]/g, '');
+                          setCustomSavingsTarget(cleaned === '' ? '0' : String(Math.min(100, parseInt(cleaned))));
+                        }}
+                        keyboardType="numeric"
+                        maxLength={3}
+                      />
                       <Text style={customStyles.savingsPercent}>%</Text>
                     </View>
                     
@@ -4273,6 +5377,59 @@ export default function BuildScreen() {
                   </View>
                 </View>
 
+                {/* Duration Selector */}
+                <View style={customStyles.durationContainer}>
+                  <Text style={customStyles.durationTitle}>📅 Duration</Text>
+                  <Text style={customStyles.durationSubtitle}>How many weeks should this challenge last?</Text>
+                  <View style={customStyles.durationInputRow}>
+                    <TouchableOpacity
+                      style={customStyles.savingsAdjustBtn}
+                      onPress={() => setCustomWeeks(prev => Math.max(1, prev - 1))}
+                    >
+                      <Ionicons name="remove" size={24} color="#FFF" />
+                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+                      <TextInput
+                        style={customStyles.weeksInput}
+                        value={String(customWeeks)}
+                        onChangeText={(text) => {
+                          const val = parseInt(text.replace(/[^0-9]/g, ''));
+                          setCustomWeeks(isNaN(val) ? 1 : Math.min(52, Math.max(1, val)));
+                        }}
+                        keyboardType="numeric"
+                        maxLength={2}
+                      />
+                      <Text style={customStyles.weeksLabel}>{customWeeks === 1 ? 'week' : 'weeks'}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={customStyles.savingsAdjustBtn}
+                      onPress={() => setCustomWeeks(prev => Math.min(52, prev + 1))}
+                    >
+                      <Ionicons name="add" size={24} color="#FFF" />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={customStyles.quickSelectRow}>
+                    {[1, 2, 3, 4].map((w) => (
+                      <TouchableOpacity
+                        key={w}
+                        style={[
+                          customStyles.quickSelectBtn,
+                          customWeeks === w && customStyles.quickSelectActive
+                        ]}
+                        onPress={() => setCustomWeeks(w)}
+                      >
+                        <Text style={[
+                          customStyles.quickSelectText,
+                          customWeeks === w && customStyles.quickSelectTextActive
+                        ]}>
+                          {w}w
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <Text style={customStyles.durationNote}>= {customWeeks * 7} days total</Text>
+                </View>
+
                 {/* Start Button */}
                 <TouchableOpacity
                   style={[customStyles.startButton, !savingsValid && customStyles.startButtonDisabled]}
@@ -4300,15 +5457,15 @@ export default function BuildScreen() {
     overlay: {
       flex: 1,
       backgroundColor: 'rgba(0,0,0,0.6)',
-      paddingTop: 60,
+      paddingTop: screenHeight * 0.07,
     },
     backButton: {
       position: 'absolute',
-      top: 50,
-      left: 20,
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+      top: screenHeight * 0.06,
+      left: screenWidth * 0.05,
+      width: Math.round(screenWidth * 0.11),
+      height: Math.round(screenWidth * 0.11),
+      borderRadius: Math.round(screenWidth * 0.055),
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
       justifyContent: 'center',
       alignItems: 'center',
@@ -4318,10 +5475,10 @@ export default function BuildScreen() {
     },
     titleContainer: {
       alignItems: 'center',
-      marginBottom: 20,
+      marginBottom: screenHeight * 0.025,
     },
     title: {
-      fontSize: 32,
+      fontSize: Math.round(screenWidth * 0.08),
       fontWeight: 'bold',
       color: '#F5DEB3',
       textShadowColor: '#000',
@@ -4329,7 +5486,7 @@ export default function BuildScreen() {
       textShadowRadius: 0,
     },
     subtitle: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: '#D4C4A8',
       marginTop: 8,
     },
@@ -4337,40 +5494,40 @@ export default function BuildScreen() {
       flex: 1,
     },
     scrollContent: {
-      paddingHorizontal: 20,
-      paddingBottom: 40,
+      paddingHorizontal: screenWidth * 0.05,
+      paddingBottom: screenHeight * 0.05,
     },
     modeSelection: {
-      gap: 12,
+      gap: Math.round(screenHeight * 0.015),
     },
     modeButton: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
-      padding: 16,
-      borderRadius: 12,
+      padding: Math.round(screenWidth * 0.04),
+      borderRadius: Math.round(screenWidth * 0.03),
       borderWidth: 2,
       borderColor: '#5A5A7A',
-      gap: 12,
+      gap: Math.round(screenWidth * 0.03),
     },
     modeIcon: {
-      fontSize: 32,
+      fontSize: Math.round(screenWidth * 0.08),
     },
     modeInfo: {
       flex: 1,
     },
     modeName: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: '#F5DEB3',
     },
     modeDesc: {
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       color: '#D4C4A8',
       marginTop: 4,
     },
     configSection: {
-      gap: 16,
+      gap: Math.round(screenHeight * 0.02),
     },
     changeTypeButton: {
       flexDirection: 'row',
@@ -4380,26 +5537,26 @@ export default function BuildScreen() {
       paddingVertical: 8,
     },
     changeTypeText: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: '#F5DEB3',
     },
     configTitle: {
-      fontSize: 22,
+      fontSize: Math.round(screenWidth * 0.055),
       fontWeight: 'bold',
       color: '#F5DEB3',
       textAlign: 'center',
     },
     configSubtitle: {
-      fontSize: 13,
+      fontSize: Math.round(screenWidth * 0.033),
       color: '#D4C4A8',
       textAlign: 'center',
-      lineHeight: 18,
+      lineHeight: Math.round(screenWidth * 0.045),
       marginBottom: 8,
     },
     sliderContainer: {
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: Math.round(screenWidth * 0.03),
+      padding: Math.round(screenWidth * 0.04),
       borderWidth: 2,
       borderColor: '#5A5A7A',
     },
@@ -4407,15 +5564,15 @@ export default function BuildScreen() {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 12,
+      marginBottom: screenHeight * 0.015,
     },
     sliderLabel: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: '#F5DEB3',
       fontWeight: '600',
     },
     sliderValue: {
-      fontSize: 20,
+      fontSize: Math.round(screenWidth * 0.05),
       fontWeight: 'bold',
       color: '#FF9800',
     },
@@ -4435,9 +5592,9 @@ export default function BuildScreen() {
       gap: 20,
     },
     sliderBtn: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+      width: Math.round(screenWidth * 0.1),
+      height: Math.round(screenWidth * 0.1),
+      borderRadius: Math.round(screenWidth * 0.05),
       backgroundColor: 'rgba(255,255,255,0.2)',
       justifyContent: 'center',
       alignItems: 'center',
@@ -4447,7 +5604,7 @@ export default function BuildScreen() {
       justifyContent: 'center',
       alignItems: 'center',
       backgroundColor: 'rgba(76, 175, 80, 0.2)',
-      padding: 12,
+      padding: Math.round(screenWidth * 0.03),
       borderRadius: 8,
       gap: 8,
     },
@@ -4455,12 +5612,12 @@ export default function BuildScreen() {
       backgroundColor: 'rgba(231, 76, 60, 0.2)',
     },
     totalText: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       fontWeight: 'bold',
       color: '#F5DEB3',
     },
     totalWarning: {
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       color: '#E74C3C',
     },
     startButton: {
@@ -4468,7 +5625,7 @@ export default function BuildScreen() {
       justifyContent: 'center',
       alignItems: 'center',
       backgroundColor: '#4CAF50',
-      padding: 16,
+      padding: screenWidth * 0.04,
       borderRadius: 12,
       gap: 10,
       marginTop: 8,
@@ -4477,7 +5634,7 @@ export default function BuildScreen() {
       backgroundColor: 'rgba(76, 175, 80, 0.3)',
     },
     startButtonText: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: '#FFF',
     },
@@ -4495,9 +5652,9 @@ export default function BuildScreen() {
       flex: 2,
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
       borderRadius: 8,
-      padding: 12,
+      padding: Math.round(screenWidth * 0.03),
       color: '#FFF',
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       borderWidth: 2,
       borderColor: '#5A5A7A',
     },
@@ -4505,9 +5662,9 @@ export default function BuildScreen() {
       flex: 1,
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
       borderRadius: 8,
-      padding: 12,
+      padding: Math.round(screenWidth * 0.03),
       color: '#FFF',
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       borderWidth: 2,
       borderColor: '#5A5A7A',
     },
@@ -4518,7 +5675,7 @@ export default function BuildScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: 12,
+      padding: Math.round(screenWidth * 0.03),
       gap: 8,
       borderWidth: 2,
       borderColor: '#4CAF50',
@@ -4526,14 +5683,14 @@ export default function BuildScreen() {
       borderRadius: 8,
     },
     addGoalText: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: '#4CAF50',
       fontWeight: '600',
     },
     savingsTargetContainer: {
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
       borderRadius: 16,
-      padding: 24,
+      padding: screenWidth * 0.06,
       borderWidth: 2,
       borderColor: '#5A5A7A',
       alignItems: 'center',
@@ -4541,13 +5698,13 @@ export default function BuildScreen() {
     savingsInputRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 20,
-      marginBottom: 20,
+      gap: screenWidth * 0.05,
+      marginBottom: screenHeight * 0.025,
     },
     savingsAdjustBtn: {
-      width: 50,
-      height: 50,
-      borderRadius: 25,
+      width: Math.round(screenWidth * 0.125),
+      height: Math.round(screenWidth * 0.125),
+      borderRadius: Math.round(screenWidth * 0.0625),
       backgroundColor: 'rgba(255,255,255,0.2)',
       justifyContent: 'center',
       alignItems: 'center',
@@ -4557,12 +5714,12 @@ export default function BuildScreen() {
       alignItems: 'flex-end',
     },
     savingsValue: {
-      fontSize: 56,
+      fontSize: Math.round(screenWidth * 0.14),
       fontWeight: 'bold',
       color: '#FF9800',
     },
     savingsPercent: {
-      fontSize: 24,
+      fontSize: Math.round(screenWidth * 0.06),
       fontWeight: 'bold',
       color: '#FF9800',
       marginBottom: 10,
@@ -4570,12 +5727,12 @@ export default function BuildScreen() {
     quickSelectRow: {
       flexDirection: 'row',
       gap: 8,
-      marginBottom: 16,
+      marginBottom: screenHeight * 0.02,
     },
     quickSelectBtn: {
-      paddingVertical: 8,
-      paddingHorizontal: 14,
-      borderRadius: 20,
+      paddingVertical: screenHeight * 0.01,
+      paddingHorizontal: Math.round(screenWidth * 0.035),
+      borderRadius: Math.round(screenWidth * 0.05),
       backgroundColor: 'rgba(255,255,255,0.1)',
       borderWidth: 1,
       borderColor: 'rgba(255,255,255,0.2)',
@@ -4585,7 +5742,7 @@ export default function BuildScreen() {
       borderColor: '#FF9800',
     },
     quickSelectText: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: '#D4C4A8',
       fontWeight: '600',
     },
@@ -4597,12 +5754,89 @@ export default function BuildScreen() {
       alignItems: 'center',
     },
     difficultyLabel: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: '#D4C4A8',
     },
     difficultyValue: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       fontWeight: 'bold',
+    },
+    sliderInputField: {
+      fontSize: Math.round(screenWidth * 0.05),
+      fontWeight: 'bold',
+      color: '#FF9800',
+      backgroundColor: 'rgba(45, 45, 68, 0.9)',
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: '#5A5A7A',
+      paddingHorizontal: screenWidth * 0.02,
+      paddingVertical: 4,
+      minWidth: Math.round(screenWidth * 0.125),
+      textAlign: 'center',
+    },
+    savingsValueInput: {
+      fontSize: Math.round(screenWidth * 0.14),
+      fontWeight: 'bold',
+      color: '#FF9800',
+      backgroundColor: 'rgba(45, 45, 68, 0.9)',
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: '#5A5A7A',
+      paddingHorizontal: 8,
+      minWidth: Math.round(screenWidth * 0.19),
+      textAlign: 'center',
+    },
+    durationContainer: {
+      backgroundColor: 'rgba(45, 45, 68, 0.9)',
+      borderRadius: 16,
+      padding: screenWidth * 0.05,
+      borderWidth: 2,
+      borderColor: '#5A5A7A',
+      alignItems: 'center',
+    },
+    durationTitle: {
+      fontSize: Math.round(screenWidth * 0.045),
+      fontWeight: 'bold',
+      color: '#F5DEB3',
+      marginBottom: 4,
+    },
+    durationSubtitle: {
+      fontSize: Math.round(screenWidth * 0.03),
+      color: '#D4C4A8',
+      textAlign: 'center',
+      marginBottom: screenHeight * 0.015,
+    },
+    durationInputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: Math.round(screenWidth * 0.05),
+      marginBottom: screenHeight * 0.02,
+    },
+    weeksInput: {
+      fontSize: Math.round(screenWidth * 0.1),
+      fontWeight: 'bold',
+      color: '#FF9800',
+      backgroundColor: 'rgba(30, 30, 50, 0.8)',
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: '#5A5A7A',
+      paddingHorizontal: 10,
+      minWidth: Math.round(screenWidth * 0.14),
+      textAlign: 'center',
+    },
+    weeksLabel: {
+      fontSize: Math.round(screenWidth * 0.045),
+      fontWeight: 'bold',
+      color: '#FF9800',
+      marginLeft: 4,
+      marginBottom: 6,
+    },
+    durationNote: {
+      color: '#D4C4A8',
+      fontSize: Math.round(screenWidth * 0.03),
+      marginTop: 8,
+      textAlign: 'center',
     },
   });
 
@@ -4610,47 +5844,47 @@ export default function BuildScreen() {
   const transportStyles = StyleSheet.create({
     transportModalContent: {
       width: '95%',
-      maxWidth: 400,
+      maxWidth: screenWidth * 0.95,
       backgroundColor: colors.card,
       borderRadius: 24,
-      padding: 20,
+      padding: screenWidth * 0.05,
       maxHeight: '85%',
     },
     transportHeader: {
       alignItems: 'center',
-      marginBottom: 20,
-      paddingBottom: 16,
+      marginBottom: screenHeight * 0.025,
+      paddingBottom: screenHeight * 0.02,
       borderBottomWidth: 1,
       borderBottomColor: 'rgba(255,255,255,0.1)',
     },
     transportTitle: {
-      fontSize: 24,
+      fontSize: Math.round(screenWidth * 0.06),
       fontWeight: 'bold',
       color: colors.text,
-      marginBottom: 8,
+      marginBottom: screenHeight * 0.01,
     },
     transportSubtitle: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: colors.textSecondary,
       textAlign: 'center',
     },
     modeSelection: {
-      gap: 12,
+      gap: Math.round(screenHeight * 0.015),
     },
     modeButton: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.background,
-      padding: 16,
-      borderRadius: 16,
+      padding: Math.round(screenWidth * 0.04),
+      borderRadius: Math.round(screenWidth * 0.04),
       borderWidth: 2,
       borderColor: colors.border,
-      gap: 12,
+      gap: Math.round(screenWidth * 0.03),
     },
     modeIconContainer: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
+      width: Math.round(screenWidth * 0.14),
+      height: Math.round(screenWidth * 0.14),
+      borderRadius: Math.round(screenWidth * 0.07),
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -4658,17 +5892,17 @@ export default function BuildScreen() {
       flex: 1,
     },
     modeName: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: colors.text,
     },
     modeDesc: {
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       color: colors.textSecondary,
       marginTop: 2,
     },
     inputSection: {
-      gap: 16,
+      gap: Math.round(screenHeight * 0.02),
     },
     backToModes: {
       flexDirection: 'row',
@@ -4677,7 +5911,7 @@ export default function BuildScreen() {
       paddingVertical: 8,
     },
     backToModesText: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: '#3498DB',
     },
     selectedModeHeader: {
@@ -4687,19 +5921,19 @@ export default function BuildScreen() {
       marginBottom: 8,
     },
     modeIconSmall: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+      width: Math.round(screenWidth * 0.1),
+      height: Math.round(screenWidth * 0.1),
+      borderRadius: Math.round(screenWidth * 0.05),
       justifyContent: 'center',
       alignItems: 'center',
     },
     selectedModeName: {
-      fontSize: 20,
+      fontSize: Math.round(screenWidth * 0.05),
       fontWeight: 'bold',
       color: colors.text,
     },
     inputLabel: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       color: colors.textSecondary,
       marginBottom: 8,
     },
@@ -4707,24 +5941,24 @@ export default function BuildScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.background,
-      borderRadius: 16,
+      borderRadius: Math.round(screenWidth * 0.04),
       borderWidth: 2,
       borderColor: colors.border,
-      paddingHorizontal: 16,
+      paddingHorizontal: Math.round(screenWidth * 0.04),
       paddingVertical: 4,
     },
     currencySymbol: {
-      fontSize: 28,
+      fontSize: Math.round(screenWidth * 0.07),
       fontWeight: 'bold',
       color: '#FF9800',
-      marginRight: 8,
+      marginRight: screenWidth * 0.02,
     },
     amountInput: {
       flex: 1,
-      fontSize: 32,
+      fontSize: Math.round(screenWidth * 0.08),
       fontWeight: 'bold',
       color: colors.text,
-      paddingVertical: 12,
+      paddingVertical: screenHeight * 0.015,
     },
     quickAmounts: {
       flexDirection: 'row',
@@ -4733,9 +5967,9 @@ export default function BuildScreen() {
       justifyContent: 'center',
     },
     quickAmountBtn: {
-      paddingVertical: 10,
-      paddingHorizontal: 16,
-      borderRadius: 20,
+      paddingVertical: screenHeight * 0.012,
+      paddingHorizontal: Math.round(screenWidth * 0.04),
+      borderRadius: Math.round(screenWidth * 0.05),
       backgroundColor: colors.background,
       borderWidth: 1,
       borderColor: colors.border,
@@ -4754,8 +5988,8 @@ export default function BuildScreen() {
     },
     confirmButton: {
       backgroundColor: '#3498DB',
-      paddingVertical: 16,
-      borderRadius: 16,
+      paddingVertical: screenHeight * 0.02,
+      borderRadius: Math.round(screenWidth * 0.04),
       alignItems: 'center',
       marginTop: 8,
     },
@@ -4766,29 +6000,29 @@ export default function BuildScreen() {
       backgroundColor: 'rgba(52, 152, 219, 0.3)',
     },
     confirmButtonText: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: '#FFF',
     },
     fuelQuestion: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       fontWeight: '600',
       color: colors.text,
       textAlign: 'center',
       marginVertical: 8,
     },
     fuelOptions: {
-      gap: 12,
+      gap: Math.round(screenHeight * 0.015),
     },
     fuelOptionBtn: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.background,
-      padding: 16,
-      borderRadius: 12,
+      padding: Math.round(screenWidth * 0.04),
+      borderRadius: Math.round(screenWidth * 0.03),
       borderWidth: 2,
       borderColor: colors.border,
-      gap: 12,
+      gap: Math.round(screenWidth * 0.03),
     },
     fuelOptionActive: {
       backgroundColor: '#4CAF50',
@@ -4799,7 +6033,7 @@ export default function BuildScreen() {
       borderColor: '#666',
     },
     fuelOptionText: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       color: colors.text,
     },
     fuelOptionTextActive: {
@@ -4807,18 +6041,18 @@ export default function BuildScreen() {
       fontWeight: '600',
     },
     fuelAmountSection: {
-      marginTop: 16,
-      paddingTop: 16,
+      marginTop: screenHeight * 0.02,
+      paddingTop: screenHeight * 0.02,
       borderTopWidth: 1,
       borderTopColor: 'rgba(255,255,255,0.1)',
     },
     cancelButton: {
-      marginTop: 16,
-      paddingVertical: 12,
+      marginTop: screenHeight * 0.02,
+      paddingVertical: screenHeight * 0.015,
       alignItems: 'center',
     },
     cancelButtonText: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       color: colors.textSecondary,
     },
   });
@@ -4833,16 +6067,16 @@ export default function BuildScreen() {
     overlay: {
       flex: 1,
       backgroundColor: 'rgba(0,0,0,0.6)',
-      paddingHorizontal: 20,
-      paddingTop: 60,
+      paddingHorizontal: screenWidth * 0.05,
+      paddingTop: screenHeight * 0.07,
     },
     backButton: {
       position: 'absolute',
-      top: 50,
-      left: 20,
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+      top: screenHeight * 0.06,
+      left: screenWidth * 0.05,
+      width: Math.round(screenWidth * 0.11),
+      height: Math.round(screenWidth * 0.11),
+      borderRadius: Math.round(screenWidth * 0.055),
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
       justifyContent: 'center',
       alignItems: 'center',
@@ -4852,10 +6086,10 @@ export default function BuildScreen() {
     },
     titleContainer: {
       alignItems: 'center',
-      marginBottom: 30,
+      marginBottom: screenHeight * 0.035,
     },
     title: {
-      fontSize: 32,
+      fontSize: Math.round(screenWidth * 0.08),
       fontWeight: 'bold',
       color: '#F5DEB3',
       textShadowColor: '#000',
@@ -4863,7 +6097,7 @@ export default function BuildScreen() {
       textShadowRadius: 0,
     },
     subtitle: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       color: '#D4C4A8',
       marginTop: 8,
       textShadowColor: '#000',
@@ -4876,9 +6110,9 @@ export default function BuildScreen() {
     levelButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      padding: 16,
+      padding: Math.round(screenWidth * 0.04),
       borderWidth: 4,
-      gap: 12,
+      gap: Math.round(screenWidth * 0.03),
     },
     levelUnlocked: {
       backgroundColor: '#2D2D44',
@@ -4896,21 +6130,21 @@ export default function BuildScreen() {
       opacity: 0.7,
     },
     levelIconContainer: {
-      width: 50,
-      height: 50,
-      borderRadius: 25,
+      width: Math.round(screenWidth * 0.125),
+      height: Math.round(screenWidth * 0.125),
+      borderRadius: Math.round(screenWidth * 0.0625),
       backgroundColor: 'rgba(0,0,0,0.3)',
       justifyContent: 'center',
       alignItems: 'center',
     },
     levelIcon: {
-      fontSize: 28,
+      fontSize: Math.round(screenWidth * 0.07),
     },
     levelInfo: {
       flex: 1,
     },
     levelName: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       fontWeight: 'bold',
       color: '#F5DEB3',
       textShadowColor: '#000',
@@ -4918,7 +6152,7 @@ export default function BuildScreen() {
       textShadowRadius: 0,
     },
     levelDesc: {
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       color: '#D4C4A8',
       marginTop: 4,
     },
@@ -4931,7 +6165,7 @@ export default function BuildScreen() {
       alignSelf: 'flex-start',
     },
     goalText: {
-      fontSize: 11,
+      fontSize: Math.round(screenWidth * 0.028),
       color: '#4CAF50',
       fontWeight: '600',
     },
@@ -4942,17 +6176,17 @@ export default function BuildScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
-      padding: 16,
-      marginTop: 24,
+      padding: Math.round(screenWidth * 0.04),
+      marginTop: screenHeight * 0.03,
       borderWidth: 2,
       borderColor: '#5A5A7A',
-      gap: 12,
+      gap: Math.round(screenWidth * 0.03),
     },
     infoText: {
       flex: 1,
-      fontSize: 13,
+      fontSize: Math.round(screenWidth * 0.033),
       color: '#D4C4A8',
-      lineHeight: 18,
+      lineHeight: Math.round(screenWidth * 0.045),
     },
   });
 
@@ -5081,15 +6315,15 @@ export default function BuildScreen() {
       flex: 1,
       backgroundColor: 'rgba(0, 0, 0, 0.65)',
       justifyContent: 'flex-end',
-      paddingBottom: 40,
+      paddingBottom: screenHeight * 0.05,
     },
     closeButton: {
       position: 'absolute',
-      top: 16,
-      left: 16,
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+      top: screenHeight * 0.02,
+      left: screenWidth * 0.04,
+      width: Math.round(screenWidth * 0.11),
+      height: Math.round(screenWidth * 0.11),
+      borderRadius: Math.round(screenWidth * 0.055),
       backgroundColor: 'rgba(45, 45, 68, 0.9)',
       justifyContent: 'center',
       alignItems: 'center',
@@ -5099,17 +6333,17 @@ export default function BuildScreen() {
     },
     levelBadge: {
       position: 'absolute',
-      top: 22,
+      top: screenHeight * 0.028,
       alignSelf: 'center',
       backgroundColor: 'rgba(45, 45, 68, 0.95)',
-      paddingHorizontal: 20,
-      paddingVertical: 8,
-      borderRadius: 20,
+      paddingHorizontal: screenWidth * 0.05,
+      paddingVertical: screenHeight * 0.01,
+      borderRadius: Math.round(screenWidth * 0.05),
       borderWidth: 2,
       borderColor: '#5A5A7A',
     },
     levelBadgeText: {
-      fontSize: 14,
+      fontSize: Math.round(screenWidth * 0.035),
       fontWeight: 'bold',
       color: '#F5DEB3',
       textShadowColor: '#000',
@@ -5121,13 +6355,13 @@ export default function BuildScreen() {
       marginBottom: -10,
     },
     characterImage: {
-      width: 200,
-      height: 200,
+      width: Math.round(screenWidth * 0.5),
+      height: Math.round(screenWidth * 0.5),
     },
     dialogueContainer: {
-      paddingHorizontal: 16,
+      paddingHorizontal: screenWidth * 0.04,
       alignItems: 'center',
-      marginBottom: 180,
+      marginBottom: screenHeight * 0.22,
     },
     dialogueBox: {
       width: '100%',
@@ -5137,35 +6371,35 @@ export default function BuildScreen() {
       borderLeftColor: '#5A5A7A',
       borderBottomColor: '#1A1A2E',
       borderRightColor: '#1A1A2E',
-      paddingHorizontal: 20,
-      paddingTop: 20,
-      paddingBottom: 12,
-      minHeight: 130,
+      paddingHorizontal: screenWidth * 0.05,
+      paddingTop: screenHeight * 0.025,
+      paddingBottom: screenHeight * 0.015,
+      minHeight: screenHeight * 0.16,
     },
     dialogueText: {
-      fontSize: 17,
+      fontSize: Math.round(screenWidth * 0.043),
       color: '#F5DEB3',
-      lineHeight: 26,
+      lineHeight: Math.round(screenWidth * 0.065),
       fontWeight: '500',
       textShadowColor: '#000',
       textShadowOffset: { width: 1, height: 1 },
       textShadowRadius: 0,
-      minHeight: 60,
+      minHeight: screenHeight * 0.075,
     },
     cursor: {
       color: '#F5DEB3',
-      fontSize: 17,
+      fontSize: Math.round(screenWidth * 0.043),
     },
     dialogueFooter: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginTop: 12,
+      marginTop: screenHeight * 0.015,
     },
     navButton: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
+      width: Math.round(screenWidth * 0.09),
+      height: Math.round(screenWidth * 0.09),
+      borderRadius: Math.round(screenWidth * 0.045),
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -5175,19 +6409,19 @@ export default function BuildScreen() {
     dotsContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: Math.round(screenWidth * 0.015),
     },
     dot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
+      width: Math.round(screenWidth * 0.02),
+      height: Math.round(screenWidth * 0.02),
+      borderRadius: Math.round(screenWidth * 0.01),
       backgroundColor: '#555',
     },
     dotActive: {
       backgroundColor: '#F5DEB3',
-      width: 10,
-      height: 10,
-      borderRadius: 5,
+      width: Math.round(screenWidth * 0.025),
+      height: Math.round(screenWidth * 0.025),
+      borderRadius: Math.round(screenWidth * 0.0125),
     },
     dotCompleted: {
       backgroundColor: '#8B7355',
@@ -5198,7 +6432,7 @@ export default function BuildScreen() {
       gap: 4,
     },
     tapHint: {
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       color: '#F5DEB3',
       fontWeight: '600',
     },
@@ -5207,10 +6441,10 @@ export default function BuildScreen() {
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: '#F5DEB3',
-      paddingVertical: 14,
-      paddingHorizontal: 32,
+      paddingVertical: screenHeight * 0.017,
+      paddingHorizontal: screenWidth * 0.08,
       borderRadius: 8,
-      marginTop: 16,
+      marginTop: screenHeight * 0.02,
       gap: 8,
       borderWidth: 3,
       borderTopColor: '#FFF8DC',
@@ -5224,7 +6458,7 @@ export default function BuildScreen() {
       elevation: 4,
     },
     startButtonText: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: '#1a1a2e',
     },
@@ -5389,27 +6623,27 @@ export default function BuildScreen() {
       flex: 1,
       backgroundColor: 'rgba(0, 0, 0, 0.7)',
       justifyContent: 'flex-end',
-      paddingBottom: 40,
+      paddingBottom: screenHeight * 0.05,
     },
     celebrationBadge: {
       position: 'absolute',
-      top: 30,
+      top: screenHeight * 0.035,
       alignSelf: 'center',
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: 'rgba(45, 45, 68, 0.95)',
-      paddingHorizontal: 24,
-      paddingVertical: 10,
-      borderRadius: 24,
+      paddingHorizontal: screenWidth * 0.06,
+      paddingVertical: screenHeight * 0.012,
+      borderRadius: Math.round(screenWidth * 0.06),
       borderWidth: 2,
       borderColor: '#FFD700',
-      gap: 10,
+      gap: Math.round(screenWidth * 0.025),
     },
     celebrationEmoji: {
-      fontSize: 22,
+      fontSize: Math.round(screenWidth * 0.055),
     },
     celebrationText: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       fontWeight: 'bold',
       color: '#FFD700',
       textShadowColor: '#000',
@@ -5421,11 +6655,11 @@ export default function BuildScreen() {
       marginBottom: -10,
     },
     characterImage: {
-      width: 220,
-      height: 220,
+      width: Math.round(screenWidth * 0.55),
+      height: Math.round(screenWidth * 0.55),
     },
     dialogueContainer: {
-      paddingHorizontal: 16,
+      paddingHorizontal: screenWidth * 0.04,
       alignItems: 'center',
     },
     dialogueBox: {
@@ -5436,35 +6670,35 @@ export default function BuildScreen() {
       borderLeftColor: '#FFD700',
       borderBottomColor: '#B8860B',
       borderRightColor: '#B8860B',
-      paddingHorizontal: 20,
-      paddingTop: 20,
-      paddingBottom: 12,
-      minHeight: 130,
+      paddingHorizontal: screenWidth * 0.05,
+      paddingTop: screenHeight * 0.025,
+      paddingBottom: screenHeight * 0.015,
+      minHeight: screenHeight * 0.16,
     },
     dialogueText: {
-      fontSize: 17,
+      fontSize: Math.round(screenWidth * 0.043),
       color: '#FFD700',
-      lineHeight: 26,
+      lineHeight: Math.round(screenWidth * 0.065),
       fontWeight: '500',
       textShadowColor: '#000',
       textShadowOffset: { width: 1, height: 1 },
       textShadowRadius: 0,
-      minHeight: 60,
+      minHeight: screenHeight * 0.075,
     },
     cursor: {
       color: '#FFD700',
-      fontSize: 17,
+      fontSize: Math.round(screenWidth * 0.043),
     },
     dialogueFooter: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginTop: 12,
+      marginTop: screenHeight * 0.015,
     },
     navButton: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
+      width: Math.round(screenWidth * 0.09),
+      height: Math.round(screenWidth * 0.09),
+      borderRadius: Math.round(screenWidth * 0.045),
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -5474,19 +6708,19 @@ export default function BuildScreen() {
     dotsContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: Math.round(screenWidth * 0.015),
     },
     dot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
+      width: Math.round(screenWidth * 0.02),
+      height: Math.round(screenWidth * 0.02),
+      borderRadius: Math.round(screenWidth * 0.01),
       backgroundColor: '#555',
     },
     dotActive: {
       backgroundColor: '#FFD700',
-      width: 10,
-      height: 10,
-      borderRadius: 5,
+      width: Math.round(screenWidth * 0.025),
+      height: Math.round(screenWidth * 0.025),
+      borderRadius: Math.round(screenWidth * 0.0125),
     },
     dotCompleted: {
       backgroundColor: '#B8860B',
@@ -5497,7 +6731,7 @@ export default function BuildScreen() {
       gap: 4,
     },
     tapHint: {
-      fontSize: 12,
+      fontSize: Math.round(screenWidth * 0.03),
       color: '#FFD700',
       fontWeight: '600',
     },
@@ -5506,10 +6740,10 @@ export default function BuildScreen() {
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: '#FFD700',
-      paddingVertical: 14,
-      paddingHorizontal: 32,
+      paddingVertical: screenHeight * 0.017,
+      paddingHorizontal: screenWidth * 0.08,
       borderRadius: 8,
-      marginTop: 16,
+      marginTop: screenHeight * 0.02,
       gap: 8,
       borderWidth: 3,
       borderTopColor: '#FFF8DC',
@@ -5523,7 +6757,7 @@ export default function BuildScreen() {
       elevation: 4,
     },
     finishButtonText: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: '#1a1a2e',
     },
@@ -5542,17 +6776,23 @@ export default function BuildScreen() {
         <View style={menuStyles.menuButtonsContainer}>
           {/* Story Mode Button */}
           <TouchableOpacity
-            style={[menuStyles.menuButton, menuStyles.storyModeButton]}
+            style={[
+              menuStyles.menuButton, 
+              menuStyles.storyModeButton,
+              !tutorialCompleted && menuStyles.lockedModeButton,
+            ]}
             onPress={handleStoryMode}
             activeOpacity={0.7}
           >
             <View style={menuStyles.menuButtonIcon}>
-              <Ionicons name="book" size={24} color="#F5DEB3" />
+              <Ionicons name={tutorialCompleted ? 'book' : 'lock-closed'} size={24} color={tutorialCompleted ? '#F5DEB3' : '#888'} />
             </View>
             <View style={menuStyles.menuButtonContent}>
-              <Text style={menuStyles.menuButtonText}>Story Mode</Text>
-              {/*<Text style={menuStyles.menuButtonSubtext}>Follow the adventure</Text>*/}
-            </View>
+              <Text style={[menuStyles.menuButtonText, !tutorialCompleted && { color: '#888' }]}>Story Mode</Text>
+              {/* {!tutorialCompleted && (
+                <Text style={{ fontSize: 11, color: '#666', marginTop: 2 }}>Complete Tutorial first</Text>
+              )}*/}
+            </View> 
           </TouchableOpacity>
 
           {/* Custom Mode Button */}
@@ -5621,18 +6861,18 @@ export default function BuildScreen() {
       alignItems: 'center',
     },
     menuButtonsContainer: {
-      paddingHorizontal: 20,
-      gap: 12,
+      paddingHorizontal: screenWidth * 0.05,
+      gap: Math.round(screenHeight * 0.015),
       width: '85%',
-      maxWidth: 320,
+      maxWidth: screenWidth * 0.82,
     },
     menuButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 14,
-      paddingHorizontal: 20,
-      gap: 12,
+      paddingVertical: screenHeight * 0.017,
+      paddingHorizontal: screenWidth * 0.05,
+      gap: Math.round(screenWidth * 0.03),
       // RPG-style box with pixel border effect
       backgroundColor: '#2D2D44',
       borderWidth: 4,
@@ -5677,23 +6917,23 @@ export default function BuildScreen() {
       borderRightColor: '#2A3A5C',
     },
     menuButtonIcon: {
-      width: 32,
-      height: 32,
+      width: Math.round(screenWidth * 0.08),
+      height: Math.round(screenWidth * 0.08),
       justifyContent: 'center',
       alignItems: 'center',
     },
     menuButtonText: {
       flex: 1,
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
-      color: '#F5DEB3', // Wheat color - classic RPG text
+      color: '#F5DEB3',
       textShadowColor: '#000',
       textShadowOffset: { width: 1, height: 1 },
       textShadowRadius: 0,
       letterSpacing: 1,
     },
     menuButtonSubtext: {
-      fontSize: 10,
+      fontSize: Math.round(screenWidth * 0.025),
       color: '#D4C4A8',
       textShadowColor: '#000',
       textShadowOffset: { width: 1, height: 1 },
@@ -5709,223 +6949,109 @@ export default function BuildScreen() {
   const howToPlayStyles = StyleSheet.create({
     section: {
       backgroundColor: colors.background,
-      padding: 16,
+      padding: Math.round(screenWidth * 0.04),
       borderRadius: 12,
     },
     sectionTitle: {
-      fontSize: 18,
+      fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       marginBottom: 8,
     },
     sectionText: {
-      fontSize: 14,
-      lineHeight: 20,
+      fontSize: Math.round(screenWidth * 0.035),
+      lineHeight: Math.round(screenWidth * 0.05),
     },
   });
   
   // Koin Tutorial Styles - In-Game Interactive Tutorial
   const tutorialStyles = StyleSheet.create({
-    // Game overlay styles
-    gameOverlay: {
-      ...StyleSheet.absoluteFillObject,
-      zIndex: 900,
+    // ===== Tutorial header (replaces normal header in tutorial mode) =====
+    tutorialHeader: {
+      backgroundColor: 'rgba(26, 26, 46, 0.97)',
+      paddingHorizontal: screenWidth * 0.025,
+      paddingTop: screenHeight * 0.007,
+      paddingBottom: screenHeight * 0.005,
+      borderBottomWidth: 1,
+      borderBottomColor: 'rgba(255, 152, 0, 0.35)',
+      height: screenHeight * 0.15,
+      overflow: 'hidden',
     },
-    highlightFab: {
-      position: 'absolute',
-      bottom: 90,
-      right: 10,
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      borderWidth: 3,
-      borderColor: '#FF9800',
-      backgroundColor: 'transparent',
-    },
-    highlightHeader: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      height: 120,
-      borderWidth: 3,
-      borderColor: '#FF9800',
-      backgroundColor: 'transparent',
-    },
-    // Koin positioning
-    koinGameContainer: {
-      position: 'absolute',
-      zIndex: 950,
-    },
-    koinPositionCenter: {
-      top: '25%',
-      left: 20,
-      right: 20,
-      alignItems: 'center',
-    },
-    koinPositionTop: {
-      top: 140,
-      left: 10,
-      right: 10,
-    },
-    koinPositionBottom: {
-      bottom: 180,
-      left: 10,
-      right: 10,
-    },
-    koinPositionLeft: {
-      top: '35%',
-      left: 10,
-      width: '80%',
-    },
-    koinPositionRight: {
-      top: '25%',
-      right: 50,
-      width: '80%',
-      alignItems: 'flex-end',
-    },
-    koinWrapper: {
+    tutorialRow1: {
       flexDirection: 'row',
       alignItems: 'flex-start',
-    },
-    koinGameImage: {
-      width: 120,
-      height: 120,
-    },
-    speechBubbleGame: {
+      gap: 8,
       flex: 1,
-      backgroundColor: '#FFFDE7',
-      borderRadius: 16,
-      padding: 14,
-      marginLeft: -10,
-      marginTop: 20,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.25,
-      shadowRadius: 4,
-      elevation: 8,
-      maxWidth: 240,
     },
-    speechTitleGame: {
-      fontSize: 15,
+    koinMini: {
+      width: Math.round(screenWidth * 0.095),
+      height: Math.round(screenWidth * 0.095),
+    },
+    tutorialTextArea: {
+      flex: 1,
+    },
+    tutorialTitle: {
+      fontSize: Math.round(screenWidth * 0.033),
       fontWeight: 'bold',
-      color: '#2C3E50',
-      marginBottom: 6,
+      color: '#FF9800',
     },
-    speechMessageGame: {
-      fontSize: 13,
-      color: '#5D6D7E',
-      lineHeight: 18,
-      marginBottom: 10,
+    tutorialMessage: {
+      fontSize: Math.round(screenWidth * 0.028),
+      color: '#CCC',
+      lineHeight: Math.round(screenWidth * 0.035),
+      marginTop: 1,
     },
-    stepIndicator: {
-      fontSize: 11,
-      color: '#999',
-      marginTop: 8,
-      textAlign: 'right',
-    },
-    // Progress dots inside speech bubble
-    progressDotsInline: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      gap: 5,
-      marginBottom: 10,
-    },
-    // Navigation inside speech bubble
-    navButtonRowInline: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginTop: 4,
-    },
-    skipButtonInline: {
-      paddingVertical: 6,
-      paddingHorizontal: 8,
-    },
-    backButtonInline: {
-      backgroundColor: '#F0F0F0',
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-      borderRadius: 20,
-    },
-    nextButtonInline: {
+    tutorialRow2: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: '#FF9800',
-      paddingVertical: 8,
-      paddingHorizontal: 14,
-      borderRadius: 20,
-      gap: 4,
-    },
-    nextButtonTextInline: {
-      fontSize: 13,
-      fontWeight: 'bold',
-      color: '#FFF',
-    },
-    // Navigation at bottom (legacy - no longer used)
-    tutorialNavigation: {
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.9)',
-      paddingVertical: 16,
-      paddingHorizontal: 20,
-      paddingBottom: 30,
-      zIndex: 1000,
-    },
-    progressDotsGame: {
-      flexDirection: 'row',
-      justifyContent: 'center',
+      marginTop: 5,
       gap: 6,
-      marginBottom: 16,
     },
-    dotGame: {
-      width: 6,
-      height: 6,
+    tutorialHint: {
+      flex: 1,
+      fontSize: Math.round(screenWidth * 0.025),
+      color: '#FFB74D',
+      fontStyle: 'italic',
+    },
+    tutorialDots: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+    },
+    dot: {
+      width: 5,
+      height: 5,
       borderRadius: 3,
-      backgroundColor: '#DDD',
+      backgroundColor: 'rgba(255,255,255,0.25)',
     },
-    dotActiveGame: {
+    dotActive: {
       backgroundColor: '#FF9800',
-      width: 14,
+      width: 12,
     },
-    dotCompletedGame: {
+    dotDone: {
       backgroundColor: '#4CAF50',
     },
-    navButtonRow: {
+    tutorialNav: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
       alignItems: 'center',
+      gap: 6,
     },
-    navMainButtons: {
-      flexDirection: 'row',
-      gap: 8,
+    btnBack: {
+      backgroundColor: 'rgba(255,255,255,0.12)',
+      paddingVertical: 5,
+      paddingHorizontal: 8,
+      borderRadius: 12,
     },
-    skipButtonGame: {
-      paddingVertical: 10,
-      paddingHorizontal: 16,
-    },
-    skipButtonTextGame: {
-      fontSize: 12,
-      color: '#999',
-    },
-    backButtonGame: {
-      backgroundColor: 'rgba(255,255,255,0.2)',
-      paddingVertical: 12,
-      paddingHorizontal: 16,
-      borderRadius: 25,
-    },
-    nextButtonGame: {
+    btnNext: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: '#FF9800',
-      paddingVertical: 12,
-      paddingHorizontal: 24,
-      borderRadius: 25,
-      gap: 8,
+      paddingVertical: 5,
+      paddingHorizontal: 10,
+      borderRadius: 12,
+      gap: 3,
     },
-    nextButtonTextGame: {
-      fontSize: 16,
+    btnNextText: {
+      fontSize: Math.round(screenWidth * 0.028),
       fontWeight: 'bold',
       color: '#FFF',
     },
@@ -5935,23 +7061,23 @@ export default function BuildScreen() {
       backgroundColor: 'rgba(0, 0, 0, 0.85)',
       justifyContent: 'center',
       alignItems: 'center',
-      padding: 20,
+      padding: screenWidth * 0.05,
     },
     koinContainer: {
-      marginBottom: -20,
+      marginBottom: -screenHeight * 0.025,
       zIndex: 10,
     },
     koinImage: {
-      width: 180,
-      height: 180,
+      width: Math.round(screenWidth * 0.45),
+      height: Math.round(screenWidth * 0.45),
     },
     speechBubble: {
       backgroundColor: '#FFFDE7',
-      borderRadius: 24,
-      padding: 24,
-      paddingTop: 32,
+      borderRadius: Math.round(screenWidth * 0.06),
+      padding: Math.round(screenWidth * 0.06),
+      paddingTop: Math.round(screenWidth * 0.08),
       width: '100%',
-      maxWidth: 340,
+      maxWidth: screenWidth * 0.85,
       alignItems: 'center',
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 4 },
@@ -5972,18 +7098,18 @@ export default function BuildScreen() {
       borderBottomColor: '#FFFDE7',
     },
     speechTitle: {
-      fontSize: 20,
+      fontSize: Math.round(screenWidth * 0.05),
       fontWeight: 'bold',
       color: '#2C3E50',
       textAlign: 'center',
-      marginBottom: 12,
+      marginBottom: screenHeight * 0.015,
     },
     speechMessage: {
-      fontSize: 15,
+      fontSize: Math.round(screenWidth * 0.038),
       color: '#5D6D7E',
       textAlign: 'center',
-      lineHeight: 22,
-      marginBottom: 20,
+      lineHeight: Math.round(screenWidth * 0.055),
+      marginBottom: screenHeight * 0.025,
     },
     progressDots: {
       flexDirection: 'row',
@@ -6013,14 +7139,14 @@ export default function BuildScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 14,
-      paddingHorizontal: 20,
+      paddingVertical: screenHeight * 0.017,
+      paddingHorizontal: screenWidth * 0.05,
       borderRadius: 12,
       backgroundColor: '#F5F5F5',
       gap: 6,
     },
     backButtonText: {
-      fontSize: 15,
+      fontSize: Math.round(screenWidth * 0.038),
       fontWeight: '600',
       color: '#666',
     },
@@ -6029,23 +7155,23 @@ export default function BuildScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 14,
-      paddingHorizontal: 24,
+      paddingVertical: screenHeight * 0.017,
+      paddingHorizontal: screenWidth * 0.06,
       borderRadius: 12,
       backgroundColor: '#FF9800',
       gap: 8,
     },
     nextButtonText: {
-      fontSize: 16,
+      fontSize: Math.round(screenWidth * 0.04),
       fontWeight: 'bold',
       color: '#FFF',
     },
     skipButton: {
-      marginTop: 16,
-      paddingVertical: 8,
+      marginTop: screenHeight * 0.02,
+      paddingVertical: screenHeight * 0.01,
     },
     skipButtonText: {
-      fontSize: 13,
+      fontSize: Math.round(screenWidth * 0.033),
       color: '#999',
       textDecorationLine: 'underline',
     },
@@ -6098,55 +7224,141 @@ export default function BuildScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header with Title and Spending Tracker */}
-      <View style={styles.header}>
-        {/* Back to Menu Button */}
-        <TouchableOpacity
-          style={styles.backToMenuButton}
-          onPress={() => {
-            // Clear tutorial state if active
-            if (tutorialActive) {
-              setTutorialActive(false);
-              setTutorialStep(0);
-            }
-            setGameMode(null);
-            setShowMainMenu(true);
-          }}
-        >
-          <Ionicons name="home" size={20} color="#FFF" />
-        </TouchableOpacity>
-        <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>{currentMap.icon} {currentMap.name}</Text>
-          <Text style={styles.headerSubtitle}>
-            {gameMode === 'story' ? `Story Mode - Level ${storyLevel}` : 'Custom Mode'}
-          </Text>
-        </View>
-        <View style={styles.headerRight}>
-          <Text style={styles.spendingLabel}>Today's Spending</Text>
-          <Text style={styles.spendingAmount}>₱{todaySpending.toFixed(2)}</Text>
-          {/* Weekly Budget - Show in Story Mode and Custom Mode */}
-          {(gameMode === 'story' || gameMode === 'custom') && (
-            <>
-              <Text style={[styles.spendingLabel, { marginTop: 6 }]}>Weekly Budget</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={[styles.spendingAmount, { 
-                  color: getRemainingWeeklyBudget() < weeklyBudget * 0.2 ? '#FF4444' : '#4CAF50' 
-                }]}>
-                  ₱{getRemainingWeeklyBudget().toFixed(2)}
+      {/* Header — tutorial mode replaces it with compact tutorial bar */}
+      {tutorialActive && gameMode === 'tutorial' ? (
+        <View style={tutorialStyles.tutorialHeader}>
+          {/* Row 1: Home + Koin avatar + title/message */}
+          <View style={tutorialStyles.tutorialRow1}>
+            <TouchableOpacity
+              style={styles.backToMenuButton}
+              onPress={() => {
+                setTutorialActive(false);
+                setTutorialStep(0);
+                setGameMode(null);
+                setShowMainMenu(true);
+              }}
+            >
+              <Ionicons name="home" size={20} color="#FFF" />
+            </TouchableOpacity>
+            <Image
+              source={KOIN_TUTORIAL_IMAGE}
+              style={tutorialStyles.koinMini}
+              resizeMode="contain"
+            />
+            <View style={tutorialStyles.tutorialTextArea}>
+              <Text style={tutorialStyles.tutorialTitle} numberOfLines={1}>
+                {TUTORIAL_STEPS[tutorialStep]?.title}
+              </Text>
+              <Text style={tutorialStyles.tutorialMessage}>
+                {TUTORIAL_STEPS[tutorialStep]?.message}
+              </Text>
+            </View>
+          </View>
+          {/* Row 2: hint + dots + nav */}
+          <View style={tutorialStyles.tutorialRow2}>
+            {!isTutorialStepComplete() && TUTORIAL_STEPS[tutorialStep]?.conditionKey ? (
+              <Text style={tutorialStyles.tutorialHint}>⏳ Do the action to continue</Text>
+            ) : (
+              <View style={{ flex: 1 }} />
+            )}
+            <View style={tutorialStyles.tutorialDots}>
+              {TUTORIAL_STEPS.map((_, i) => (
+                <View key={i} style={[
+                  tutorialStyles.dot,
+                  i === tutorialStep && tutorialStyles.dotActive,
+                  i < tutorialStep && tutorialStyles.dotDone,
+                ]} />
+              ))}
+            </View>
+            <View style={tutorialStyles.tutorialNav}>
+              {tutorialStep > 0 && (
+                <TouchableOpacity
+                  style={tutorialStyles.btnBack}
+                  onPress={() => setTutorialStep(p => p - 1)}
+                >
+                  <Ionicons name="arrow-back" size={14} color="#AAA" />
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[tutorialStyles.btnNext, !isTutorialStepComplete() && { backgroundColor: '#555' }]}
+                disabled={!isTutorialStepComplete()}
+                onPress={() => {
+                  if (tutorialStep < TUTORIAL_STEPS.length - 1) {
+                    const next = tutorialStep + 1;
+                    setTutorialStep(next);
+                    gameDatabaseService.saveTutorialProgress({ currentStep: next, stepsCompleted: Array.from({ length: next }, (_, i) => String(i)), tutorialCompleted: false });
+                  } else {
+                    endTutorial();
+                  }
+                }}
+              >
+                <Text style={tutorialStyles.btnNextText}>
+                  {tutorialStep === TUTORIAL_STEPS.length - 1 ? 'Done!' : 'Next'}
                 </Text>
-                {gameMode === 'custom' && (
-                  <TouchableOpacity
-                    onPress={() => { setSettingsModeType(customModeType); setShowCustomSettingsModal(true); }}
-                    style={styles.settingsGearButton}
-                  >
-                    <Ionicons name="settings-sharp" size={18} color="#F5DEB3" />
-                  </TouchableOpacity>
-                )}
-              </View>
-            </>
-          )}
+                <Ionicons
+                  name={tutorialStep === TUTORIAL_STEPS.length - 1 ? 'checkmark' : 'arrow-forward'}
+                  size={13} color="#FFF"
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
-      </View>
+      ) : (
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backToMenuButton}
+            onPress={() => {
+              if (tutorialActive) {
+                setTutorialActive(false);
+                setTutorialStep(0);
+              }
+              setGameMode(null);
+              setShowMainMenu(true);
+            }}
+          >
+            <Ionicons name="home" size={20} color="#FFF" />
+          </TouchableOpacity>
+          {(gameMode === 'story') && (
+            <TouchableOpacity
+              style={styles.giveUpButton}
+              onPress={handleAbandonSession}
+            >
+              <Ionicons name="flag" size={16} color="#FFF" />
+              <Text style={styles.giveUpButtonText}>Give Up</Text>
+            </TouchableOpacity>
+          )}
+          <View style={styles.headerLeft}>
+            <Text style={styles.headerTitle}>{currentMap.icon} {currentMap.name}</Text>
+            <Text style={styles.headerSubtitle}>
+              {gameMode === 'story' ? `Story Mode - Level ${storyLevel}` : 'Custom Mode'}
+            </Text>
+          </View>
+          <View style={styles.headerRight}>
+            <Text style={styles.spendingLabel}>Today's Spending</Text>
+            <Text style={styles.spendingAmount}>₱{todaySpending.toFixed(2)}</Text>
+            {(gameMode === 'story' || gameMode === 'custom') && (
+              <>
+                <Text style={[styles.spendingLabel, { marginTop: 6 }]}>Weekly Budget</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={[styles.spendingAmount, {
+                    color: getRemainingWeeklyBudget() < weeklyBudget * 0.2 ? '#FF4444' : '#4CAF50'
+                  }]}>
+                    ₱{getRemainingWeeklyBudget().toFixed(2)}
+                  </Text>
+                  {gameMode === 'custom' && (
+                    <TouchableOpacity
+                      onPress={() => { setSettingsModeType(customModeType); setShowCustomSettingsModal(true); }}
+                      style={styles.settingsGearButton}
+                    >
+                      <Ionicons name="settings-sharp" size={18} color="#F5DEB3" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      )}
 
       {/* Story/Custom Mode Progress - Level-specific UI */}
       {(gameMode === 'story' || gameMode === 'custom') && (
@@ -6270,17 +7482,6 @@ export default function BuildScreen() {
         </View>
       )}
 
-      {/* Location Badge - positioned below progress bar in story/custom mode */}
-      <View style={[
-        styles.locationBadge,
-        (gameMode === 'story' || gameMode === 'custom') && { top: 105 }
-      ]}>
-        <View style={[styles.walkingIndicator, isWalking && { backgroundColor: '#FF9800' }]} />
-        <Text style={styles.locationText}>
-          {isWalking ? 'Walking to...' : currentLocation}
-        </Text>
-      </View>
-
       {/* Map Content */}
       {renderMapContent()}
 
@@ -6306,111 +7507,7 @@ export default function BuildScreen() {
         </View>
       )}
 
-      {/* In-Game Koin Tutorial Overlay */}
-      {tutorialActive && gameMode === 'tutorial' && (
-        <>
-          {/* Semi-transparent overlay for non-highlighted areas */}
-          <View style={tutorialStyles.gameOverlay} pointerEvents="box-none">
-            {/* Highlight specific UI elements based on current step */}
-            {TUTORIAL_STEPS[tutorialStep].highlight === 'fab' && (
-              <View style={tutorialStyles.highlightFab} />
-            )}
-            {TUTORIAL_STEPS[tutorialStep].highlight === 'header' && (
-              <View style={tutorialStyles.highlightHeader} />
-            )}
-          </View>
-          
-          {/* Koin Character and Speech Bubble */}
-          <View 
-            style={[
-              tutorialStyles.koinGameContainer,
-              TUTORIAL_STEPS[tutorialStep].position === 'top' && tutorialStyles.koinPositionTop,
-              TUTORIAL_STEPS[tutorialStep].position === 'bottom' && tutorialStyles.koinPositionBottom,
-              TUTORIAL_STEPS[tutorialStep].position === 'left' && tutorialStyles.koinPositionLeft,
-              TUTORIAL_STEPS[tutorialStep].position === 'right' && tutorialStyles.koinPositionRight,
-              TUTORIAL_STEPS[tutorialStep].position === 'center' && tutorialStyles.koinPositionCenter,
-            ]}
-            pointerEvents="box-none"
-          >
-            <View style={tutorialStyles.koinWrapper}>
-              {/* Koin Image */}
-              <Image
-                source={KOIN_TUTORIAL_IMAGE}
-                style={tutorialStyles.koinGameImage}
-                resizeMode="contain"
-              />
-              
-              {/* Speech Bubble with Navigation Inside */}
-              <View style={tutorialStyles.speechBubbleGame}>
-                <Text style={tutorialStyles.speechTitleGame}>
-                  {TUTORIAL_STEPS[tutorialStep].title}
-                </Text>
-                <Text style={tutorialStyles.speechMessageGame}>
-                  {TUTORIAL_STEPS[tutorialStep].message}
-                </Text>
-                
-                {/* Progress Dots */}
-                <View style={tutorialStyles.progressDotsInline}>
-                  {TUTORIAL_STEPS.map((_, index) => (
-                    <View
-                      key={index}
-                      style={[
-                        tutorialStyles.dotGame,
-                        index === tutorialStep && tutorialStyles.dotActiveGame,
-                        index < tutorialStep && tutorialStyles.dotCompletedGame,
-                      ]}
-                    />
-                  ))}
-                </View>
-                
-                {/* Navigation Buttons Inside Speech Bubble */}
-                <View style={tutorialStyles.navButtonRowInline}>
-                  <TouchableOpacity
-                    style={tutorialStyles.skipButtonInline}
-                    onPress={endTutorial}
-                  >
-                    <Text style={tutorialStyles.skipButtonTextGame}>Skip</Text>
-                  </TouchableOpacity>
-                  
-                  <View style={tutorialStyles.navMainButtons}>
-                    {tutorialStep > 0 && (
-                      <TouchableOpacity
-                        style={tutorialStyles.backButtonInline}
-                        onPress={() => setTutorialStep(prev => prev - 1)}
-                      >
-                        <Ionicons name="arrow-back" size={18} color="#666" />
-                      </TouchableOpacity>
-                    )}
-                    
-                    <TouchableOpacity
-                      style={tutorialStyles.nextButtonInline}
-                      onPress={() => {
-                        if (tutorialStep < TUTORIAL_STEPS.length - 1) {
-                          const nextStep = tutorialStep + 1;
-                          setTutorialStep(prev => prev + 1);
-                          // Persist step progress to Supabase
-                          gameDatabaseService.saveTutorialProgress({ currentStep: nextStep, stepsCompleted: Array.from({ length: nextStep }, (_, i) => String(i)), tutorialCompleted: false });
-                        } else {
-                          endTutorial();
-                        }
-                      }}
-                    >
-                      <Text style={tutorialStyles.nextButtonTextInline}>
-                        {tutorialStep === TUTORIAL_STEPS.length - 1 ? "Done!" : 'Next'}
-                      </Text>
-                      <Ionicons 
-                        name={tutorialStep === TUTORIAL_STEPS.length - 1 ? "checkmark" : "arrow-forward"} 
-                        size={16} 
-                        color="#FFF" 
-                      />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-            </View>
-          </View>
-        </>
-      )}
+      {/* Tutorial overlay removed — tutorial now renders inside the header */}
 
       {/* Closet Modal - Character Selection */}
       <Modal
@@ -6549,6 +7646,15 @@ export default function BuildScreen() {
               </View>
             </View>
 
+            {/* Tutorial guidance banner inside notebook modal */}
+            {tutorialActive && gameMode === 'tutorial' && (
+              <View style={{ backgroundColor: '#FFF3E0', borderRadius: 10, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#FF9800' }}>
+                <Text style={{ fontSize: 13, color: '#E65100', textAlign: 'center', fontWeight: '600' }}>
+                  🎓 Practice logging! Enter any amount and tap Log. This won't be saved to your records.
+                </Text>
+              </View>
+            )}
+
             <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 590 }}>
               {/* Category Selection */}
               <View style={{ marginBottom: 16 }}>
@@ -6664,7 +7770,8 @@ export default function BuildScreen() {
                 </View>
               )}
 
-              {/* No Spend Today Button */}
+              {/* No Spend Today Button — hidden in tutorial */}
+              {!(tutorialActive && gameMode === 'tutorial') && (
               <TouchableOpacity
                 style={{
                   flexDirection: 'row',
@@ -6723,6 +7830,7 @@ export default function BuildScreen() {
                   No Spend Today
                 </Text>
               </TouchableOpacity>
+              )}
 
               {/* Action Buttons */}
               <View style={styles.buttonContainer}>
@@ -6762,6 +7870,18 @@ export default function BuildScreen() {
                     setExpenseAmount('');
                     setExpenseNote('');
                     setNotebookCategory('Food & Dining');
+
+                    // ── Tutorial mode: skip DB save, mark condition ──
+                    if (tutorialActive && gameMode === 'tutorial') {
+                      Alert.alert(
+                        '🎓 Practice Expense!',
+                        `You practiced logging ₱${savedAmount.toFixed(2)} in ${savedCategory}.\n\nThis wasn't saved — nice work!`,
+                        [{ text: 'OK' }]
+                      );
+                      markTutorialCondition('notebook_expense_logged');
+                      console.log('🎓 Tutorial: Skipped notebook expense save (practice mode)');
+                      return;
+                    }
 
                     // Quick non-blocking feedback
                     Alert.alert(
@@ -6853,7 +7973,7 @@ export default function BuildScreen() {
                   disabled={isSubmitting}
                 >
                   <Text style={[styles.buttonText, styles.submitButtonText]}>
-                    {isSubmitting ? 'Saving...' : `Save Expense ₱${expenseAmount || '0'}`}
+                    {isSubmitting ? 'Logging...' : `Log Expense ₱${expenseAmount || '0'}`}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -7126,6 +8246,54 @@ export default function BuildScreen() {
         </View>
       </Modal>
 
+      {/* Abandon / End Session Confirmation Modal */}
+      <Modal
+        visible={showAbandonModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowAbandonModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.travelModalContent, { alignItems: 'center', paddingVertical: 30 }]}>
+            <Text style={{ fontSize: 48, marginBottom: 12 }}>⚠️</Text>
+            <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#FFF', marginBottom: 8, textAlign: 'center' }}>
+              End Session?
+            </Text>
+            <Text style={{ fontSize: 14, color: '#BBB', textAlign: 'center', marginBottom: 24, paddingHorizontal: 12 }}>
+              Ending the session will reset your progress for this level. You will need to start over.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 12, width: '100%', paddingHorizontal: 16 }}>
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  backgroundColor: 'rgba(100,100,100,0.6)',
+                  paddingVertical: 14,
+                  borderRadius: 10,
+                  alignItems: 'center',
+                  borderWidth: 1,
+                  borderColor: 'rgba(255,255,255,0.2)',
+                }}
+                onPress={() => setShowAbandonModal(false)}
+              >
+                <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '600' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  backgroundColor: '#E53935',
+                  paddingVertical: 14,
+                  borderRadius: 10,
+                  alignItems: 'center',
+                }}
+                onPress={handleConfirmAbandon}
+              >
+                <Text style={{ color: '#FFF', fontSize: 15, fontWeight: 'bold' }}>Give Up</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Travel Modal */}
       <Modal
         visible={showTravelModal}
@@ -7137,6 +8305,19 @@ export default function BuildScreen() {
           <View style={styles.travelModalContent}>
             <Text style={styles.travelTitle}>🚪 Where to?</Text>
             <Text style={styles.travelSubtitle}>Choose your destination</Text>
+
+            {/* Tutorial guidance banner inside travel modal */}
+            {tutorialActive && gameMode === 'tutorial' && (
+              <View style={{ backgroundColor: '#FFF3E0', borderRadius: 10, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#FF9800' }}>
+                <Text style={{ fontSize: 13, color: '#E65100', textAlign: 'center', fontWeight: '600' }}>
+                  {TUTORIAL_STEPS[tutorialStep]?.id === 'exit_door' 
+                    ? '🎓 Choose School to continue the tutorial!'
+                    : TUTORIAL_STEPS[tutorialStep]?.id === 'go_to_mall'
+                    ? '🎓 Choose the Mall to continue!'
+                    : '🎓 Pick a destination!'}
+                </Text>
+              </View>
+            )}
 
             {travelDestinations.map((destId) => {
               const dest = MAPS[destId];
@@ -7189,6 +8370,24 @@ export default function BuildScreen() {
                 How will you travel to {selectedDestination ? MAPS[selectedDestination]?.name : ''}?
               </Text>
             </View>
+
+            {/* Tutorial guidance banner inside transport modal */}
+            {tutorialActive && gameMode === 'tutorial' && (
+              <View style={{ backgroundColor: '#FFF3E0', borderRadius: 10, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#FF9800' }}>
+                <Text style={{ fontSize: 13, color: '#E65100', textAlign: 'center', fontWeight: '600' }}>
+                  {!transportMode && !tutorialViewedCar
+                    ? '🎓 First, try the Car option to learn about gas tracking!'
+                    : !transportMode && tutorialViewedCar
+                    ? '🎓 Great! Now choose Commute to log your fare!'
+                    : transportMode === 'car'
+                    ? '🎓 You can track gas expenses here! Now go back and try Commute.'
+                    : transportMode === 'commute'
+                    ? '🎓 Enter your commute fare and confirm! This is practice only.'
+                    : '🎓 Pick a transport mode!'
+                  }
+                </Text>
+              </View>
+            )}
 
             {/* Transport Mode Selection */}
             {!transportMode && (
@@ -7443,6 +8642,15 @@ export default function BuildScreen() {
               </View>
             </View>
 
+            {/* Tutorial guidance banner inside expense modal */}
+            {tutorialActive && gameMode === 'tutorial' && (
+              <View style={{ backgroundColor: '#FFF3E0', borderRadius: 10, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#FF9800' }}>
+                <Text style={{ fontSize: 13, color: '#E65100', textAlign: 'center', fontWeight: '600' }}>
+                  🎓 Practice time! Log an expense here. It won't be saved to your records.
+                </Text>
+              </View>
+            )}
+
             <ScrollView showsVerticalScrollIndicator={false}>
               {/* Quick Amount Buttons */}
               <View style={styles.quickAmountsContainer}>
@@ -7518,7 +8726,7 @@ export default function BuildScreen() {
                   disabled={isSubmitting}
                 >
                   <Text style={[styles.buttonText, styles.submitButtonText]}>
-                    {isSubmitting ? 'Saving...' : 'Save ₱' + (expenseAmount || '0')}
+                    {isSubmitting ? 'Logging...' : 'Log ₱' + (expenseAmount || '0')}
                   </Text>
                 </TouchableOpacity>
               </View>

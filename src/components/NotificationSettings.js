@@ -4,7 +4,6 @@ import { View, Text, Switch, StyleSheet, TouchableOpacity, Alert } from 'react-n
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { NotificationService } from '../MonT/services/NotificationService';
 import { useTheme } from '../context/ThemeContext';
 
 const NotificationSettings = () => {
@@ -38,14 +37,12 @@ const NotificationSettings = () => {
     setExpenseReminder(value);
     
     if (value) {
-      await NotificationService.scheduleDailyExpenseReminder(
-        reminderTime.getHours(),
-        reminderTime.getMinutes()
-      );
-      Alert.alert('MonT Reminder Set! 🔔', 'I\'ll remind you daily to track your expenses!');
+      // Save the reminder preference
+      await AsyncStorage.setItem('expense_reminder_enabled', 'true');
+      Alert.alert('Reminder Set! \uD83D\uDD14', 'You will be reminded daily to track your expenses!');
     } else {
-      await NotificationService.cancelNotification('daily-expense-reminder');
-      Alert.alert('Reminder Disabled', 'MonT will no longer send daily expense reminders.');
+      await AsyncStorage.removeItem('expense_reminder_enabled');
+      Alert.alert('Reminder Disabled', 'Daily expense reminders have been turned off.');
     }
   };
 
@@ -56,11 +53,12 @@ const NotificationSettings = () => {
       setReminderTime(selectedTime);
       
       if (expenseReminder) {
-        await NotificationService.scheduleDailyExpenseReminder(
-          selectedTime.getHours(),
-          selectedTime.getMinutes()
-        );
-        Alert.alert('Time Updated! ⏰', `MonT will remind you at ${selectedTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`);
+        // Save updated time preference
+        await AsyncStorage.setItem('expense_reminder_time', JSON.stringify({
+          hour: selectedTime.getHours(),
+          minute: selectedTime.getMinutes()
+        }));
+        Alert.alert('Time Updated! \u23F0', `Reminder set for ${selectedTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`);
       }
     }
   };
