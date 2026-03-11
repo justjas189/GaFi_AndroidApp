@@ -17,10 +17,25 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
-import { PieChart, BarChart } from 'react-native-chart-kit';
+import { LineChart } from 'react-native-chart-kit';
 import { AchievementService } from '../../services/AchievementService';
 import { normalizeCategory } from '../../utils/categoryUtils';
 import { getCategoryIcon } from '../../utils/categoryIcons';
+
+// Sub-categories per expense category (synced with GameScreen)
+const SUBCATEGORIES = {
+  'Food & Dining': [],
+  'Transport': ['Public Transit', 'Ride-Hailing & Taxis', 'Fuel & Gas', 'Parking & Tolls'],
+  'Shopping': ['Clothing & Footwear', 'Personal Care & Beauty', 'Gifts', 'Home Decor', 'Others'],
+  'Groceries': ['Food & Pantry', 'Toiletries', 'Cleaning Supplies', 'Others'],
+  'Entertainment': ['Gaming', 'Digital Subscriptions', 'Personal Hobbies', 'Events & Outings', 'Others'],
+  'Electronics': ['Hardware & Gadgets', 'Accessories & Peripherals', 'Repairs', 'Software Licenses & Web Hosting'],
+  'School Supplies': ['Textbooks & Literature', 'Stationery', 'Printing & Copying'],
+  'Education': ['Tuition & Lab Fees', 'Seminars & Workshops', 'Others'],
+  'Utilities': ['Electricity', 'Water', 'Internet & Mobile', 'Rent & Dues', 'Others'],
+  'Health': ['Medicines & Pharmacy', 'Fitness & Sports', 'Dental & Medical Visits', 'Personal Care & First Aid', 'Others'],
+  'Other': [],
+};
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -63,6 +78,12 @@ const ExpenseScreen = ({ navigation, route }) => {
   const [showRangeEndPicker, setShowRangeEndPicker] = useState(false);
   const [tempStartDate, setTempStartDate] = useState(new Date());
   const [tempEndDate, setTempEndDate] = useState(new Date());
+
+  // Category filter for statistics view
+  const [selectedCategory, setSelectedCategory] = useState('all'); // 'all' or specific category
+
+  // Form sub-category state
+  const [subCategory, setSubCategory] = useState('');
 
   // Detailed view states
   const [categoryFilter, setCategoryFilter] = useState('all'); // 'all' or specific category
@@ -107,19 +128,9 @@ const ExpenseScreen = ({ navigation, route }) => {
     }
   }, [route?.params?.showForm, route?.params?.preselectedDate, navigation]);
 
-  // Process expenses data for charts
-  const charts = useMemo(() => {
-    const categoryTotals = {};
-    const dailyTotals = {};
-    let totalExpenses = 0;
-
-    categories.forEach(cat => {
-      categoryTotals[cat] = 0;
-    });
-
-    let filteredExpenses = [];
+  // Compute period boundaries (shared across charts + grouped)
+  const periodBounds = useMemo(() => {
     let periodStart, periodEnd;
-
     if (selectedPeriod === 'week') {
       periodStart = new Date(selectedWeekStart);
       periodStart.setHours(0, 0, 0, 0);
@@ -143,37 +154,87 @@ const ExpenseScreen = ({ navigation, route }) => {
       periodStart = null;
       periodEnd = null;
     }
+    return { periodStart, periodEnd };
+  }, [selectedPeriod, selectedWeekStart, selectedMonth, selectedYear, customStartDate, customEndDate]);
 
+  // Process expenses data for charts
+  const charts = useMemo(() => {
+    const { periodStart, periodEnd } = periodBounds;
+    const categoryTotals = {};
+    const dailyTotals = {};
+    const subCategoryTotals = {};
+    let totalExpenses = 0;
+
+    categories.forEach(cat => {
+      categoryTotals[cat] = 0;
+    });
+
+    // Filter by time period
+    let periodFiltered = [];
     if (periodStart && periodEnd) {
-      filteredExpenses = expenses.filter(exp => {
+      periodFiltered = expenses.filter(exp => {
         const expDate = new Date(exp.date);
         return expDate >= periodStart && expDate <= periodEnd;
       });
     } else {
-      filteredExpenses = [...expenses];
+      periodFiltered = [...expenses];
     }
 
-    filteredExpenses.forEach(expense => {
+    // Compute total for ALL categories in this period (for percentage calc)
+    periodFiltered.forEach(expense => {
       const cat = normalizeCategory(expense.category);
       categoryTotals[cat] = (categoryTotals[cat] || 0) + expense.amount;
       totalExpenses += expense.amount;
-
-      const date = new Date(expense.date).toISOString().split('T')[0];
-      dailyTotals[date] = (dailyTotals[date] || 0) + expense.amount;
     });
 
-    const pieChartData = Object.entries(categoryTotals)
+    // Build category ranking data
+    const categoryRankings = Object.entries(categoryTotals)
       .filter(([_, value]) => value > 0)
       .sort(([_, a], [__, b]) => b - a)
-      .map(([category, amount]) => ({
-        name: category,
-        amount,
-        percentage: totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0,
-        color: categoryColors[category] || categoryColors['Other'],
-        legendFontColor: theme.colors.text,
-        legendFontSize: 12,
+      .map(([catName, amt]) => ({
+        name: catName,
+        amount: amt,
+        percentage: totalExpenses > 0 ? (amt / totalExpenses) * 100 : 0,
+        color: categoryColors[catName] || categoryColors['Other'],
       }));
 
+    // Now apply category filter for the trend line
+    let filteredExpenses = periodFiltered;
+    if (selectedCategory !== 'all') {
+      filteredExpenses = periodFiltered.filter(
+        exp => normalizeCategory(exp.category) === selectedCategory
+      );
+    }
+
+    const filteredTotal = filteredExpenses.reduce((s, e) => s + e.amount, 0);
+
+    // Build daily totals for the trend line
+    filteredExpenses.forEach(expense => {
+      const date = new Date(expense.date).toISOString().split('T')[0];
+      dailyTotals[date] = (dailyTotals[date] || 0) + expense.amount;
+
+      // Track subcategory totals when a category is selected
+      if (selectedCategory !== 'all') {
+        const sub = expense.sub_category || 'Uncategorized';
+        subCategoryTotals[sub] = (subCategoryTotals[sub] || 0) + expense.amount;
+      }
+    });
+
+    // Build subcategory breakdown
+    const subCategoryBreakdown = Object.entries(subCategoryTotals)
+      .sort(([_, a], [__, b]) => b - a)
+      .map(([name, amt]) => ({
+        name,
+        amount: amt,
+        percentage: filteredTotal > 0 ? (amt / filteredTotal) * 100 : 0,
+      }));
+
+    // Percentage of selected category relative to total period spending
+    const categoryPercentage = selectedCategory !== 'all' && totalExpenses > 0
+      ? (filteredTotal / totalExpenses) * 100
+      : 0;
+
+    // Build trend line labels + data
     const dates = [];
     const amounts = [];
     
@@ -287,15 +348,19 @@ const ExpenseScreen = ({ navigation, route }) => {
     }
 
     return {
-      pieChart: pieChartData,
-      barChart: {
+      categoryRankings,
+      lineChart: {
         labels: dates,
-        datasets: [{ data: amounts.length > 0 ? amounts : [0] }]
+        datasets: [{ data: amounts.length > 0 ? amounts : [0], strokeWidth: 2 }]
       },
       totalExpenses,
-      filteredCount: filteredExpenses.length
+      filteredTotal,
+      filteredCount: filteredExpenses.length,
+      allCount: periodFiltered.length,
+      categoryPercentage,
+      subCategoryBreakdown,
     };
-  }, [expenses, selectedPeriod, selectedWeekStart, selectedMonth, selectedYear, customStartDate, customEndDate, theme.colors.text]);
+  }, [expenses, selectedPeriod, selectedWeekStart, selectedMonth, selectedYear, customStartDate, customEndDate, selectedCategory, periodBounds]);
 
   // Group expenses by date for detailed view
   const groupedExpenses = useMemo(() => {
@@ -476,12 +541,13 @@ const ExpenseScreen = ({ navigation, route }) => {
     setShowCustomRangeModal(false);
   };
 
-  const getBarChartTitle = () => {
-    if (selectedPeriod === 'week') return 'Daily Spending';
-    if (selectedPeriod === 'month') return 'Weekly Spending';
-    if (selectedPeriod === 'year') return 'Monthly Spending';
-    if (selectedPeriod === 'custom') return 'Spending Breakdown';
-    return 'Monthly Spending (Last 6 Months)';
+  const getTrendTitle = () => {
+    const prefix = selectedCategory !== 'all' ? `${selectedCategory} ` : '';
+    if (selectedPeriod === 'week') return `${prefix}Daily Trend`;
+    if (selectedPeriod === 'month') return `${prefix}Weekly Trend`;
+    if (selectedPeriod === 'year') return `${prefix}Monthly Trend`;
+    if (selectedPeriod === 'custom') return `${prefix}Spending Trend`;
+    return `${prefix}Trend (Last 6 Months)`;
   };
 
   const handleSave = async () => {
@@ -493,6 +559,7 @@ const ExpenseScreen = ({ navigation, route }) => {
     const newExpense = {
       amount: parseFloat(amount),
       category,
+      sub_category: subCategory || null,
       note,
       description,
       date: selectedDate.toISOString()
@@ -523,6 +590,7 @@ const ExpenseScreen = ({ navigation, route }) => {
   const resetForm = () => {
     setAmount('');
     setCategory('');
+    setSubCategory('');
     setNote('');
     setDescription('');
     setSelectedDate(new Date());
@@ -576,6 +644,9 @@ const ExpenseScreen = ({ navigation, route }) => {
           </View>
           <View style={styles.expenseInfo}>
             <Text style={[styles.expenseCategory, { color: theme.colors.text }]}>{normalizeCategory(item.category)}</Text>
+            {item.sub_category && (
+              <Text style={[styles.expenseSubCategory, { color: categoryColors[normalizeCategory(item.category)] || '#795548' }]} numberOfLines={1}>{item.sub_category}</Text>
+            )}
             {item.note && (
               <Text style={[styles.expenseNote, { color: theme.colors.text }]} numberOfLines={1}>{item.note}</Text>
             )}
@@ -777,6 +848,34 @@ const ExpenseScreen = ({ navigation, route }) => {
               </View>
             </View>
 
+            {/* Sub-category picker (shows when a category with subcategories is selected) */}
+            {category && SUBCATEGORIES[category] && SUBCATEGORIES[category].length > 0 && (
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>Sub-category</Text>
+                <View style={styles.categoryContainer}>
+                  {SUBCATEGORIES[category].map((sub) => (
+                    <TouchableOpacity
+                      key={sub}
+                      style={[
+                        styles.categoryButton,
+                        { backgroundColor: theme.colors.card },
+                        subCategory === sub && { backgroundColor: categoryColors[category] || theme.colors.primary }
+                      ]}
+                      onPress={() => setSubCategory(subCategory === sub ? '' : sub)}
+                    >
+                      <Text style={[
+                        styles.categoryButtonText,
+                        { color: theme.colors.textSecondary || theme.colors.text + '80' },
+                        subCategory === sub && { color: '#FFF' }
+                      ]}>
+                        {sub}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>Note</Text>
               <TextInput
@@ -854,19 +953,40 @@ const ExpenseScreen = ({ navigation, route }) => {
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-            {/* Summary Cards */}
+            {/* Summary Cards — dynamic based on category filter */}
             <View style={styles.summaryRow}>
               <View style={[styles.summaryCard, { backgroundColor: theme.colors.card }]}>
                 <Ionicons name="wallet-outline" size={24} color={theme.colors.primary} />
                 <Text style={[styles.summaryAmount, { color: theme.colors.text }]}>
-                  {formatCurrency(charts.totalExpenses)}
+                  {formatCurrency(selectedCategory !== 'all' ? charts.filteredTotal : charts.totalExpenses)}
                 </Text>
-                <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>Total Spent</Text>
+                <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>
+                  {selectedCategory !== 'all' ? selectedCategory : 'Total Spent'}
+                </Text>
               </View>
               <View style={[styles.summaryCard, { backgroundColor: theme.colors.card }]}>
-                <Ionicons name="receipt-outline" size={24} color="#4ECDC4" />
-                <Text style={[styles.summaryAmount, { color: theme.colors.text }]}>{charts.filteredCount}</Text>
-                <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>Transactions</Text>
+                <Ionicons
+                  name={selectedCategory !== 'all' ? 'pie-chart-outline' : 'receipt-outline'}
+                  size={24}
+                  color="#4ECDC4"
+                />
+                {selectedCategory !== 'all' ? (
+                  <>
+                    <Text style={[styles.summaryAmount, { color: theme.colors.text }]}>
+                      {charts.categoryPercentage.toFixed(1)}%
+                    </Text>
+                    <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>
+                      of Total Spending
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={[styles.summaryAmount, { color: theme.colors.text }]}>{charts.allCount}</Text>
+                    <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>
+                      Transactions
+                    </Text>
+                  </>
+                )}
               </View>
             </View>
 
@@ -929,80 +1049,175 @@ const ExpenseScreen = ({ navigation, route }) => {
               </View>
             )}
 
-            {/* Spending by Category - Pie Chart */}
-            <View style={[styles.chartCard, { backgroundColor: theme.colors.card }]}>
-              <Text style={[styles.chartTitle, { color: theme.colors.text }]}>Spending by Category</Text>
-              
-              {charts.pieChart.length > 0 ? (
-                <>
-                  <PieChart
-                    data={charts.pieChart}
-                    width={screenWidth - 64}
-                    height={200}
-                    chartConfig={chartConfig}
-                    accessor="amount"
-                    backgroundColor="transparent"
-                    paddingLeft="15"
-                    center={[10, 0]}
-                    absolute
-                    hasLegend={false}
-                  />
-                  
-                  {/* Category Rankings */}
-                  <View style={styles.rankingsContainer}>
-                    <Text style={[styles.rankingsTitle, { color: theme.colors.text }]}>
-                      Category Rankings
+            {/* Category Filter */}
+            <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+              <Text style={[styles.filterLabel, { color: theme.colors.textSecondary || theme.colors.text + '80', marginBottom: 8 }]}>
+                Filter by Category
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <TouchableOpacity
+                  style={[
+                    styles.periodChip,
+                    { backgroundColor: theme.colors.card },
+                    selectedCategory === 'all' && { backgroundColor: theme.colors.primary },
+                  ]}
+                  onPress={() => setSelectedCategory('all')}
+                >
+                  <Text style={[styles.periodChipText, { color: selectedCategory === 'all' ? '#FFF' : theme.colors.text }]}>
+                    All
+                  </Text>
+                </TouchableOpacity>
+                {categories.map(cat => (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[
+                      styles.periodChip,
+                      { backgroundColor: theme.colors.card, marginLeft: 8 },
+                      selectedCategory === cat && { backgroundColor: categoryColors[cat] || theme.colors.primary },
+                    ]}
+                    onPress={() => setSelectedCategory(selectedCategory === cat ? 'all' : cat)}
+                  >
+                    <Text style={[styles.periodChipText, { color: selectedCategory === cat ? '#FFF' : theme.colors.text }]}>
+                      {cat}
                     </Text>
-                    {charts.pieChart.map((item, index) => (
-                      <View key={item.name} style={styles.rankingItem}>
-                        <View style={styles.rankingLeft}>
-                          <View style={[styles.rankBadge, { backgroundColor: index === 0 ? '#FFD700' : index === 1 ? '#C0C0C0' : index === 2 ? '#CD7F32' : theme.colors.border }]}>
-                            <Text style={[styles.rankNumber, { color: index < 3 ? '#000' : theme.colors.text }]}>{index + 1}</Text>
-                          </View>
-                          <View style={[styles.categoryDot, { backgroundColor: item.color }]} />
-                          <Text style={[styles.rankingName, { color: theme.colors.text }]}>{item.name}</Text>
-                        </View>
-                        <View style={styles.rankingRight}>
-                          <Text style={[styles.rankingAmount, { color: theme.colors.primary }]}>
-                            {formatCurrency(item.amount)}
-                          </Text>
-                          <Text style={[styles.rankingPercent, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>
-                            {item.percentage.toFixed(1)}%
-                          </Text>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                </>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
+            {/* Spending Trend — Line/Area Chart */}
+            <View style={[styles.chartCard, { backgroundColor: theme.colors.card }]}>
+              <Text style={[styles.chartTitle, { color: theme.colors.text }]}>
+                {getTrendTitle()}
+              </Text>
+              
+              {charts.lineChart.datasets[0].data.some(v => v > 0) ? (
+                <LineChart
+                  data={charts.lineChart}
+                  width={screenWidth - 64}
+                  height={220}
+                  chartConfig={{
+                    ...chartConfig,
+                    fillShadowGradient: selectedCategory !== 'all'
+                      ? (categoryColors[selectedCategory] || theme.colors.primary)
+                      : theme.colors.primary,
+                    fillShadowGradientOpacity: 0.3,
+                    fillShadowGradientFromOpacity: 0.4,
+                    fillShadowGradientToOpacity: 0,
+                    propsForDots: {
+                      r: '4',
+                      strokeWidth: '2',
+                      stroke: selectedCategory !== 'all'
+                        ? (categoryColors[selectedCategory] || theme.colors.primary)
+                        : theme.colors.primary,
+                    },
+                    color: (opacity = 1) => {
+                      const baseColor = selectedCategory !== 'all'
+                        ? (categoryColors[selectedCategory] || theme.colors.primary)
+                        : theme.colors.primary;
+                      return baseColor + Math.round(opacity * 255).toString(16).padStart(2, '0');
+                    },
+                  }}
+                  bezier
+                  style={styles.chart}
+                  fromZero
+                  withInnerLines={true}
+                  withOuterLines={false}
+                  withShadow={false}
+                  getDotColor={() =>
+                    selectedCategory !== 'all'
+                      ? (categoryColors[selectedCategory] || theme.colors.primary)
+                      : theme.colors.primary
+                  }
+                />
               ) : (
                 <View style={styles.noDataContainer}>
-                  <Ionicons name="pie-chart-outline" size={48} color={theme.colors.textSecondary || theme.colors.text + '80'} />
+                  <Ionicons name="trending-up-outline" size={48} color={theme.colors.textSecondary || theme.colors.text + '80'} />
                   <Text style={[styles.noDataText, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>No expenses yet</Text>
                 </View>
               )}
             </View>
 
-            {/* Spending Trends - Bar Chart */}
+            {/* Subcategory Breakdown (visible when a category is selected) */}
+            {selectedCategory !== 'all' && SUBCATEGORIES[selectedCategory] && SUBCATEGORIES[selectedCategory].length > 0 && (
+              <View style={[styles.chartCard, { backgroundColor: theme.colors.card }]}>
+                <Text style={[styles.chartTitle, { color: theme.colors.text }]}>
+                  {selectedCategory} — Subcategory Breakdown
+                </Text>
+                {charts.subCategoryBreakdown.length > 0 ? (
+                  charts.subCategoryBreakdown.map((item, index) => (
+                    <View key={item.name} style={styles.subCategoryRow}>
+                      <View style={styles.subCategoryLeft}>
+                        <View style={[styles.subCategoryDot, { backgroundColor: categoryColors[selectedCategory] || '#795548' }]} />
+                        <Text style={[styles.subCategoryName, { color: theme.colors.text }]}>{item.name}</Text>
+                      </View>
+                      <View style={styles.subCategoryRight}>
+                        <View style={styles.subCategoryBarBg}>
+                          <View
+                            style={[
+                              styles.subCategoryBarFill,
+                              {
+                                width: `${Math.min(item.percentage, 100)}%`,
+                                backgroundColor: categoryColors[selectedCategory] || theme.colors.primary,
+                              },
+                            ]}
+                          />
+                        </View>
+                        <Text style={[styles.subCategoryPercent, { color: theme.colors.text }]}>
+                          {item.percentage.toFixed(1)}%
+                        </Text>
+                        <Text style={[styles.subCategoryAmount, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>
+                          {formatCurrency(item.amount)}
+                        </Text>
+                      </View>
+                    </View>
+                  ))
+                ) : (
+                  <View style={styles.noDataContainer}>
+                    <Text style={[styles.noDataText, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>
+                      No subcategory data
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Category Rankings */}
             <View style={[styles.chartCard, { backgroundColor: theme.colors.card }]}>
               <Text style={[styles.chartTitle, { color: theme.colors.text }]}>
-                {getBarChartTitle()}
+                Category Rankings
               </Text>
-              
-              <BarChart
-                data={charts.barChart}
-                width={screenWidth - 64}
-                height={220}
-                chartConfig={{
-                  ...chartConfig,
-                  fillShadowGradient: theme.colors.primary,
-                  fillShadowGradientOpacity: 0.8,
-                  barRadius: 6,
-                }}
-                style={styles.chart}
-                fromZero
-                showBarTops={false}
-                showValuesOnTopOfBars={true}
-              />
+              {charts.categoryRankings.length > 0 ? (
+                charts.categoryRankings.map((item, index) => (
+                  <TouchableOpacity
+                    key={item.name}
+                    style={styles.rankingItem}
+                    onPress={() => setSelectedCategory(selectedCategory === item.name ? 'all' : item.name)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.rankingLeft}>
+                      <View style={[styles.rankBadge, { backgroundColor: index === 0 ? '#FFD700' : index === 1 ? '#C0C0C0' : index === 2 ? '#CD7F32' : theme.colors.border }]}>
+                        <Text style={[styles.rankNumber, { color: index < 3 ? '#000' : theme.colors.text }]}>{index + 1}</Text>
+                      </View>
+                      <View style={[styles.categoryDot, { backgroundColor: item.color }]} />
+                      <Text style={[styles.rankingName, { color: theme.colors.text }]}>{item.name}</Text>
+                    </View>
+                    <View style={styles.rankingRight}>
+                      <Text style={[styles.rankingAmount, { color: theme.colors.primary }]}>
+                        {formatCurrency(item.amount)}
+                      </Text>
+                      <Text style={[styles.rankingPercent, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>
+                        {item.percentage.toFixed(1)}%
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <View style={styles.noDataContainer}>
+                  <Ionicons name="bar-chart-outline" size={48} color={theme.colors.textSecondary || theme.colors.text + '80'} />
+                  <Text style={[styles.noDataText, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>No expenses yet</Text>
+                </View>
+              )}
             </View>
 
             <View style={{ height: 100 }} />
@@ -1732,6 +1947,70 @@ const styles = StyleSheet.create({
   rangeCancelText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+
+  // Sub-category breakdown
+  subCategoryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
+  },
+  subCategoryLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    minWidth: 100,
+  },
+  subCategoryDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  subCategoryName: {
+    fontSize: 13,
+    fontWeight: '500',
+    flexShrink: 1,
+  },
+  subCategoryRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1.5,
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  subCategoryBarBg: {
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    overflow: 'hidden',
+    maxWidth: 80,
+  },
+  subCategoryBarFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  subCategoryPercent: {
+    fontSize: 13,
+    fontWeight: '600',
+    width: 45,
+    textAlign: 'right',
+  },
+  subCategoryAmount: {
+    fontSize: 12,
+    width: 70,
+    textAlign: 'right',
+  },
+
+  // Expense sub-category label
+  expenseSubCategory: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 1,
   },
 });
 
