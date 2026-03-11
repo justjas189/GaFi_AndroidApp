@@ -189,7 +189,7 @@ const MAPS = {
     name: 'Mall - 3F',
     icon: '🏬',
     image: require('../../../assets/Game_Graphics/maps/Mall/Map008.png'),
-    spawnPoint: { xPct: 0.32, yPct: 0.5 },
+    spawnPoint: { xPct: 0.32, yPct: 0.7 },
     locations: [
       {
         id: 'escalator_down_2f',
@@ -356,19 +356,19 @@ export default function BuildScreen() {
   
   // In-game Tutorial steps configuration — step-by-step, action-gated
   const TUTORIAL_STEPS = [
-    {
-      id: 'budget_intro',
-      title: "Budget Tracker 📊",
-      message: "Hi! I'm Koin, your financial buddy! See the Budget Tracker at the top? It shows your daily spending and weekly budget. Keep an eye on it!",
-      nextAlwaysEnabled: true,
-      conditionKey: null,
-      position: 'bottom',
-      highlight: 'header',
-    },
+    // {
+    //   id: 'budget_intro',
+    //   title: "Budget Tracker 📊",
+    //   message: " See the Budget Tracker at the top? It shows your daily spending and weekly budget. Keep an eye on it!",
+    //   nextAlwaysEnabled: true,
+    //   conditionKey: null,
+    //   position: 'bottom',
+    //   highlight: 'header',
+    // },
     {
       id: 'walk_around',
       title: "Move Around! 🏠",
-      message: "This is your room! Tap anywhere on the screen to walk your character around. Try it now!",
+      message: "Hi! I'm Koin, your financial buddy! This is your room! Tap anywhere on the screen to walk your character around. Try it now!",
       nextAlwaysEnabled: false,
       conditionKey: 'walked',
       position: 'top',
@@ -1516,7 +1516,10 @@ export default function BuildScreen() {
         .select('category')
         .eq('user_id', user.id);
       
-      if (error) throw error;
+      if (error) {
+        console.warn('Could not fetch expense stats:', error?.message || error);
+        return expenseStats;
+      }
       
       const stats = {
         total: allExpenses?.length || 0,
@@ -1528,7 +1531,7 @@ export default function BuildScreen() {
       setExpenseStats(stats);
       return stats;
     } catch (error) {
-      console.error('Error fetching expense stats:', error);
+      console.warn('Could not fetch expense stats:', error?.message || error);
       return expenseStats;
     }
   };
@@ -3458,46 +3461,9 @@ export default function BuildScreen() {
     return colors[action] || '#FFFFFF';
   };
 
-  // Render location collision overlays
+  // Render location collision overlays (invisible — events trigger on bounds only)
   const renderLocationOverlays = () => {
-    return currentMap.locations.map((loc, index) => {
-      const bounds = loc.bounds;
-      return (
-        <View
-          key={`overlay-${loc.id}`}
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            left: `${bounds.left * 100}%`,
-            top: `${bounds.top * 100}%`,
-            width: `${(bounds.right - bounds.left) * 100}%`,
-            height: `${(bounds.bottom - bounds.top) * 100}%`,
-            backgroundColor: getLocationColor(loc.action, index),
-            borderWidth: 2,
-            borderColor: getLocationBorderColor(loc.action, index),
-            borderStyle: 'dashed',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 1100,
-            elevation: 110,
-          }}
-        >
-          <View style={{
-            backgroundColor: 'rgba(0,0,0,0.7)',
-            paddingHorizontal: 8,
-            paddingVertical: 4,
-            borderRadius: 8,
-          }}>
-            <Text style={{ color: '#FFF', fontSize: 16, textAlign: 'center' }}>
-              {loc.icon}
-            </Text>
-            <Text style={{ color: '#FFF', fontSize: 10, textAlign: 'center', fontWeight: 'bold' }}>
-              {loc.name}
-            </Text>
-          </View>
-        </View>
-      );
-    });
+    return null;
   };
 
   // Calculate map display dimensions to match resizeMode="contain" layout

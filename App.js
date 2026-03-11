@@ -100,8 +100,13 @@ const AppNavigator = () => {
     }, 3000); // 3 second timeout
 
     if (!isLoading && userToken && userInfo) {
-      setCheckingOnboarding(true);
-      checkOnboardingStatus();
+      // Only check onboarding status once (when hasOnboarded is still undetermined).
+      // Skipping re-checks prevents mid-onboarding state updates (e.g. setUserType)
+      // from resetting the navigation stack back to GetStartedScreen.
+      if (hasOnboarded === null) {
+        setCheckingOnboarding(true);
+        checkOnboardingStatus();
+      }
     } else if (!isLoading && !userToken) {
       setCheckingOnboarding(false);
       setHasOnboarded(null);
@@ -112,7 +117,7 @@ const AppNavigator = () => {
     }
 
     return () => clearTimeout(timeout);
-  }, [isLoading, userToken, userInfo]);
+  }, [isLoading, userToken, userInfo, hasOnboarded]);
 
   const checkOnboardingStatus = async () => {
     try {
@@ -165,6 +170,12 @@ const AppNavigator = () => {
     isLoading,
     checkingOnboarding
   });
+
+  // While we haven't resolved onboarding status yet, show a loading screen
+  // to prevent MainNavigator from briefly mounting and triggering data fetches.
+  if (userToken && userInfo && hasOnboarded === null) {
+    return <LoadingScreen message="Loading your profile..." />;
+  }
 
   return (
     <Stack.Navigator 

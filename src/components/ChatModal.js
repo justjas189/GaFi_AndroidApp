@@ -26,7 +26,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
 import { DataContext } from '../context/DataContext';
 import { AuthContext } from '../context/AuthContext';
-import { getChatCompletion } from '../config/nvidia';
+import { getChatCompletion, getUserTypeContext } from '../config/nvidia';
 import DebugUtils from '../utils/DebugUtils';
 import MascotImage from './MascotImage';
 
@@ -438,8 +438,13 @@ const ChatModal = forwardRef(({ visible, onClose }, ref) => {
     const isTabScreen = ['Home', 'Expenses', 'Game', 'Explore'].includes(screenName);
     const tabInfo = isTabScreen ? `\n⚠️ USER IS ON THE "${screenName.toUpperCase()}" TAB (one of 4 main tabs: Game, Home, Expenses, Explore)` : '';
 
-    return `You are Koin, GaFi's friendly AI financial assistant for Filipino college students. You are CONTEXT-AWARE and currently helping the user on the "${screenContext.name}" screen.
+    // Dynamic user-type context block (student vs employee)
+    const userTypeBlock = getUserTypeContext(userInfo?.userType);
+    const userTypeLabel = userInfo?.userType === 'employee' ? 'a working professional' : 'a Filipino college student';
+
+    return `You are Koin, GaFi's friendly AI financial assistant for ${userTypeLabel}. You are CONTEXT-AWARE and currently helping the user on the "${screenContext.name}" screen.
 ${tabInfo}
+${userTypeBlock}
 
 ═══════════════════════════════════════
 STRICT DOMAIN POLICY  (NEVER VIOLATE)

@@ -12,7 +12,7 @@ import MascotImage from '../../components/MascotImage';
 const UserTypeScreen = ({ navigation }) => {
   const [selectedType, setSelectedType] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const { userInfo } = useAuth();
+  const { userInfo, setUserType } = useAuth();
   const { theme } = React.useContext(ThemeContext);
 
   const userTypes = [
@@ -52,19 +52,28 @@ const UserTypeScreen = ({ navigation }) => {
       
       // Save to database if user is authenticated
       if (userInfo?.id) {
-        const { error } = await supabase
-          .from('profiles')
-          .update({ 
-            user_type: selectedType,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', userInfo.id);
+        try {
+          const { error } = await supabase
+            .from('profiles')
+            .upsert({ 
+              id: userInfo.id,
+              user_type: selectedType,
+              email: userInfo.email,
+              full_name: userInfo.name || userInfo.user_metadata?.full_name || null,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'id' });
 
-        if (error) {
-          console.warn('Could not update user type in database:', error);
+          if (error) {
+            console.warn('Could not update user type in database:', error?.message || error);
+          }
+        } catch (dbError) {
+          console.warn('Could not update user type in database:', dbError?.message || dbError);
           // Don't block the user from continuing - AsyncStorage is sufficient
         }
       }
+
+      // Update AuthContext in-memory state so all screens see the selection immediately
+      await setUserType(selectedType);
 
       // Navigate to next onboarding screen
       navigation.navigate('BudgetGoals');

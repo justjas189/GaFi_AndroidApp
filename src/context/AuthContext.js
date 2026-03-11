@@ -46,10 +46,10 @@ export const AuthProvider = ({ children }) => {
       }
       
       if (event === 'SIGNED_IN' && session) {
-        // Get user profile data from database to get the full name and username
+        // Get user profile data from database to get the full name, username, and user type
         const { data: profileData } = await supabase
           .from('profiles')
-          .select('full_name, username')
+          .select('full_name, username, user_type')
           .eq('id', session.user.id)
           .single();
 
@@ -58,6 +58,7 @@ export const AuthProvider = ({ children }) => {
           ...session.user,
           name: profileData?.full_name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
           username: profileData?.username || null,
+          userType: profileData?.user_type || null,
           email: session.user.email
         };
 
@@ -103,10 +104,10 @@ export const AuthProvider = ({ children }) => {
       if (error) throw error;
       
       if (session) {
-        // Get user profile data from database to get the full name and username
+        // Get user profile data from database to get the full name, username, and user type
         const { data: profileData } = await supabase
           .from('profiles')
-          .select('full_name, username')
+          .select('full_name, username, user_type')
           .eq('id', session.user.id)
           .single();
 
@@ -115,6 +116,7 @@ export const AuthProvider = ({ children }) => {
           ...session.user,
           name: profileData?.full_name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
           username: profileData?.username || null,
+          userType: profileData?.user_type || null,
           email: session.user.email
         };
 
@@ -408,6 +410,19 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const setUserType = async (userType) => {
+    try {
+      // Update in-memory state immediately
+      const updatedUserInfo = { ...userInfo, userType };
+      setUserInfo(updatedUserInfo);
+      await AsyncStorage.setItem('userInfo', JSON.stringify(updatedUserInfo));
+      return { success: true };
+    } catch (error) {
+      console.error('Error setting user type:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
   const updateProfile = async (profileData) => {
     try {
       setIsLoading(true);
@@ -479,6 +494,7 @@ export const AuthProvider = ({ children }) => {
     resetPassword,
     markOnboardingComplete,
     updateProfile,
+    setUserType,
     isAuthenticated: !!userToken,
   };
 
