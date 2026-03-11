@@ -522,9 +522,8 @@ export default function BuildScreen() {
   };
   
   // End tutorial — the in-game part is done, Koin will continue with the App Tour
-  const endTutorial = () => {
+  const endTutorial = useCallback(() => {
     setTutorialActive(false);
-    cancelTutorial();
     setTutorialStep(0);
     setTutorialConditions(new Set());
     setTutorialViewedCar(false);
@@ -538,9 +537,19 @@ export default function BuildScreen() {
     // Persist tutorial completion to Supabase
     gameDatabaseService.saveTutorialProgress({ currentStep: 0, stepsCompleted: [], tutorialCompleted: true });
     gameDatabaseService.logActivity({ activityType: 'tutorial_step', details: { step: 'done', action: 'completed' } });
-    // Note: The TutorialContext will auto-transition to APP_TOUR phase
-    // when the last GAME_TUTORIAL_STEPS step advances via KoinTutorialOverlay
-  };
+  }, [user?.id]);
+
+  // Auto-detect when TutorialContext finishes the GAME_TUTORIAL phase
+  // and clean up GameScreen local state (exit to main menu, unlock Story Mode)
+  const prevTutorialPhaseRef = useRef(tutorialPhase);
+  useEffect(() => {
+    const prevPhase = prevTutorialPhaseRef.current;
+    prevTutorialPhaseRef.current = tutorialPhase;
+    // If we were in GAME_TUTORIAL and now transitioned to APP_TOUR or beyond, end the game tutorial
+    if (prevPhase === TUTORIAL_PHASE.GAME_TUTORIAL && tutorialPhase !== TUTORIAL_PHASE.GAME_TUTORIAL) {
+      endTutorial();
+    }
+  }, [tutorialPhase, endTutorial]);
   
   // Story Mode state
   const [showStoryIntro, setShowStoryIntro] = useState(false);
