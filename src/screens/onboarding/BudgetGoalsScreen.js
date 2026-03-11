@@ -5,10 +5,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 
-const BUDGET_PRESETS = [
+const STUDENT_PRESETS = [
   { label: '₱5,000', value: 5000 },
   { label: '₱10,000', value: 10000 },
   { label: '₱15,000', value: 15000 },
@@ -17,11 +18,53 @@ const BUDGET_PRESETS = [
   { label: '₱50,000', value: 50000 },
 ];
 
+const EMPLOYEE_PRESETS = [
+  { label: '₱15,000', value: 15000 },
+  { label: '₱20,000', value: 20000 },
+  { label: '₱30,000', value: 30000 },
+  { label: '₱50,000', value: 50000 },
+  { label: '₱80,000', value: 80000 },
+  { label: '₱100,000', value: 100000 },
+];
+
+// Student: equal split across 6 categories
+const buildStudentCategories = (monthly) => {
+  const perCategory = Math.round((monthly / 6) * 100) / 100;
+  return {
+    food: { limit: perCategory, spent: 0 },
+    transportation: { limit: perCategory, spent: 0 },
+    entertainment: { limit: perCategory, spent: 0 },
+    shopping: { limit: perCategory, spent: 0 },
+    utilities: { limit: perCategory, spent: 0 },
+    others: { limit: perCategory, spent: 0 },
+  };
+};
+
+// Employee: 50/30/20 rule — needs / wants / savings
+const buildEmployeeCategories = (monthly) => {
+  const needs = monthly * 0.50;   // 50% needs
+  const wants = monthly * 0.30;   // 30% wants
+  const savings = monthly * 0.20; // 20% savings
+  return {
+    bills: { limit: Math.round(needs * 0.40 * 100) / 100, spent: 0 },         // rent, utilities, insurance
+    food: { limit: Math.round(needs * 0.35 * 100) / 100, spent: 0 },          // groceries, meals
+    transportation: { limit: Math.round(needs * 0.25 * 100) / 100, spent: 0 },// commute, gas
+    entertainment: { limit: Math.round(wants * 0.40 * 100) / 100, spent: 0 }, // leisure, subscriptions
+    shopping: { limit: Math.round(wants * 0.35 * 100) / 100, spent: 0 },      // personal items
+    others: { limit: Math.round(wants * 0.25 * 100) / 100, spent: 0 },        // miscellaneous
+    savings: { limit: Math.round(savings * 100) / 100, spent: 0 },             // emergency fund, investments
+  };
+};
+
 const BudgetGoalsScreen = ({ navigation }) => {
   const { updateBudget } = useContext(DataContext);
   const { theme } = useContext(ThemeContext);
+  const { userInfo } = useAuth();
   const [monthlyBudget, setMonthlyBudget] = useState('');
   const [error, setError] = useState('');
+
+  const isEmployee = userInfo?.userType === 'employee';
+  const BUDGET_PRESETS = isEmployee ? EMPLOYEE_PRESETS : STUDENT_PRESETS;
 
   const handlePresetSelect = (value) => {
     setMonthlyBudget(value.toString());
@@ -64,19 +107,14 @@ const BudgetGoalsScreen = ({ navigation }) => {
       }
 
       const monthly = parseFloat(monthlyBudget);
-      const categoryBudget = Math.round((monthly / 6) * 100) / 100;
+      const categories = isEmployee
+        ? buildEmployeeCategories(monthly)
+        : buildStudentCategories(monthly);
 
       const budgetData = {
         monthly,
         userId: parsedUserInfo.id,
-        categories: {
-          food: { limit: categoryBudget, spent: 0 },
-          transportation: { limit: categoryBudget, spent: 0 },
-          entertainment: { limit: categoryBudget, spent: 0 },
-          shopping: { limit: categoryBudget, spent: 0 },
-          utilities: { limit: categoryBudget, spent: 0 },
-          others: { limit: categoryBudget, spent: 0 }
-        }
+        categories
       };
 
       await updateBudget(budgetData);
@@ -173,7 +211,9 @@ const BudgetGoalsScreen = ({ navigation }) => {
           <View style={[styles.infoCard, { backgroundColor: theme.colors.card }]}>
             <Ionicons name="information-circle" size={24} color="#00D4FF" />
             <Text style={[styles.infoText, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>
-              You can set savings goals later through the gamification feature. Your budget will be evenly distributed across 6 categories.
+              {isEmployee
+                ? 'Your budget follows the 50/30/20 rule: 50% needs (bills, food, transport), 30% wants (entertainment, shopping), and 20% savings.'
+                : 'You can set savings goals later through the gamification feature. Your budget will be evenly distributed across 6 categories.'}
             </Text>
           </View>
         </View>

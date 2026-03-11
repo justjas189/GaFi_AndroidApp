@@ -27,6 +27,7 @@ import FriendRequestsScreen from '../screens/main/FriendRequestsScreen';
 import FriendsListScreen from '../screens/main/FriendsListScreen';
 import ManageFriendsScreen from '../screens/main/ManageFriendsScreen';
 import DataPredictionScreen from '../screens/main/DataPrediction';
+import CustomModeDashboard from '../screens/main/CustomModeDashboard';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -75,6 +76,8 @@ const TabNavigator = () => {
 
           if (route.name === 'Game') {
             iconName = focused ? 'game-controller' : 'game-controller-outline';
+          } else if (route.name === 'CustomModeDashboard') {
+            iconName = focused ? 'stats-chart' : 'stats-chart-outline';
           } else if (route.name === 'Expenses') {
             iconName = focused ? 'stats-chart' : 'stats-chart-outline';
           } else if (route.name === 'Predictions') {
@@ -100,6 +103,8 @@ const TabNavigator = () => {
       })}
     >
       <Tab.Screen name="Game" component={GameScreen} />
+      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="CustomModeDashboard" component={CustomModeDashboard} />
       <Tab.Screen name="Expenses" component={ExpenseScreen} />
       <Tab.Screen name="Predictions" component={DataPredictionScreen} />
       <Tab.Screen name="Explore" component={ExploreScreen} />
@@ -135,6 +140,7 @@ const MainNavigator = () => {
         <Stack.Screen name="ManageFriends" component={ManageFriendsScreen} />
         <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="OldLearn" component={LearnScreen} />
+        <Stack.Screen name="CustomModeDashboard" component={CustomModeDashboard} />
       </Stack.Navigator>
     </View>
   );

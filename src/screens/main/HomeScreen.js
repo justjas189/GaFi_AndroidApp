@@ -322,7 +322,7 @@ const HomeScreen = ({ navigation }) => {
             <Ionicons name="document-text" size={20} color={theme.colors.primary} />
           </TouchableOpacity>
           
-          {/*
+          
           {__DEV__ && (
             <TouchableOpacity
               style={[styles.testButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.primary }]}
@@ -331,7 +331,7 @@ const HomeScreen = ({ navigation }) => {
               <Text style={[styles.testButtonText, { color: theme.colors.primary }]}>🧪</Text>
             </TouchableOpacity>
           )}
-          
+          {/*
           {__DEV__ && (
             <TouchableOpacity
               style={[styles.testButton, { backgroundColor: theme.colors.card, borderColor: '#FF6B00' }]}

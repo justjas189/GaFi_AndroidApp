@@ -73,6 +73,20 @@ const SEASONAL_MULTIPLIERS = {
 
 const getInflationRate = (year) => PH_INFLATION_RATES[year] || DEFAULT_INFLATION_RATE;
 
+// Format data history duration with dynamic units (days / months / years)
+const formatDataSpan = (days) => {
+  if (days < 30) {
+    const d = Math.round(days);
+    return `${d} day${d !== 1 ? 's' : ''}`;
+  } else if (days < 365) {
+    const m = Math.round((days / 30.44) * 10) / 10;
+    return `${m} month${m !== 1 ? 's' : ''}`;
+  } else {
+    const y = Math.round((days / 365.25) * 10) / 10;
+    return `${y} year${y !== 1 ? 's' : ''}`;
+  }
+};
+
 const getMonthName = (monthIdx) => {
   return new Date(2000, monthIdx, 1).toLocaleString('default', { month: 'long' });
 };
@@ -225,11 +239,12 @@ const generateInsights = (categoryBreakdown, monthlyHistory, trend, predicted, a
 
   // Multi-year data advantage
   if (yearsOfData && yearsOfData > 1) {
+    const spanLabel = formatDataSpan((yearsOfData || 1) * 365.25);
     insights.push({
       icon: 'time',
       color: '#00BCD4',
-      title: `${yearsOfData}-Year Training Window`,
-      message: `The model has ${yearsOfData} years of historical data, enabling cross-year pattern matching and seasonal calibration.`,
+      title: `${spanLabel} Training Window`,
+      message: `The model has ${spanLabel} of historical data, enabling cross-year pattern matching and seasonal calibration.`,
     });
   }
 
@@ -263,6 +278,7 @@ const computePredictionForMonth = (expenses, targetMonthIdx, targetYear, current
     seasonalMultiplier: 1,
     targetMonth: getMonthName(targetMonthIdx),
     yearsOfData: 0,
+    dataSpanDays: 0,
     sameMonthYears: [],
     predictionMethod: 'XGBoost Hybrid ML',
     // Current-month specific
@@ -442,6 +458,7 @@ const computePredictionForMonth = (expenses, targetMonthIdx, targetYear, current
   const allDates = expenses.map(e => new Date(e.date || e.created_at));
   const minDate = new Date(Math.min(...allDates));
   const maxDate = new Date(Math.max(...allDates));
+  const dataSpanDays = Math.max(1, Math.round((maxDate - minDate) / (24 * 60 * 60 * 1000)));
   const dataSpanYears = Math.max(1, Math.round(((maxDate - minDate) / (365.25 * 24 * 60 * 60 * 1000)) * 10) / 10);
 
   // Calendar calculations (needed for pace-based prediction)
@@ -640,6 +657,7 @@ const computePredictionForMonth = (expenses, targetMonthIdx, targetYear, current
     seasonalMultiplier,
     targetMonth: targetMonthName,
     yearsOfData,
+    dataSpanDays,
     sameMonthYears,
     predictionMethod: 'XGBoost Hybrid ML',
     // Current-month specifics
@@ -733,7 +751,7 @@ const DataPredictionScreen = ({ navigation }) => {
   }, [expenses]);
 
   // Active predictions based on toggle (with safe fallback while loading)
-  const defaultPrediction = { totalPredicted: 0, categoryBreakdown: [], insights: [], confidence: 0, historicalAverage: 0, trend: 'stable', monthlyHistory: [], sameMonthLastYear: 0, hasYearOverYearData: false, yoyGrowthRate: 0, inflationRate: 0.035, seasonalMultiplier: 1, targetMonth: '', yearsOfData: 0, sameMonthYears: [], predictionMethod: 'none', isCurrentMonth: false, spentSoFar: 0, projectedRemaining: 0, daysElapsed: 0, daysInMonth: 0, currentMonthCategorySpent: {} };
+  const defaultPrediction = { totalPredicted: 0, categoryBreakdown: [], insights: [], confidence: 0, historicalAverage: 0, trend: 'stable', monthlyHistory: [], sameMonthLastYear: 0, hasYearOverYearData: false, yoyGrowthRate: 0, inflationRate: 0.035, seasonalMultiplier: 1, targetMonth: '', yearsOfData: 0, dataSpanDays: 0, sameMonthYears: [], predictionMethod: 'none', isCurrentMonth: false, spentSoFar: 0, projectedRemaining: 0, daysElapsed: 0, daysInMonth: 0, currentMonthCategorySpent: {} };
   const predictions = selectedPeriod === 'current'
     ? (currentMonthPredictions || defaultPrediction)
     : (nextMonthPredictions || defaultPrediction);
@@ -932,7 +950,7 @@ const DataPredictionScreen = ({ navigation }) => {
               <Ionicons name="layers-outline" size={16} color="#00D4FF" />
               <Text style={styles.factorLabel}>Data History Analyzed:</Text>
               <Text style={styles.factorValue}>
-                {predictions.yearsOfData || 1} year{(predictions.yearsOfData || 1) !== 1 ? 's' : ''}
+                {formatDataSpan(predictions.dataSpanDays || (predictions.yearsOfData || 1) * 365.25)}
               </Text>
             </View>
           </View>

@@ -183,19 +183,25 @@ export const DataProvider = ({ children }) => {
       console.log('Loading data for user ID:', userId, deferInsights ? '(insights deferred)' : '');
 
       // Load budget data with explicit user scoping
-      const { data: budgetData, error: budgetError } = await supabase
-        .from('budgets')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle();
+      let budgetData = null;
+      let budgetCategories = [];
+      try {
+        const { data, error: budgetError } = await supabase
+          .from('budgets')
+          .select('*')
+          .eq('user_id', userId)
+          .maybeSingle();
 
-      if (budgetError && budgetError.code !== 'PGRST116') {
-        console.error('Budget load error:', budgetError);
-        throw budgetError;
+        if (budgetError && budgetError.code !== 'PGRST116') {
+          console.warn('Budget load warning:', budgetError?.message || budgetError);
+        } else {
+          budgetData = data;
+        }
+      } catch (budgetErr) {
+        console.warn('Budget load warning:', budgetErr?.message || budgetErr);
       }
 
       // Load budget categories separately if budget exists
-      let budgetCategories = [];
       if (budgetData) {
         try {
           const { data: categoriesData, error: categoriesError } = await supabase
@@ -211,34 +217,41 @@ export const DataProvider = ({ children }) => {
         }
       }
 
-      if (budgetError && budgetError.code !== 'PGRST116') {
-        console.error('Budget load error:', budgetError);
-        throw budgetError;
-      }
-
       // Load expenses with explicit user scoping
-      const { data: expensesData, error: expensesError } = await supabase
-        .from('expenses')
-        .select('*')
-        .eq('user_id', userId)
-        .order('date', { ascending: false })
-        .range(0, 9999);
+      let expensesData = [];
+      try {
+        const { data, error: expensesError } = await supabase
+          .from('expenses')
+          .select('*')
+          .eq('user_id', userId)
+          .order('date', { ascending: false })
+          .range(0, 9999);
 
-      if (expensesError) {
-        console.error('Expenses load error:', expensesError);
-        throw expensesError;
+        if (expensesError) {
+          console.warn('Expenses load warning:', expensesError?.message || expensesError);
+        } else {
+          expensesData = data || [];
+        }
+      } catch (expErr) {
+        console.warn('Expenses load warning:', expErr?.message || expErr);
       }
 
       // Load notes with explicit user scoping
-      const { data: notesData, error: notesError } = await supabase
-        .from('notes')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+      let notesData = [];
+      try {
+        const { data, error: notesError } = await supabase
+          .from('notes')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
 
-      if (notesError) {
-        console.error('Notes load error:', notesError);
-        throw notesError;
+        if (notesError) {
+          console.warn('Notes load warning:', notesError?.message || notesError);
+        } else {
+          notesData = data || [];
+        }
+      } catch (notesErr) {
+        console.warn('Notes load warning:', notesErr?.message || notesErr);
       }
 
       console.log('Data loaded successfully:', {

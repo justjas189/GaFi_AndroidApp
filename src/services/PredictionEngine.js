@@ -46,6 +46,20 @@ const getInflationRate = (year) => PH_INFLATION_RATES[year] || DEFAULT_INFLATION
 const getMonthName = (monthIdx) =>
   new Date(2000, monthIdx, 1).toLocaleString('default', { month: 'long' });
 
+// Format data history duration with dynamic units (days / months / years)
+const formatDataSpan = (days) => {
+  if (days < 30) {
+    const d = Math.round(days);
+    return `${d} day${d !== 1 ? 's' : ''}`;
+  } else if (days < 365) {
+    const m = Math.round((days / 30.44) * 10) / 10;
+    return `${m} month${m !== 1 ? 's' : ''}`;
+  } else {
+    const y = Math.round((days / 365.25) * 10) / 10;
+    return `${y} year${y !== 1 ? 's' : ''}`;
+  }
+};
+
 // ── Seasonal multipliers (PH context) ──────────────────────────────────
 const SEASONAL_MULTIPLIERS = {
   0: 0.90, 1: 0.88, 2: 0.92, 3: 0.95, 4: 0.93, 5: 0.95,
@@ -185,6 +199,7 @@ class PredictionEngine {
       seasonalMultiplier: 1,
       targetMonth: targetMonthName,
       yearsOfData: 0,
+      dataSpanDays: 0,
       sameMonthYears: [],
       predictionMethod: 'none',
       mlConfidence: 0,
@@ -256,6 +271,7 @@ class PredictionEngine {
     const allDates = expenses.map((e) => new Date(e.date || e.created_at));
     const minDate = new Date(Math.min(...allDates));
     const maxDate = new Date(Math.max(...allDates));
+    const dataSpanDays = Math.max(1, Math.round((maxDate - minDate) / (24 * 60 * 60 * 1000)));
     const dataSpanYears = Math.max(
       1,
       Math.round(((maxDate - minDate) / (365.25 * 24 * 60 * 60 * 1000)) * 10) / 10
@@ -689,11 +705,12 @@ class PredictionEngine {
 
     // Multi-year data advantage
     if (yearsOfData > 1) {
+      const spanLabel = formatDataSpan(dataSpanDays);
       insights.push({
         icon: 'time',
         color: '#00BCD4',
-        title: `${yearsOfData}-Year Training Window`,
-        message: `The model has ${yearsOfData} years of historical data across ${numMonths} months, enabling cross-year pattern matching and seasonal calibration.`,
+        title: `${spanLabel} Training Window`,
+        message: `The model has ${spanLabel} of historical data across ${numMonths} months, enabling cross-year pattern matching and seasonal calibration.`,
       });
     }
 
@@ -723,6 +740,7 @@ class PredictionEngine {
       seasonalMultiplier: 1,
       targetMonth: targetMonthName,
       yearsOfData,
+      dataSpanDays,
       sameMonthYears,
       // ML-specific fields
       predictionMethod,
