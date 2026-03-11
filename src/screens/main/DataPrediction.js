@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -307,6 +308,11 @@ const computePredictionForMonth = (expenses, targetMonthIdx, targetYear, current
   let spentSoFar = 0;
   const currentMonthCategorySpent = {};
 
+  // Subcategory tracking (recent 2 months vs older)
+  const subCategoryRecent = {};
+  const subCategoryOlder = {};
+  const recentCutoff = new Date(targetYear, targetMonthIdx - 2, 1);
+
   expenses.forEach(expense => {
     const date = new Date(expense.date || expense.created_at);
     const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
@@ -314,6 +320,7 @@ const computePredictionForMonth = (expenses, targetMonthIdx, targetYear, current
     const amount = parseFloat(expense.amount) || 0;
     const expYear = date.getFullYear();
     const expMonth = date.getMonth();
+    const subCat = expense.sub_category || null;
 
     yearsSet.add(expYear);
 
@@ -348,6 +355,14 @@ const computePredictionForMonth = (expenses, targetMonthIdx, targetYear, current
     if (!categoryMonthlyData[category]) categoryMonthlyData[category] = {};
     if (!categoryMonthlyData[category][monthKey]) categoryMonthlyData[category][monthKey] = 0;
     categoryMonthlyData[category][monthKey] += amount;
+
+    // Subcategory tracking for insights
+    if (subCat) {
+      const isRecent = date >= recentCutoff;
+      const bucket = isRecent ? subCategoryRecent : subCategoryOlder;
+      if (!bucket[category]) bucket[category] = {};
+      bucket[category][subCat] = (bucket[category][subCat] || 0) + amount;
+    }
   });
 
   // Filter out sparse months (< 3 transactions)
@@ -642,6 +657,63 @@ const computePredictionForMonth = (expenses, targetMonthIdx, targetYear, current
     });
   }
 
+  // Subcategory insights computation
+  const subCategoryInsights = [];
+  for (const cat of Object.keys(subCategoryRecent)) {
+    const recentSubs = subCategoryRecent[cat] || {};
+    const olderSubs = subCategoryOlder[cat] || {};
+    const allSubNames = new Set([...Object.keys(recentSubs), ...Object.keys(olderSubs)]);
+    const recentTotal = Object.values(recentSubs).reduce((s, v) => s + v, 0);
+    const olderTotal = Object.values(olderSubs).reduce((s, v) => s + v, 0);
+    for (const sub of allSubNames) {
+      const recentAmt = recentSubs[sub] || 0;
+      const olderAmt = olderSubs[sub] || 0;
+      const recentPct = recentTotal > 0 ? (recentAmt / recentTotal) * 100 : 0;
+      let subTrend = 'stable';
+      let subTrendPct = 0;
+      if (olderAmt > 0) {
+        const change = (recentAmt - olderAmt) / olderAmt;
+        subTrendPct = Math.round(change * 100);
+        if (change > 0.10) subTrend = 'increasing';
+        else if (change < -0.10) subTrend = 'decreasing';
+      } else if (recentAmt > 0) {
+        subTrend = 'increasing';
+        subTrendPct = 100;
+      }
+      subCategoryInsights.push({
+        category: cat,
+        subCategory: sub,
+        recentAmount: Math.round(recentAmt),
+        trend: subTrend,
+        trendPercentage: subTrendPct,
+        recentSharePct: Math.round(recentPct),
+      });
+    }
+  }
+
+  // Add subcategory-driven insights
+  const increasingSubs = subCategoryInsights.filter(s => s.trend === 'increasing' && Math.abs(s.trendPercentage) >= 15);
+  if (increasingSubs.length > 0) {
+    const topPerCat = {};
+    for (const si of increasingSubs) {
+      if (!topPerCat[si.category] || si.recentAmount > topPerCat[si.category].recentAmount) {
+        topPerCat[si.category] = si;
+      }
+    }
+    const topSubs = Object.values(topPerCat).sort((a, b) => b.recentAmount - a.recentAmount).slice(0, 3);
+    if (topSubs.length > 0) {
+      const msgs = topSubs.map(s =>
+        `${s.category} ${s.trendPercentage > 0 ? 'up' : 'down'} ${Math.abs(s.trendPercentage)}% primarily due to ${s.subCategory}`
+      );
+      insights.push({
+        icon: 'layers',
+        color: '#FF9800',
+        title: 'Subcategory Drivers',
+        message: msgs.join('. ') + '.',
+      });
+    }
+  }
+
   return {
     totalPredicted: Math.round(totalPredicted * 100) / 100,
     categoryBreakdown,
@@ -660,6 +732,7 @@ const computePredictionForMonth = (expenses, targetMonthIdx, targetYear, current
     dataSpanDays,
     sameMonthYears,
     predictionMethod: 'XGBoost Hybrid ML',
+    subCategoryInsights,
     // Current-month specifics
     isCurrentMonth,
     spentSoFar: Math.round(spentSoFar * 100) / 100,
@@ -685,6 +758,7 @@ const DataPredictionScreen = ({ navigation }) => {
   const [showPredictiveInsights, setShowPredictiveInsights] = useState(false);
   const [showMonthlyHistory, setShowMonthlyHistory] = useState(false);
   const [showHowWeCalculate, setShowHowWeCalculate] = useState(false);
+  const [showCalcTooltip, setShowCalcTooltip] = useState(false);
 
   const toggleSection = (setter) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -751,7 +825,7 @@ const DataPredictionScreen = ({ navigation }) => {
   }, [expenses]);
 
   // Active predictions based on toggle (with safe fallback while loading)
-  const defaultPrediction = { totalPredicted: 0, categoryBreakdown: [], insights: [], confidence: 0, historicalAverage: 0, trend: 'stable', monthlyHistory: [], sameMonthLastYear: 0, hasYearOverYearData: false, yoyGrowthRate: 0, inflationRate: 0.035, seasonalMultiplier: 1, targetMonth: '', yearsOfData: 0, dataSpanDays: 0, sameMonthYears: [], predictionMethod: 'none', isCurrentMonth: false, spentSoFar: 0, projectedRemaining: 0, daysElapsed: 0, daysInMonth: 0, currentMonthCategorySpent: {} };
+  const defaultPrediction = { totalPredicted: 0, categoryBreakdown: [], insights: [], confidence: 0, historicalAverage: 0, trend: 'stable', monthlyHistory: [], sameMonthLastYear: 0, hasYearOverYearData: false, yoyGrowthRate: 0, inflationRate: 0.035, seasonalMultiplier: 1, targetMonth: '', yearsOfData: 0, dataSpanDays: 0, sameMonthYears: [], predictionMethod: 'none', subCategoryInsights: [], isCurrentMonth: false, spentSoFar: 0, projectedRemaining: 0, daysElapsed: 0, daysInMonth: 0, currentMonthCategorySpent: {} };
   const predictions = selectedPeriod === 'current'
     ? (currentMonthPredictions || defaultPrediction)
     : (nextMonthPredictions || defaultPrediction);
@@ -781,8 +855,8 @@ const DataPredictionScreen = ({ navigation }) => {
 
   const getTrendColor = (trend) => {
     switch (trend) {
-      case 'increasing': return '#FF6B6B';
-      case 'decreasing': return '#4CD964';
+      case 'increasing': return '#FF9800';
+      case 'decreasing': return '#5DADE2';
       default: return '#888888';
     }
   };
@@ -916,16 +990,11 @@ const DataPredictionScreen = ({ navigation }) => {
             const dynamicTrend = pctDiff > 2 ? 'increasing' : pctDiff < -2 ? 'decreasing' : 'stable';
             return (
               <View style={styles.trendContainer}>
-                <Ionicons
-                  name={getTrendIcon(dynamicTrend)}
-                  size={20}
-                  color={getTrendColor(dynamicTrend)}
-                />
                 <Text style={[styles.trendText, { color: getTrendColor(dynamicTrend) }]}>
                   {dynamicTrend === 'increasing'
-                    ? `+${Math.abs(pctDiff)}% Up`
+                    ? `${Math.abs(pctDiff)}% Up`
                     : dynamicTrend === 'decreasing'
-                    ? `-${Math.abs(pctDiff)}% Down`
+                    ? `${Math.abs(pctDiff)}% Down`
                     : 'Stable'}
                 </Text>
                 <Text style={styles.averageText}>
@@ -956,7 +1025,7 @@ const DataPredictionScreen = ({ navigation }) => {
           </View>
         </View>}
 
-        {/* ===== ACCORDION: Category Breakdown (Horizontal Bar Chart) ===== */}
+        {/* ===== ACCORDION: Category Breakdown — COMMENTED OUT =====
         <TouchableOpacity
           style={styles.accordionHeader}
           onPress={() => toggleSection(setShowCategoryBreakdown)}
@@ -1009,6 +1078,7 @@ const DataPredictionScreen = ({ navigation }) => {
             )}
           </View>
         )}
+        ===== END COMMENTED OUT ===== */}
 
         {/* ===== ACCORDION: Predicted by Category ===== */}
         <TouchableOpacity
@@ -1046,16 +1116,11 @@ const DataPredictionScreen = ({ navigation }) => {
                   <View style={styles.categoryInfo}>
                     <Text style={styles.categoryName}>{item.category}</Text>
                     <View style={styles.categoryStats}>
-                      <Ionicons
-                        name={getTrendIcon(item.trend)}
-                        size={14}
-                        color={getTrendColor(item.trend)}
-                      />
                       <Text style={[styles.categoryTrendLabel, { color: getTrendColor(item.trend) }]}>
                         {item.trend === 'increasing'
-                          ? `+${Math.abs(item.trendPercentage || 0)}% Up`
+                          ? `${Math.abs(item.trendPercentage || 0)}% Up`
                           : item.trend === 'decreasing'
-                          ? `-${Math.abs(item.trendPercentage || 0)}% Down`
+                          ? `${Math.abs(item.trendPercentage || 0)}% Down`
                           : 'Stable'}
                       </Text>
                     </View>
@@ -1109,7 +1174,9 @@ const DataPredictionScreen = ({ navigation }) => {
           </View>
         )}
 
-        {/* ===== ACCORDION: Monthly Spending History ===== */}
+
+
+        {/* ===== ACCORDION: Monthly Spending History — COMMENTED OUT =====
         {predictions.monthlyHistory.length > 1 && (
           <>
             <TouchableOpacity
@@ -1160,55 +1227,47 @@ const DataPredictionScreen = ({ navigation }) => {
             )}
           </>
         )}
+        ===== END COMMENTED OUT ===== */}
 
-        {/* ===== ACCORDION: How We Calculate ===== */}
-        <TouchableOpacity
-          style={styles.accordionHeader}
-          onPress={() => toggleSection(setShowHowWeCalculate)}
-          activeOpacity={0.7}
+        {/* ===== Info Tooltip (replaces How We Calculate accordion) ===== */}
+        <View style={styles.calcTooltipRow}>
+          <TouchableOpacity
+            onPress={() => setShowCalcTooltip(true)}
+            style={styles.calcInfoButton}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="information-circle-outline" size={22} color={colors?.textSecondary || '#888'} />
+            <Text style={styles.calcInfoLabel}>How we calculate</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Modal
+          visible={showCalcTooltip}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowCalcTooltip(false)}
         >
-          <View style={styles.accordionHeaderLeft}>
-            <Ionicons name="code-slash" size={20} color={colors?.textSecondary || '#888'} />
-            <Text style={styles.accordionTitle}>How We Calculate</Text>
-          </View>
-          <Ionicons
-            name={showHowWeCalculate ? 'chevron-up' : 'chevron-down'}
-            size={22}
-            color={colors?.textSecondary || '#888'}
-          />
-        </TouchableOpacity>
-        {showHowWeCalculate && (
-          <View style={styles.accordionContent}>
-            <Text style={styles.algorithmText}>
-              Our prediction uses an <Text style={styles.algorithmHighlight}>XGBoost Hybrid ML Model</Text> with a heuristic-as-features architecture:{"\n\n"}
-              • <Text style={styles.algorithmHighlight}>Primary: YoY Same-Month</Text> – The model's strongest feature (85-90% weight). Spending from the same calendar month in prior years, with multi-year weighted averaging{"\n"}
-              • <Text style={styles.algorithmHighlight}>Inflation Adjustment</Text> – BSP annual inflation rates applied to historical data to normalize purchasing power changes{"\n"}
-              • <Text style={styles.algorithmHighlight}>Recency-Weighted Average</Text> – Secondary feature: exponential decay weights over the last 6 months of spending{"\n"}
-              • <Text style={styles.algorithmHighlight}>Trend Coefficients</Text> – Momentum detection comparing recent 2-month average vs older baseline{"\n"}
-              • <Text style={styles.algorithmHighlight}>Live Pace Adjustment</Text> – For the current month, real-time spending velocity dynamically refines the prediction as days progress{"\n"}
-              • <Text style={styles.algorithmHighlight}>Per-Category Sub-Models</Text> – Individual gradient boosting models for each spending category using YoY category-level data
-            </Text>
-            <View style={styles.algorithmDivider} />
-            <View style={styles.algorithmStats}>
-              <View style={styles.algorithmStat}>
-                <Text style={styles.algorithmStatValue}>{predictions.monthlyHistory.length}</Text>
-                <Text style={styles.algorithmStatLabel}>Months Analyzed</Text>
+          <TouchableOpacity
+            style={styles.tooltipOverlay}
+            activeOpacity={1}
+            onPress={() => setShowCalcTooltip(false)}
+          >
+            <View style={styles.tooltipCard}>
+              <Text style={styles.tooltipTitle}>How We Calculate</Text>
+              <Text style={styles.tooltipBody}>
+                Our XGBoost Hybrid ML model anchors on same-month prior-year spending (70-90% weight), blended with a recency-weighted 6-month average. Inflation adjustments, trend coefficients, and live pace data for the current month refine the forecast. Per-category sub-models use YoY category-level data + subcategory drivers.
+              </Text>
+              <View style={styles.tooltipStats}>
+                <Text style={styles.tooltipStat}>{predictions.monthlyHistory.length} months analyzed</Text>
+                <Text style={styles.tooltipStat}>{expenses?.length || 0} transactions</Text>
+                <Text style={styles.tooltipStat}>{predictions.categoryBreakdown.length} categories</Text>
               </View>
-              <View style={styles.algorithmStat}>
-                <Text style={styles.algorithmStatValue}>{expenses?.length || 0}</Text>
-                <Text style={styles.algorithmStatLabel}>Transactions</Text>
-              </View>
-              <View style={styles.algorithmStat}>
-                <Text style={styles.algorithmStatValue}>{predictions.yearsOfData || 1}</Text>
-                <Text style={styles.algorithmStatLabel}>Years of Data</Text>
-              </View>
-              <View style={styles.algorithmStat}>
-                <Text style={styles.algorithmStatValue}>{predictions.categoryBreakdown.length}</Text>
-                <Text style={styles.algorithmStatLabel}>Categories</Text>
-              </View>
+              <TouchableOpacity onPress={() => setShowCalcTooltip(false)} style={styles.tooltipClose}>
+                <Text style={styles.tooltipCloseText}>Got it</Text>
+              </TouchableOpacity>
             </View>
-          </View>
-        )}
+          </TouchableOpacity>
+        </Modal>
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -1665,6 +1724,137 @@ const createStyles = (colors, theme) => StyleSheet.create({
     fontSize: 11,
     color: colors?.textSecondary || '#888',
     marginTop: 4,
+  },
+  // ── Tooltip styles (replaces How We Calculate accordion) ──
+  calcTooltipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  calcInfoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: (colors?.surface || '#2C2C2C') + '80',
+  },
+  calcInfoLabel: {
+    fontSize: 13,
+    color: colors?.textSecondary || '#888',
+  },
+  tooltipOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  tooltipCard: {
+    backgroundColor: colors?.card || '#2C2C2C',
+    borderRadius: 16,
+    padding: 20,
+    width: '100%',
+    maxWidth: 360,
+  },
+  tooltipTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: colors?.text || '#FFF',
+    marginBottom: 10,
+  },
+  tooltipBody: {
+    fontSize: 13,
+    color: colors?.textSecondary || '#888',
+    lineHeight: 20,
+    marginBottom: 14,
+  },
+  tooltipStats: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  tooltipStat: {
+    fontSize: 12,
+    color: colors?.primary || '#FF6B00',
+    backgroundColor: (colors?.primary || '#FF6B00') + '15',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  tooltipClose: {
+    alignSelf: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 28,
+    borderRadius: 20,
+    backgroundColor: colors?.primary || '#FF6B00',
+  },
+  tooltipCloseText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  // ── Subcategory insights styles ──
+  subInsightsContainer: {
+    backgroundColor: colors?.card || '#2C2C2C',
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 12,
+  },
+  subInsightsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  subInsightsTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors?.text || '#FFF',
+  },
+  subInsightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: (colors?.border || '#3C3C3C') + '40',
+  },
+  subInsightDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 10,
+  },
+  subInsightInfo: {
+    flex: 1,
+  },
+  subInsightName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors?.text || '#FFF',
+  },
+  subInsightCat: {
+    fontSize: 11,
+    color: colors?.textSecondary || '#888',
+    marginTop: 1,
+  },
+  subInsightTrend: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginRight: 12,
+    minWidth: 48,
+    textAlign: 'right',
+  },
+  subInsightAmount: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors?.text || '#FFF',
+    minWidth: 60,
+    textAlign: 'right',
   },
 });
 

@@ -228,6 +228,12 @@ class PredictionEngine {
     let spentSoFar = 0;
     const currentMonthCategorySpent = {};
 
+    // ── Subcategory tracking ─────────────────────────────────────────
+    // Track subcategory spending per category across recent months vs older months
+    const subCategoryRecent = {};   // last 2 months
+    const subCategoryOlder = {};    // months before that
+    const recentCutoff = new Date(targetYear, targetMonthIdx - 2, 1);
+
     expenses.forEach((exp) => {
       const d = new Date(exp.date || exp.created_at);
       const monthKey = `${d.getFullYear()}-${d.getMonth()}`;
@@ -235,6 +241,7 @@ class PredictionEngine {
       const amount = parseFloat(exp.amount) || 0;
       const expYear = d.getFullYear();
       const expMonth = d.getMonth();
+      const subCat = exp.sub_category || null;
 
       if (isCurrentMonth && expMonth === targetMonthIdx && expYear === targetYear) {
         spentSoFar += amount;
@@ -253,6 +260,14 @@ class PredictionEngine {
       if (!categoryMonthlyData[category]) categoryMonthlyData[category] = {};
       categoryMonthlyData[category][monthKey] =
         (categoryMonthlyData[category][monthKey] || 0) + amount;
+
+      // Subcategory tracking for insights
+      if (subCat) {
+        const isRecent = d >= recentCutoff;
+        const bucket = isRecent ? subCategoryRecent : subCategoryOlder;
+        if (!bucket[category]) bucket[category] = {};
+        bucket[category][subCat] = (bucket[category][subCat] || 0) + amount;
+      }
     });
 
     // ── Monthly history (last 6 months for UI chart) ─────────────────
@@ -724,6 +739,66 @@ class PredictionEngine {
       });
     }
 
+    // ── Subcategory insights ───────────────────────────────────────
+    const subCategoryInsights = [];
+    for (const cat of Object.keys(subCategoryRecent)) {
+      const recentSubs = subCategoryRecent[cat] || {};
+      const olderSubs = subCategoryOlder[cat] || {};
+      const allSubNames = new Set([...Object.keys(recentSubs), ...Object.keys(olderSubs)]);
+      const recentTotal = Object.values(recentSubs).reduce((s, v) => s + v, 0);
+      const olderTotal = Object.values(olderSubs).reduce((s, v) => s + v, 0);
+
+      for (const sub of allSubNames) {
+        const recentAmt = recentSubs[sub] || 0;
+        const olderAmt = olderSubs[sub] || 0;
+        const recentPct = recentTotal > 0 ? (recentAmt / recentTotal) * 100 : 0;
+        const olderPct = olderTotal > 0 ? (olderAmt / olderTotal) * 100 : 0;
+        let subTrend = 'stable';
+        let subTrendPct = 0;
+        if (olderAmt > 0) {
+          const change = (recentAmt - olderAmt) / olderAmt;
+          subTrendPct = Math.round(change * 100);
+          if (change > 0.10) subTrend = 'increasing';
+          else if (change < -0.10) subTrend = 'decreasing';
+        } else if (recentAmt > 0) {
+          subTrend = 'increasing';
+          subTrendPct = 100;
+        }
+        subCategoryInsights.push({
+          category: cat,
+          subCategory: sub,
+          recentAmount: Math.round(recentAmt),
+          trend: subTrend,
+          trendPercentage: subTrendPct,
+          recentSharePct: Math.round(recentPct),
+        });
+      }
+    }
+
+    // Add subcategory-driven insights to the insights array
+    const increasingSubs = subCategoryInsights.filter(s => s.trend === 'increasing' && Math.abs(s.trendPercentage) >= 15);
+    if (increasingSubs.length > 0) {
+      // Find the most impactful increasing subcategory per category
+      const topPerCat = {};
+      for (const si of increasingSubs) {
+        if (!topPerCat[si.category] || si.recentAmount > topPerCat[si.category].recentAmount) {
+          topPerCat[si.category] = si;
+        }
+      }
+      const topSubs = Object.values(topPerCat).sort((a, b) => b.recentAmount - a.recentAmount).slice(0, 3);
+      if (topSubs.length > 0) {
+        const msgs = topSubs.map(s =>
+          `${s.category} ${s.trendPercentage > 0 ? 'up' : 'down'} ${Math.abs(s.trendPercentage)}% primarily due to ${s.subCategory}`
+        );
+        insights.push({
+          icon: 'layers',
+          color: '#FF9800',
+          title: 'Subcategory Drivers',
+          message: msgs.join('. ') + '.',
+        });
+      }
+    }
+
     // ── Return result ────────────────────────────────────────────────
     return {
       totalPredicted: Math.round(totalPredicted * 100) / 100,
@@ -746,6 +821,8 @@ class PredictionEngine {
       predictionMethod,
       mlConfidence,
       modelMetrics: this.modelMetrics,
+      // Subcategory insights
+      subCategoryInsights,
       // Current-month
       isCurrentMonth,
       spentSoFar: Math.round(spentSoFar * 100) / 100,
