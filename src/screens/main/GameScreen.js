@@ -19,6 +19,21 @@ const CHARACTER_SIZE = 48;
 // Quick amount options for canteen
 const QUICK_AMOUNTS = [20, 50, 100, 150];
 
+// Sub-categories per expense category
+const SUBCATEGORIES = {
+  'Food & Dining': [],
+  'Transport': ['Public Transit', 'Ride-Hailing & Taxis', 'Fuel & Gas', 'Parking & Tolls'],
+  'Shopping': ['Clothing & Footwear', 'Personal Care & Beauty', 'Gifts', 'Home Decor', 'Others'],
+  'Groceries': ['Food & Pantry', 'Toiletries', 'Cleaning Supplies', 'Others'],
+  'Entertainment': ['Gaming', 'Digital Subscriptions', 'Personal Hobbies', 'Events & Outings', 'Others'],
+  'Electronics': ['Hardware & Gadgets', 'Accessories & Peripherals', 'Repairs', 'Software Licenses & Web Hosting'],
+  'School Supplies': ['Textbooks & Literature', 'Stationery', 'Printing & Copying'],
+  'Education': ['Tuition & Lab Fees', 'Seminars & Workshops', 'Others'],
+  'Utilities': ['Electricity', 'Water', 'Internet & Mobile', 'Rent & Dues', 'Others'],
+  'Health': ['Medicines & Pharmacy', 'Fitness & Sports', 'Dental & Medical Visits', 'Personal Care & First Aid', 'Others'],
+  'Other': [],
+};
+
 // Map configurations - expandable for more maps
 const MAPS = {
   school: {
@@ -289,6 +304,8 @@ export default function BuildScreen() {
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseNote, setExpenseNote] = useState('');
   const [expenseCategory, setExpenseCategory] = useState('Food & Dining');
+  const [expenseSubCategory, setExpenseSubCategory] = useState(null);
+  const [showSubCategoryDropdown, setShowSubCategoryDropdown] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentLocation, setCurrentLocation] = useState('Hallway 🚶');
   const [showInstructions, setShowInstructions] = useState(true);
@@ -641,6 +658,8 @@ export default function BuildScreen() {
   const [showClosetModal, setShowClosetModal] = useState(false);
   const [showNotebookModal, setShowNotebookModal] = useState(false);
   const [notebookCategory, setNotebookCategory] = useState('Food & Dining');
+  const [notebookSubCategory, setNotebookSubCategory] = useState(null);
+  const [showNotebookSubCategoryDropdown, setShowNotebookSubCategoryDropdown] = useState(false);
   const [unlockedSkins, setUnlockedSkins] = useState(['girl', 'jasper']); // Default skins
   const frameIntervalRef = useRef(null);
   
@@ -1605,6 +1624,8 @@ export default function BuildScreen() {
     switch (location.action) {
       case 'expense':
         setExpenseCategory(location.category || 'Other');
+        setExpenseSubCategory(null);
+        setShowSubCategoryDropdown(false);
         // Directly open the expense modal without an alert prompt
         if (tutorialActive && gameMode === 'tutorial') {
           markTutorialCondition('expense_opened');
@@ -1715,12 +1736,12 @@ export default function BuildScreen() {
       if (savedTransportMode === 'commute') {
         const fare = parseFloat(savedFareAmount);
         if (fare > 0) {
-          recordTransportExpense('Commute Fare', fare, 'Transport');
+          recordTransportExpense('Commute Fare', fare, 'Transport', 'Public Transit');
         }
       } else if (savedTransportMode === 'car' && savedDidBuyFuel) {
         const fuel = parseFloat(savedFuelAmount);
         if (fuel > 0) {
-          recordTransportExpense('Gas/Fuel', fuel, 'Transport');
+          recordTransportExpense('Gas/Fuel', fuel, 'Transport', 'Fuel & Gas');
         }
       }
 
@@ -1743,7 +1764,7 @@ export default function BuildScreen() {
   };
 
   // Record transport expense (non-blocking, matches Canteen pattern)
-  const recordTransportExpense = async (description, amount, category) => {
+  const recordTransportExpense = async (description, amount, category, subCategory) => {
     // Optimistic local state updates (instant)
     setCategorySpending(prev => ({
       ...prev,
@@ -1767,6 +1788,7 @@ export default function BuildScreen() {
       const expenseData = {
         amount: amount,
         category: category,
+        sub_category: subCategory || null,
         note: description,
         date: new Date().toISOString(),
       };
@@ -2360,7 +2382,7 @@ export default function BuildScreen() {
       return;
     }
 
-    if (!expenseNote.trim()) {
+    if (!expenseNote.trim() && !(SUBCATEGORIES[expenseCategory] || []).length) {
       Alert.alert('Missing Details', 'Please describe what you bought.');
       return;
     }
@@ -2375,12 +2397,15 @@ export default function BuildScreen() {
     const savedAmount = expenseAmount;
     const savedNote = expenseNote;
     const savedCategory = expenseCategory;
+    const savedSubCategory = expenseSubCategory;
     const currentDate = new Date();
 
     // Optimistic UI update - close modal immediately for seamless experience
     setShowExpenseModal(false);
     setExpenseAmount('');
     setExpenseNote('');
+    setExpenseSubCategory(null);
+    setShowSubCategoryDropdown(false);
 
     // ── Tutorial mode: skip DB save, mark conditions ──
     if (tutorialActive && gameMode === 'tutorial') {
@@ -2409,7 +2434,8 @@ export default function BuildScreen() {
       const expenseData = {
         amount: parseFloat(savedAmount),
         category: savedCategory,
-        note: `${savedNote} (at ${currentMap.name})`, // Include location in note
+        sub_category: savedSubCategory || null,
+        note: `${savedNote || savedSubCategory || savedCategory} (at ${currentMap.name})`, // Include location in note
         date: currentDate.toISOString(), // Pass full ISO timestamp with date AND time
       };
 
@@ -7641,7 +7667,11 @@ export default function BuildScreen() {
                           borderWidth: 2,
                           borderColor: isSelected ? cat.color : colors.border,
                         }}
-                        onPress={() => setNotebookCategory(cat.id)}
+                        onPress={() => {
+                          setNotebookCategory(cat.id);
+                          setNotebookSubCategory(null);
+                          setShowNotebookSubCategoryDropdown(false);
+                        }}
                       >
                         <Text style={{ fontSize: 16, marginRight: 6 }}>{cat.icon}</Text>
                         <Text style={{
@@ -7697,20 +7727,81 @@ export default function BuildScreen() {
                 />
               </View>
 
-              {/* Note Input */}
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Description (optional)</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  placeholder="e.g., Lunch at canteen, Bus fare to school..."
-                  placeholderTextColor={colors.textSecondary + '80'}
-                  multiline
-                  numberOfLines={3}
-                  value={expenseNote}
-                  onChangeText={setExpenseNote}
-                  editable={!isSubmitting}
-                />
-              </View>
+              {/* Sub-Category Dropdown or Description */}
+              {(SUBCATEGORIES[notebookCategory] || []).length > 0 ? (
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Sub-Category</Text>
+                  <TouchableOpacity
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      backgroundColor: colors.surface,
+                      borderWidth: 2,
+                      borderColor: showNotebookSubCategoryDropdown ? (EXPENSE_CATEGORIES.find(c => c.id === notebookCategory)?.color || '#4CAF50') : colors.border,
+                      borderRadius: 12,
+                      paddingVertical: 12,
+                      paddingHorizontal: 16,
+                      marginTop: 4,
+                    }}
+                    onPress={() => setShowNotebookSubCategoryDropdown(!showNotebookSubCategoryDropdown)}
+                  >
+                    <Text style={{ fontSize: 14, color: notebookSubCategory ? colors.text : colors.textSecondary + '80' }}>
+                      {notebookSubCategory || 'Select a sub-category'}
+                    </Text>
+                    <Ionicons name={showNotebookSubCategoryDropdown ? 'chevron-up' : 'chevron-down'} size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                  {showNotebookSubCategoryDropdown && (
+                    <View style={{
+                      backgroundColor: colors.surface,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      borderRadius: 12,
+                      marginTop: 4,
+                      overflow: 'hidden',
+                    }}>
+                      {SUBCATEGORIES[notebookCategory].map((sub, idx) => (
+                        <TouchableOpacity
+                          key={sub}
+                          style={{
+                            paddingVertical: 12,
+                            paddingHorizontal: 16,
+                            backgroundColor: notebookSubCategory === sub ? (EXPENSE_CATEGORIES.find(c => c.id === notebookCategory)?.color || '#4CAF50') + '20' : 'transparent',
+                            borderBottomWidth: idx < SUBCATEGORIES[notebookCategory].length - 1 ? 1 : 0,
+                            borderBottomColor: colors.border,
+                          }}
+                          onPress={() => {
+                            setNotebookSubCategory(sub);
+                            setShowNotebookSubCategoryDropdown(false);
+                          }}
+                        >
+                          <Text style={{
+                            fontSize: 14,
+                            color: notebookSubCategory === sub ? (EXPENSE_CATEGORIES.find(c => c.id === notebookCategory)?.color || '#4CAF50') : colors.text,
+                            fontWeight: notebookSubCategory === sub ? 'bold' : 'normal',
+                          }}>
+                            {sub}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              ) : (
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Description (optional)</Text>
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    placeholder="e.g., Lunch at canteen, Bus fare to school..."
+                    placeholderTextColor={colors.textSecondary + '80'}
+                    multiline
+                    numberOfLines={3}
+                    value={expenseNote}
+                    onChangeText={setExpenseNote}
+                    editable={!isSubmitting}
+                  />
+                </View>
+              )}
 
               {/* Budget Info (if in Story/Custom Mode) */}
               {(gameMode === 'story' || gameMode === 'custom') && (
@@ -7807,6 +7898,8 @@ export default function BuildScreen() {
                     setExpenseAmount('');
                     setExpenseNote('');
                     setNotebookCategory('Food & Dining');
+                    setNotebookSubCategory(null);
+                    setShowNotebookSubCategoryDropdown(false);
                   }}
                   disabled={isSubmitting}
                 >
@@ -7829,6 +7922,7 @@ export default function BuildScreen() {
                     const savedAmount = amount;
                     const savedNote = expenseNote;
                     const savedCategory = notebookCategory;
+                    const savedSubCategory = notebookSubCategory;
                     const currentDate = new Date();
 
                     // Optimistic UI — close modal immediately
@@ -7836,6 +7930,8 @@ export default function BuildScreen() {
                     setExpenseAmount('');
                     setExpenseNote('');
                     setNotebookCategory('Food & Dining');
+                    setNotebookSubCategory(null);
+                    setShowNotebookSubCategoryDropdown(false);
 
                     // ── Tutorial mode: skip DB save, mark condition ──
                     if (tutorialActive && gameMode === 'tutorial') {
@@ -7879,6 +7975,7 @@ export default function BuildScreen() {
                       const expenseData = {
                         amount: savedAmount,
                         category: savedCategory,
+                        sub_category: savedSubCategory || null,
                         note: savedNote || `${savedCategory} expense`,
                         date: currentDate.toISOString(),
                       };
@@ -8657,19 +8754,81 @@ export default function BuildScreen() {
                 />
               </View>
 
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>What did you buy?</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  placeholder="e.g., Burger, fries, and juice"
-                  placeholderTextColor={colors.textSecondary + '80'}
-                  multiline
-                  numberOfLines={3}
-                  value={expenseNote}
-                  onChangeText={setExpenseNote}
-                  editable={!isSubmitting}
-                />
-              </View>
+              {/* Sub-Category Dropdown or Description */}
+              {(SUBCATEGORIES[expenseCategory] || []).length > 0 ? (
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Sub-Category</Text>
+                  <TouchableOpacity
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      backgroundColor: colors.surface,
+                      borderWidth: 2,
+                      borderColor: showSubCategoryDropdown ? (EXPENSE_CATEGORIES.find(c => c.id === expenseCategory)?.color || '#4CAF50') : colors.border,
+                      borderRadius: 12,
+                      paddingVertical: 12,
+                      paddingHorizontal: 16,
+                      marginTop: 4,
+                    }}
+                    onPress={() => setShowSubCategoryDropdown(!showSubCategoryDropdown)}
+                  >
+                    <Text style={{ fontSize: 14, color: expenseSubCategory ? colors.text : colors.textSecondary + '80' }}>
+                      {expenseSubCategory || 'Select a sub-category'}
+                    </Text>
+                    <Ionicons name={showSubCategoryDropdown ? 'chevron-up' : 'chevron-down'} size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                  {showSubCategoryDropdown && (
+                    <View style={{
+                      backgroundColor: colors.surface,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      borderRadius: 12,
+                      marginTop: 4,
+                      overflow: 'hidden',
+                    }}>
+                      {SUBCATEGORIES[expenseCategory].map((sub, idx) => (
+                        <TouchableOpacity
+                          key={sub}
+                          style={{
+                            paddingVertical: 12,
+                            paddingHorizontal: 16,
+                            backgroundColor: expenseSubCategory === sub ? (EXPENSE_CATEGORIES.find(c => c.id === expenseCategory)?.color || '#4CAF50') + '20' : 'transparent',
+                            borderBottomWidth: idx < SUBCATEGORIES[expenseCategory].length - 1 ? 1 : 0,
+                            borderBottomColor: colors.border,
+                          }}
+                          onPress={() => {
+                            setExpenseSubCategory(sub);
+                            setShowSubCategoryDropdown(false);
+                          }}
+                        >
+                          <Text style={{
+                            fontSize: 14,
+                            color: expenseSubCategory === sub ? (EXPENSE_CATEGORIES.find(c => c.id === expenseCategory)?.color || '#4CAF50') : colors.text,
+                            fontWeight: expenseSubCategory === sub ? 'bold' : 'normal',
+                          }}>
+                            {sub}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              ) : (
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>What did you buy?</Text>
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    placeholder="e.g., Burger, fries, and juice"
+                    placeholderTextColor={colors.textSecondary + '80'}
+                    multiline
+                    numberOfLines={3}
+                    value={expenseNote}
+                    onChangeText={setExpenseNote}
+                    editable={!isSubmitting}
+                  />
+                </View>
+              )}
 
               <View style={styles.buttonContainer}>
                 <TouchableOpacity
@@ -8678,6 +8837,8 @@ export default function BuildScreen() {
                     setShowExpenseModal(false);
                     setExpenseAmount('');
                     setExpenseNote('');
+                    setExpenseSubCategory(null);
+                    setShowSubCategoryDropdown(false);
                   }}
                   disabled={isSubmitting}
                 >

@@ -374,6 +374,7 @@ export const DataProvider = ({ children }) => {
         category: normalizedCategory,
         description: expense.note || null,
         date: expense.date || null, // Pass the selected date or null for current time
+        sub_category: expense.sub_category || null, // Sub-category for granular tracking
         naturalLanguageInput: null, // null for manual entries
         confidence: null  // null for manual entries
       };

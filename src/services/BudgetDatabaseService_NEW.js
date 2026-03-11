@@ -544,7 +544,7 @@ export class BudgetDatabaseService {
       DebugUtils.log('DB_SERVICE', 'Recording expense', { userId, transactionData });
       
       // Validate required fields
-      const { amount, category, description, date, naturalLanguageInput, confidence } = transactionData;
+      const { amount, category, description, date, sub_category, naturalLanguageInput, confidence } = transactionData;
       
       if (!amount || amount <= 0) {
         throw new Error('Amount must be greater than 0');
@@ -569,6 +569,7 @@ export class BudgetDatabaseService {
         user_id: userId,
         amount,
         category: validCategory,
+        sub_category: sub_category || null,
         note: description || null,
         // Enhanced date/time handling - respect manually selected dates
         date: (() => {
