@@ -12,6 +12,7 @@ import { AchievementService } from '../../services/AchievementService';
 import gameDatabaseService from '../../services/GameDatabaseService';
 import { normalizeCategory } from '../../utils/categoryUtils';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTutorial, TUTORIAL_PHASE } from '../../context/TutorialContext';
 
 const { width: INITIAL_WIDTH, height: INITIAL_HEIGHT } = Dimensions.get('window');
 const CHARACTER_SIZE = 48;
@@ -105,7 +106,7 @@ const MAPS = {
   // Mall 1st Floor (Map006) - stores + exit + escalator up
   mall_1f: {
     id: 'mall_1f',
-    name: 'Mall - 1F',
+    name: 'Mall',
     icon: '🏬',
     image: require('../../../assets/Game_Graphics/maps/Mall/Map006.png'),
     spawnPoint: { xPct: 0.5, yPct: 0.5 },
@@ -273,6 +274,7 @@ export default function BuildScreen() {
   const { colors } = useTheme();
   const { user } = useContext(AuthContext);
   const { addExpense, expenses } = useContext(DataContext);
+  const { startGameTutorial: startContextTutorial, markConditionComplete, cancelTutorial, tutorialPhase } = useTutorial();
 
   // ─── Responsive dimensions ─────────────────────────────────────────
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -345,9 +347,11 @@ export default function BuildScreen() {
       next.add(conditionKey);
       return next;
     });
-    // Auto-advance: if this condition matches the current step (and it's not step 0), move forward
+    // Also notify TutorialContext so KoinTutorialOverlay can react
+    markConditionComplete(conditionKey);
+    // Auto-advance: if this condition matches the current step, move forward
     const currentStep = TUTORIAL_STEPS[tutorialStep];
-    if (currentStep && currentStep.conditionKey === conditionKey && tutorialStep > 0) {
+    if (currentStep && currentStep.conditionKey === conditionKey) {
       // Small delay so the user sees the action complete before the overlay advances
       setTimeout(() => {
         setTutorialStep(prev => {
@@ -510,14 +514,17 @@ export default function BuildScreen() {
     setTutorialConditions(new Set());
     setTutorialViewedCar(false);
     setCurrentMapId('dorm'); // Always start tutorial at home
+    // Also start the new KoinTutorialOverlay system
+    startContextTutorial();
     // Persist tutorial start to Supabase
     gameDatabaseService.saveTutorialProgress({ currentStep: 0, stepsCompleted: [], tutorialCompleted: false });
     gameDatabaseService.logActivity({ activityType: 'tutorial_step', details: { step: 0, action: 'started' } });
   };
   
-  // End tutorial
+  // End tutorial — the in-game part is done, Koin will continue with the App Tour
   const endTutorial = () => {
     setTutorialActive(false);
+    cancelTutorial();
     setTutorialStep(0);
     setTutorialConditions(new Set());
     setTutorialViewedCar(false);
@@ -531,6 +538,8 @@ export default function BuildScreen() {
     // Persist tutorial completion to Supabase
     gameDatabaseService.saveTutorialProgress({ currentStep: 0, stepsCompleted: [], tutorialCompleted: true });
     gameDatabaseService.logActivity({ activityType: 'tutorial_step', details: { step: 'done', action: 'completed' } });
+    // Note: The TutorialContext will auto-transition to APP_TOUR phase
+    // when the last GAME_TUTORIAL_STEPS step advances via KoinTutorialOverlay
   };
   
   // Story Mode state
@@ -3923,6 +3932,7 @@ export default function BuildScreen() {
     // Clear any leftover tutorial state
     if (tutorialActive) {
       setTutorialActive(false);
+      cancelTutorial();
       setTutorialStep(0);
     }
 
@@ -4083,6 +4093,7 @@ export default function BuildScreen() {
     // Clear any leftover tutorial state
     if (tutorialActive) {
       setTutorialActive(false);
+      cancelTutorial();
       setTutorialStep(0);
     }
 
@@ -7216,15 +7227,15 @@ export default function BuildScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header — tutorial mode replaces it with compact tutorial bar */}
+      {/* Header — tutorial mode shows simplified bar (Koin dialogue handled by KoinTutorialOverlay) */}
       {tutorialActive && gameMode === 'tutorial' ? (
         <View style={tutorialStyles.tutorialHeader}>
-          {/* Row 1: Home + Koin avatar + title/message */}
           <View style={tutorialStyles.tutorialRow1}>
             <TouchableOpacity
               style={styles.backToMenuButton}
               onPress={() => {
                 setTutorialActive(false);
+                cancelTutorial();
                 setTutorialStep(0);
                 setGameMode(null);
                 setShowMainMenu(true);
@@ -7232,67 +7243,20 @@ export default function BuildScreen() {
             >
               <Ionicons name="home" size={20} color="#FFF" />
             </TouchableOpacity>
-            <Image
-              source={KOIN_TUTORIAL_IMAGE}
-              style={tutorialStyles.koinMini}
-              resizeMode="contain"
-            />
             <View style={tutorialStyles.tutorialTextArea}>
               <Text style={tutorialStyles.tutorialTitle} numberOfLines={1}>
-                {TUTORIAL_STEPS[tutorialStep]?.title}
+                🎓 Tutorial Mode
               </Text>
-              <Text style={tutorialStyles.tutorialMessage}>
-                {TUTORIAL_STEPS[tutorialStep]?.message}
+              <Text style={tutorialStyles.tutorialMessage} numberOfLines={1}>
+                {currentMap.icon} {currentMap.name}
               </Text>
             </View>
           </View>
-          {/* Row 2: hint + dots + nav */}
+          {/* Row 2: hint text for current step */}
           <View style={tutorialStyles.tutorialRow2}>
-            {!isTutorialStepComplete() && TUTORIAL_STEPS[tutorialStep]?.conditionKey ? (
-              <Text style={tutorialStyles.tutorialHint}>⏳ Do the action to continue</Text>
-            ) : (
-              <View style={{ flex: 1 }} />
-            )}
-            <View style={tutorialStyles.tutorialDots}>
-              {TUTORIAL_STEPS.map((_, i) => (
-                <View key={i} style={[
-                  tutorialStyles.dot,
-                  i === tutorialStep && tutorialStyles.dotActive,
-                  i < tutorialStep && tutorialStyles.dotDone,
-                ]} />
-              ))}
-            </View>
-            <View style={tutorialStyles.tutorialNav}>
-              {tutorialStep > 0 && (
-                <TouchableOpacity
-                  style={tutorialStyles.btnBack}
-                  onPress={() => setTutorialStep(p => p - 1)}
-                >
-                  <Ionicons name="arrow-back" size={14} color="#AAA" />
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={[tutorialStyles.btnNext, !isTutorialStepComplete() && { backgroundColor: '#555' }]}
-                disabled={!isTutorialStepComplete()}
-                onPress={() => {
-                  if (tutorialStep < TUTORIAL_STEPS.length - 1) {
-                    const next = tutorialStep + 1;
-                    setTutorialStep(next);
-                    gameDatabaseService.saveTutorialProgress({ currentStep: next, stepsCompleted: Array.from({ length: next }, (_, i) => String(i)), tutorialCompleted: false });
-                  } else {
-                    endTutorial();
-                  }
-                }}
-              >
-                <Text style={tutorialStyles.btnNextText}>
-                  {tutorialStep === TUTORIAL_STEPS.length - 1 ? 'Done!' : 'Next'}
-                </Text>
-                <Ionicons
-                  name={tutorialStep === TUTORIAL_STEPS.length - 1 ? 'checkmark' : 'arrow-forward'}
-                  size={13} color="#FFF"
-                />
-              </TouchableOpacity>
-            </View>
+            <Text style={tutorialStyles.tutorialHint} numberOfLines={2}>
+              💡 {TUTORIAL_STEPS[tutorialStep]?.message || 'Follow Koin\'s instructions!'}
+            </Text>
           </View>
         </View>
       ) : (
@@ -7302,6 +7266,7 @@ export default function BuildScreen() {
             onPress={() => {
               if (tutorialActive) {
                 setTutorialActive(false);
+                cancelTutorial();
                 setTutorialStep(0);
               }
               setGameMode(null);

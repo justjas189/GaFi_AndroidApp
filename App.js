@@ -32,6 +32,9 @@ import { navigationRef } from './src/navigation/navigationRef';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { DataProvider } from './src/context/DataContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+import { TutorialProvider } from './src/context/TutorialContext';
+import KoinTutorialOverlay from './src/components/KoinTutorialOverlay';
+import AppTourManager from './src/components/AppTourManager';
 
 const Stack = createStackNavigator();
 
@@ -40,6 +43,18 @@ const AuthenticatedBubble = () => {
   const { userToken, userInfo } = useAuth();
   if (!userToken || !userInfo) return null;
   return <GlobalDraggableKoin />;
+};
+
+// Koin tutorial overlay — only shown when tutorial is active
+const AuthenticatedTutorial = () => {
+  const { userToken, userInfo } = useAuth();
+  if (!userToken || !userInfo) return null;
+  return (
+    <>
+      <KoinTutorialOverlay />
+      <AppTourManager />
+    </>
+  );
 };
 
 // Simple loading screen component
@@ -268,11 +283,14 @@ export default function App() {
             <ThemedNavigationContainer>
               <AuthProvider>
                 <DataProvider>
+                  <TutorialProvider>
                     <StatusBar style="auto" />
                     <View style={{ flex: 1 }}>
                       <AppNavigator />
+                      <AuthenticatedTutorial />
                       <AuthenticatedBubble />
                     </View>
+                  </TutorialProvider>
                 </DataProvider>
               </AuthProvider>
             </ThemedNavigationContainer>

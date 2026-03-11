@@ -15,6 +15,7 @@ import {
 import { useTheme } from '../context/ThemeContext';
 import ChatModal from './ChatModal';
 import MascotImage from './MascotImage';
+import { useTutorial, TUTORIAL_PHASE } from '../context/TutorialContext';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -25,6 +26,7 @@ const EDGE_SNAP_THRESHOLD = 100;
 
 const GlobalDraggableKoin = () => {
   const { colors } = useTheme();
+  const { tutorialPhase } = useTutorial();
   
   // Animation values
   const pan = useRef(new Animated.ValueXY({ x: screenWidth - BUBBLE_SIZE - 20, y: screenHeight / 2 })).current;
@@ -230,8 +232,11 @@ const GlobalDraggableKoin = () => {
     };
   }, [lastActivity, isDragging]);
   
-  // Don't render if not visible
+  // Don't render if not visible or if tutorial is active (KoinTutorialOverlay handles Koin)
   if (!isVisible) {
+    return null;
+  }
+  if (tutorialPhase && tutorialPhase !== TUTORIAL_PHASE.IDLE && tutorialPhase !== TUTORIAL_PHASE.COMPLETE) {
     return null;
   }
   
