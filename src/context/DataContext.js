@@ -177,7 +177,11 @@ export const DataProvider = ({ children }) => {
   //                           Used during login so the UI renders fast.
   const loadData = async ({ deferInsights = false } = {}) => {
     try {
-      const session = await ensureAuthenticated();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        console.log('loadData skipped: User not authenticated');
+        return;
+      }
       const userId = session.user.id;
 
       console.log('Loading data for user ID:', userId, deferInsights ? '(insights deferred)' : '');

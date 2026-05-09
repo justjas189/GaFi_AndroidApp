@@ -11,6 +11,7 @@ const NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1";
 
 // Ordered list of models to try — if the primary is DEGRADED, fall back to the next
 const NVIDIA_MODELS = [
+  "nvidia/llama-3.3-nemotron-super-49b-v1.5",
   "meta/llama-3.3-70b-instruct",             // Primary model: powerful but may be less available
   "nvidia/llama-3.1-nemotron-ultra-253b-v1", // Fallback 1: very powerful, may have better availability than the primary
   "meta/llama-3.1-8b-instruct",           // Fallback 2: smaller, more available model
@@ -19,22 +20,22 @@ const NVIDIA_MODELS = [
 const NVIDIA_MODEL = NVIDIA_MODELS[0];
 
 // Models that support DeepSeek-style thinking (chat_template_kwargs)
-const THINKING_MODELS = new Set(["deepseek-ai/deepseek-v3.2"]);
+const THINKING_MODELS = new Set(["nvidia/llama-3.3-nemotron-super-49b-v1.5"]);
 
 // Your NVIDIA API key
-const NVIDIA_API_KEY = process.env.EXPO_PUBLIC_NVIDIA_API_KEY || "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";
+const NVIDIA_API_KEY = process.env.EXPO_PUBLIC_NVIDIA_API_KEY;
 
 // Enhanced chat completion function with error recovery and automatic model fallback
 export const getChatCompletion = async (messages, options = {}) => {
   const startTime = Date.now();
-  
+
   try {
     const {
       temperature = 0.6,
       top_p = 0.95,
-      max_tokens = 8192,
-      frequency_penalty = 0.7,
-      presence_penalty = 0.5,
+      max_tokens = 65536,
+      frequency_penalty = 0,
+      presence_penalty = 0,
       stream = false,
     } = options;
 
@@ -75,7 +76,7 @@ export const getChatCompletion = async (messages, options = {}) => {
 
         if (!response.ok) {
           const errorData = await response.text();
-          
+
           // If model is DEGRADED or unavailable (400 with "DEGRADED"), try next model
           if (response.status === 400 && errorData.includes('DEGRADED')) {
             DebugUtils.log('NVIDIA_API', `Model ${modelId} is DEGRADED, trying next fallback...`);
@@ -91,7 +92,7 @@ export const getChatCompletion = async (messages, options = {}) => {
             url: `${NVIDIA_BASE_URL}/chat/completions`,
             apiKeyPresent: !!NVIDIA_API_KEY
           });
-          
+
           // Check for specific error types
           if (response.status === 401) {
             throw new Error('NVIDIA API authentication failed - API key may be invalid or expired');
@@ -100,7 +101,7 @@ export const getChatCompletion = async (messages, options = {}) => {
           } else if (response.status === 500) {
             throw new Error('NVIDIA API server error - please try again later');
           }
-          
+
           throw new Error(`NVIDIA API error: ${response.status} - ${response.statusText}`);
         }
 
@@ -111,7 +112,7 @@ export const getChatCompletion = async (messages, options = {}) => {
         if (modelId !== NVIDIA_MODELS[0]) {
           DebugUtils.log('NVIDIA_API', `Successfully used fallback model: ${modelId}`, { responseTime });
         }
-    
+
         // Log the full response for debugging
         DebugUtils.log('NVIDIA_API', 'Raw API response', {
           hasData: !!data,
@@ -121,37 +122,37 @@ export const getChatCompletion = async (messages, options = {}) => {
           model: modelId,
           responseTime
         });
-    
+
         // Check if response has valid content
         if (!data || !data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
-          DebugUtils.error('NVIDIA_API', 'Invalid API response structure - no choices', { 
-            data: JSON.stringify(data).substring(0, 500) 
+          DebugUtils.error('NVIDIA_API', 'Invalid API response structure - no choices', {
+            data: JSON.stringify(data).substring(0, 500)
           });
           throw new Error('Invalid API response structure - no choices');
         }
-    
+
         const firstChoice = data.choices[0];
         if (!firstChoice || !firstChoice.message) {
-          DebugUtils.error('NVIDIA_API', 'Invalid API response structure - no message', { 
+          DebugUtils.error('NVIDIA_API', 'Invalid API response structure - no message', {
             firstChoice: JSON.stringify(firstChoice).substring(0, 500)
           });
           throw new Error('Invalid API response structure - no message');
         }
-    
+
         // NVIDIA reasoning models may return content in 'reasoning_content' field
         const content = firstChoice.message.content || firstChoice.message.reasoning_content;
-    
+
         // Check if content is null or empty
         if (!content || content === null || content === undefined || content === '') {
-          DebugUtils.error('NVIDIA_API', 'API returned null or empty content', { 
+          DebugUtils.error('NVIDIA_API', 'API returned null or empty content', {
             message: firstChoice.message,
             hasContent: !!firstChoice.message.content,
             hasReasoningContent: !!firstChoice.message.reasoning_content,
-            responseTime 
+            responseTime
           });
           throw new Error('API returned null or empty content');
         }
-    
+
         DebugUtils.log('NVIDIA_API', 'Chat completion successful', {
           responseTime,
           model: modelId,
@@ -181,10 +182,10 @@ export const getChatCompletion = async (messages, options = {}) => {
       error: error.message,
       responseTime
     });
-    
+
     // Log error for debugging
     DebugUtils.warn('NVIDIA_API', 'API error, returning fallback response');
-    
+
     // Return a basic fallback response
     return "I'm having trouble connecting to my AI services, but I can still help with basic expense tracking. Please try again or use simpler commands.";
   }
@@ -361,23 +362,23 @@ export const FINANCIAL_TIPS = [
 // Function to get personalized financial tips
 export const getPersonalizedTip = (userExpenses, userBudget) => {
   const tips = [...FINANCIAL_TIPS];
-  
+
   // Add context-specific tips based on spending patterns
   if (userExpenses && userBudget) {
     const foodSpending = userExpenses.filter(e => e.category === 'food')
       .reduce((sum, e) => sum + parseFloat(e.amount), 0);
     const transportSpending = userExpenses.filter(e => e.category === 'transportation')
       .reduce((sum, e) => sum + parseFloat(e.amount), 0);
-    
+
     if (foodSpending > userBudget.categories?.food?.limit * 0.8) {
       tips.unshift("Your food spending is high. Try meal prepping to save money!");
     }
-    
+
     if (transportSpending > userBudget.categories?.transportation?.limit * 0.8) {
       tips.unshift("Consider using student transport cards or walking more to save on transport costs.");
     }
   }
-  
+
   return tips[Math.floor(Math.random() * Math.min(tips.length, 3))];
 };
 
@@ -416,7 +417,10 @@ export const analyzeExpenses = async (expenses, budget = null) => {
         role: 'system',
         content: `You are a Filipino financial advisor AI specializing in college student budgeting. Analyze spending patterns and provide actionable insights in Filipino context. 
 
-CRITICAL: Respond with ONLY a valid JSON array. Do not include any explanatory text, greetings, or additional content. 
+CRITICAL: Respond with ONLY a raw JSON array. 
+Do NOT wrap the response in markdown code blocks (e.g., no \`\`\`json or \`\`\`).
+Do NOT include any conversational text, greetings, or explanations.
+Output ONLY the raw JSON array starting with [ and ending with ].
 
 Return insights as a JSON array with this exact format:
 [
@@ -465,17 +469,17 @@ Focus on: spending patterns, budget adherence, category-specific tips, and Filip
       // Clean and extract JSON from the response
       const cleanedResponse = extractJSON(response);
       insights = JSON.parse(cleanedResponse);
-      
+
       // Validate the parsed insights
       if (!Array.isArray(insights)) {
         throw new Error('Response is not an array');
       }
-      
+
       // Ensure each insight has required fields and valid icons
-      insights = insights.filter(insight => 
-        insight && 
-        typeof insight === 'object' && 
-        insight.title && 
+      insights = insights.filter(insight =>
+        insight &&
+        typeof insight === 'object' &&
+        insight.title &&
         insight.message
       ).map(insight => ({
         type: insight.type || 'info',
@@ -484,14 +488,15 @@ Focus on: spending patterns, budget adherence, category-specific tips, and Filip
         icon: validateIconName(insight.icon), // Validate and fix icon names
         color: insight.color || '#4CAF50'
       }));
-      
+
       DebugUtils.log('NVIDIA_AI', 'AI analysis successful', { insightCount: insights.length });
     } catch (parseError) {
       DebugUtils.error('NVIDIA_AI', 'AI response parsing failed', parseError);
-      DebugUtils.log('NVIDIA_AI', 'Raw response that failed to parse', { response: response.substring(0, 200) });
-      
+      DebugUtils.log('NVIDIA_AI', 'Raw response that failed to parse', { response: typeof response === 'string' ? response.substring(0, 200) : String(response).substring(0, 200) });
+
       // Fallback to manual insights
       insights = generateFallbackInsights(expenses, budget);
+      if (!Array.isArray(insights)) insights = [];
     }
 
     // Ensure insights have unique IDs and are properly formatted
@@ -502,7 +507,7 @@ Focus on: spending patterns, budget adherence, category-specific tips, and Filip
 
   } catch (error) {
     DebugUtils.error('NVIDIA_AI', 'Error analyzing expenses with AI', error);
-    
+
     return generateFallbackInsights(expenses, budget);
   }
 };
@@ -534,24 +539,24 @@ export const getRecommendations = async (userProfile, expenses, budget = null) =
     });
 
     const topCategory = Object.entries(categorySpending)
-      .sort(([,a], [,b]) => b - a)[0];
+      .sort(([, a], [, b]) => b - a)[0];
 
     // Check for budget alerts before generating recommendations
     if (userProfile?.id && budget) {
-      const totalSpent = Object.values(categorySpending).reduce((a,b) => a+b, 0);
+      const totalSpent = Object.values(categorySpending).reduce((a, b) => a + b, 0);
       const alerts = await budgetAlertManager.processExpenseAlert(
         userProfile.id,
         { amount: 0, category: 'check' }, // Dummy expense for checking
         budget,
         categorySpending
       );
-      
+
       // If there are critical alerts, prioritize those in recommendations
       if (alerts.length > 0) {
-        const criticalAlerts = alerts.filter(alert => 
+        const criticalAlerts = alerts.filter(alert =>
           alert.level === 'critical' || alert.level === 'exceeded'
         );
-        
+
         if (criticalAlerts.length > 0) {
           return criticalAlerts.map(alert => ({
             id: alert.id,
@@ -571,7 +576,10 @@ export const getRecommendations = async (userProfile, expenses, budget = null) =
         role: 'system',
         content: `You are a financial coach for Filipino college students. Provide personalized money-saving recommendations.
 
-CRITICAL: Respond with ONLY a valid JSON array. Do not include any explanatory text, greetings, or additional content.
+CRITICAL: Respond with ONLY a raw JSON array. 
+Do NOT wrap the response in markdown code blocks (e.g., no \`\`\`json or \`\`\`).
+Do NOT include any conversational text, greetings, or explanations like "Certainly!".
+Output ONLY the raw JSON array starting with [ and ending with ].
 
 Return as JSON array with this format:
 [
@@ -600,7 +608,7 @@ Focus on: Filipino student context, practical savings tips, budget optimization,
         content: `Generate 2-3 personalized recommendations for this student:
         
         Top Spending Category: ${topCategory ? `${topCategory[0]} (₱${topCategory[1].toLocaleString()})` : 'No data'}
-        Total Monthly Spending: ₱${categorySpending ? Object.values(categorySpending).reduce((a,b) => a+b, 0).toLocaleString() : '0'}
+        Total Monthly Spending: ₱${categorySpending ? Object.values(categorySpending).reduce((a, b) => a + b, 0).toLocaleString() : '0'}
         Budget: ₱${budget?.monthly?.toLocaleString() || 'Not set'}
         
         Focus on practical, student-friendly Philippine context recommendations.`
@@ -619,17 +627,17 @@ Focus on: Filipino student context, practical savings tips, budget optimization,
       // Clean and extract JSON from the response
       const cleanedResponse = extractJSON(response);
       recommendations = JSON.parse(cleanedResponse);
-      
+
       // Validate the parsed recommendations
       if (!Array.isArray(recommendations)) {
         throw new Error('Response is not an array');
       }
-      
+
       // Ensure each recommendation has required fields and valid icons
-      recommendations = recommendations.filter(rec => 
-        rec && 
-        typeof rec === 'object' && 
-        rec.title && 
+      recommendations = recommendations.filter(rec =>
+        rec &&
+        typeof rec === 'object' &&
+        rec.title &&
         rec.message
       ).map(rec => ({
         type: rec.type || 'success',
@@ -638,15 +646,16 @@ Focus on: Filipino student context, practical savings tips, budget optimization,
         icon: validateIconName(rec.icon), // Validate and fix icon names
         color: rec.color || '#4CAF50'
       }));
-      
-      DebugUtils.log('NVIDIA_AI', 'Recommendations generated successfully', { 
-        recommendationCount: recommendations.length 
+
+      DebugUtils.log('NVIDIA_AI', 'Recommendations generated successfully', {
+        recommendationCount: recommendations.length
       });
     } catch (parseError) {
       DebugUtils.error('NVIDIA_AI', 'Recommendation parsing failed', parseError);
-      DebugUtils.log('NVIDIA_AI', 'Raw response that failed to parse', { response: response.substring(0, 200) });
-      
+      DebugUtils.log('NVIDIA_AI', 'Raw response that failed to parse', { response: typeof response === 'string' ? response.substring(0, 200) : String(response).substring(0, 200) });
+
       recommendations = generateFallbackRecommendations(expenses, budget);
+      if (!Array.isArray(recommendations)) recommendations = [];
     }
 
     return recommendations.map((rec, index) => ({
@@ -656,8 +665,9 @@ Focus on: Filipino student context, practical savings tips, budget optimization,
 
   } catch (error) {
     DebugUtils.error('NVIDIA_AI', 'Error getting AI recommendations', error);
-    
-    return generateFallbackRecommendations(expenses, budget);
+
+    const fallbacks = generateFallbackRecommendations(expenses, budget);
+    return Array.isArray(fallbacks) ? fallbacks : [];
   }
 };
 
@@ -694,169 +704,43 @@ const sanitizeJSONString = (str) => {
 // Helper function to extract JSON from mixed text responses
 const extractJSON = (response) => {
   try {
-    // Check if response is null or undefined
-    if (!response || response === null || response === undefined) {
-      DebugUtils.error('NVIDIA_AI', 'Response is null or undefined');
-      throw new Error('Response is null or undefined');
+    if (!response) return '[]';
+    
+    let str = typeof response === 'string' ? response : String(response);
+    str = str.trim();
+    
+    // 1. Strip markdown formatting first
+    const markdownRegex = /```(?:json)?\s*([\s\S]*?)\s*```/i;
+    const markdownMatch = str.match(markdownRegex);
+    if (markdownMatch) {
+      str = markdownMatch[1].trim();
     }
     
-    // Convert to string if not already
-    let responseStr = typeof response === 'string' ? response : String(response);
+    // 2. Extract JSON by matching outer brackets if still contains conversational filler
+    const firstBracket = str.indexOf('[');
+    const lastBracket = str.lastIndexOf(']');
+    const firstBrace = str.indexOf('{');
+    const lastBrace = str.lastIndexOf('}');
     
-    DebugUtils.log('NVIDIA_AI', 'Attempting to extract JSON from response', { 
-      responseStart: responseStr.substring(0, 100),
-      responseType: typeof response,
-      responseLength: responseStr.length
-    });
+    if (firstBracket !== -1 && lastBracket !== -1 && (firstBrace === -1 || firstBracket < firstBrace)) {
+      str = str.substring(firstBracket, lastBracket + 1);
+    } else if (firstBrace !== -1 && lastBrace !== -1) {
+      str = str.substring(firstBrace, lastBrace + 1);
+      // Ensure it's wrapped in an array if it's a single object
+      if (!str.startsWith('[')) {
+        str = `[${str}]`;
+      }
+    }
 
-    // Sanitize: strip comments and invalid characters BEFORE any parsing
-    responseStr = sanitizeJSONString(responseStr);
+    // 3. Sanitize comments and invalid characters
+    str = sanitizeJSONString(str);
     
-    // Check for truncated response — log warning but don't throw yet;
-    // let the repair logic below attempt to salvage partial JSON.
-    if (responseStr.trim().endsWith(',') || 
-        responseStr.trim().endsWith('"') || 
-        (!responseStr.trim().endsWith(']') && !responseStr.trim().endsWith('}'))) {
-      DebugUtils.warn('NVIDIA_AI', 'Response appears to be truncated, attempting repair', { 
-        responseEnd: responseStr.slice(-50) 
-      });
-      // fall through to repair logic
-      throw new Error('Response is truncated - attempting repair');
-    }
+    // Validate by parsing
+    JSON.parse(str);
     
-    // First, try to parse as-is
-    JSON.parse(responseStr);
-    return responseStr;
+    return str;
   } catch (error) {
-    // If direct parsing fails, try to extract JSON from the response
-    
-    // Ensure response is a string and sanitize it
-    let responseStr = typeof response === 'string' ? response : (response ? String(response) : '');
-    responseStr = sanitizeJSONString(responseStr);
-    
-    if (!responseStr) {
-      DebugUtils.error('NVIDIA_AI', 'Cannot extract JSON from empty response');
-      return '[]';
-    }
-    
-    // Look for JSON array patterns
-    const arrayMatch = responseStr.match(/\[\s*\{[\s\S]*\}\s*\]/);
-    if (arrayMatch) {
-      DebugUtils.log('NVIDIA_AI', 'Found JSON array pattern', { match: arrayMatch[0].substring(0, 100) });
-      return arrayMatch[0];
-    }
-    
-    // Try to fix incomplete JSON by finding the start and attempting completion
-    const incompleteMatch = responseStr.match(/\[\s*\{[\s\S]*$/);
-    if (incompleteMatch) {
-      const incomplete = incompleteMatch[0];
-      DebugUtils.warn('NVIDIA_AI', 'Found incomplete JSON, attempting to complete it', { 
-        incomplete: incomplete.substring(0, 100) 
-      });
-      
-      // Strategy: extract all fully-formed objects from the truncated array,
-      // discard the last partial object, and close the array.
-      const fullObjectsMatch = incomplete.match(/\{[^{}]*\}/g);
-      if (fullObjectsMatch && fullObjectsMatch.length > 0) {
-        // Validate each extracted object and keep only parseable ones
-        const validObjects = fullObjectsMatch.filter(obj => {
-          try { JSON.parse(obj); return true; } catch { return false; }
-        });
-        if (validObjects.length > 0) {
-          const repaired = '[' + validObjects.join(',') + ']';
-          try {
-            JSON.parse(repaired);
-            DebugUtils.log('NVIDIA_AI', 'Successfully repaired truncated JSON', {
-              objectsRecovered: validObjects.length,
-              objectsDiscarded: fullObjectsMatch.length - validObjects.length
-            });
-            return repaired;
-          } catch (e) {
-            DebugUtils.warn('NVIDIA_AI', 'Repaired JSON still invalid', { error: e.message });
-          }
-        }
-      }
-      
-      // Fallback: try to complete the JSON by adding missing properties and closing brackets
-      let completed = incomplete;
-      if (completed.trim().endsWith(',') || completed.trim().endsWith('"')) {
-        // Add missing icon and color if not present
-        if (!completed.includes('"icon"')) {
-          completed += '\n    "icon": "bulb-outline",';
-        }
-        if (!completed.includes('"color"')) {
-          completed += '\n    "color": "#4CAF50"';
-        }
-        completed += '\n  }\n]';
-        
-        try {
-          JSON.parse(completed);
-          DebugUtils.log('NVIDIA_AI', 'Successfully completed truncated JSON with field repair');
-          return completed;
-        } catch (e) {
-          DebugUtils.warn('NVIDIA_AI', 'Failed to complete JSON', { error: e.message });
-        }
-      }
-    }
-    
-    // Look for JSON object patterns (single object that should be wrapped in array)
-    const objectMatch = responseStr.match(/\{[\s\S]*\}/);
-    if (objectMatch) {
-      // Check if it's a valid single object by trying to parse it
-      try {
-        const testParse = JSON.parse(objectMatch[0]);
-        if (typeof testParse === 'object' && !Array.isArray(testParse)) {
-          DebugUtils.log('NVIDIA_AI', 'Found valid single JSON object, wrapping in array', { match: objectMatch[0].substring(0, 100) });
-          return `[${objectMatch[0]}]`;
-        }
-      } catch (e) {
-        DebugUtils.log('NVIDIA_AI', 'Object match found but not valid JSON', { error: e.message });
-      }
-    }
-    
-    // Try to find content between code blocks
-    const codeBlockMatch = responseStr.match(/```(?:json)?\s*(\[[\s\S]*?\]|\{[\s\S]*?\})\s*```/);
-    if (codeBlockMatch) {
-      DebugUtils.log('NVIDIA_AI', 'Found JSON in code block', { match: codeBlockMatch[1].substring(0, 100) });
-      return sanitizeJSONString(codeBlockMatch[1]);
-    }
-    
-    // Try to clean up common issues
-    let cleaned = responseStr.trim();
-    
-    // Remove common prefixes
-    cleaned = cleaned.replace(/^(Here's?|Here are|Based on|The analysis shows?)[\s\S]*?(\[|\{)/, '$2');
-    
-    // Remove common suffixes after JSON
-    cleaned = cleaned.replace(/(\]|\})\s*[\s\S]*$/, '$1');
-    
-    // Try to find the first [ or { and last ] or }
-    const startBracket = Math.min(
-      cleaned.indexOf('[') >= 0 ? cleaned.indexOf('[') : Infinity,
-      cleaned.indexOf('{') >= 0 ? cleaned.indexOf('{') : Infinity
-    );
-    
-    if (startBracket !== Infinity) {
-      const substring = cleaned.substring(startBracket);
-      const endBracket = Math.max(
-        substring.lastIndexOf(']'),
-        substring.lastIndexOf('}')
-      );
-      
-      if (endBracket > 0) {
-        const extracted = substring.substring(0, endBracket + 1);
-        DebugUtils.log('NVIDIA_AI', 'Extracted JSON by bracket matching', { 
-          extracted: extracted.substring(0, 100) 
-        });
-        return extracted;
-      }
-    }
-    
-    DebugUtils.error('NVIDIA_AI', 'Could not extract valid JSON from response', { 
-      response: responseStr.substring(0, 200) 
-    });
-    
-    // Return empty array as last resort
+    DebugUtils.error('NVIDIA_AI', 'extractJSON parsing failed', error);
     return '[]';
   }
 };
@@ -875,12 +759,12 @@ const validateIconName = (iconName) => {
   if (!iconName || typeof iconName !== 'string') {
     return 'bulb-outline'; // Default fallback
   }
-  
+
   // Check if it's already a valid modern icon
   if (VALID_ICONICONS.includes(iconName)) {
     return iconName;
   }
-  
+
   // Convert old formats to modern equivalents
   const iconMappings = {
     'ion-ios-list': 'list-outline',
@@ -898,32 +782,32 @@ const validateIconName = (iconName) => {
     'cash': 'wallet-outline',
     'close': 'close-circle-outline'
   };
-  
+
   const mapped = iconMappings[iconName];
   if (mapped) {
-    DebugUtils.log('NVIDIA_AI', 'Converted legacy icon name', { 
-      oldIcon: iconName, 
-      newIcon: mapped 
+    DebugUtils.log('NVIDIA_AI', 'Converted legacy icon name', {
+      oldIcon: iconName,
+      newIcon: mapped
     });
     return mapped;
   }
-  
+
   // Try to find a partial match
   const lowerIcon = iconName.toLowerCase();
-  const partialMatch = VALID_ICONICONS.find(validIcon => 
+  const partialMatch = VALID_ICONICONS.find(validIcon =>
     validIcon.includes(lowerIcon) || lowerIcon.includes(validIcon.replace('-outline', ''))
   );
-  
+
   if (partialMatch) {
-    DebugUtils.log('NVIDIA_AI', 'Found partial icon match', { 
-      originalIcon: iconName, 
-      matchedIcon: partialMatch 
+    DebugUtils.log('NVIDIA_AI', 'Found partial icon match', {
+      originalIcon: iconName,
+      matchedIcon: partialMatch
     });
     return partialMatch;
   }
-  
-  DebugUtils.warn('NVIDIA_AI', 'Invalid icon name, using fallback', { 
-    invalidIcon: iconName 
+
+  DebugUtils.warn('NVIDIA_AI', 'Invalid icon name, using fallback', {
+    invalidIcon: iconName
   });
   return 'bulb-outline'; // Default fallback
 };
@@ -932,13 +816,13 @@ const validateIconName = (iconName) => {
 const generateFallbackInsights = (expenses, budget) => {
   const insights = [];
   const totalSpent = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
-  
+
   DebugUtils.log('NVIDIA_AI', 'Generating fallback insights', {
     totalSpent,
     expenseCount: expenses.length,
     hasBudget: !!budget
   });
-  
+
   // Category analysis with enhanced insights
   const categorySpending = {};
   expenses.forEach(expense => {
@@ -946,8 +830,8 @@ const generateFallbackInsights = (expenses, budget) => {
     categorySpending[cat] = (categorySpending[cat] || 0) + parseFloat(expense.amount);
   });
 
-  const topCategory = Object.entries(categorySpending).sort(([,a], [,b]) => b - a)[0];
-  
+  const topCategory = Object.entries(categorySpending).sort(([, a], [, b]) => b - a)[0];
+
   if (topCategory) {
     const categoryName = topCategory[0].charAt(0).toUpperCase() + topCategory[0].slice(1);
     insights.push({
@@ -962,7 +846,7 @@ const generateFallbackInsights = (expenses, budget) => {
   // Enhanced budget analysis with real-time alerts
   if (budget?.monthly > 0) {
     const percentage = (totalSpent / budget.monthly) * 100;
-    
+
     if (percentage > 100) {
       insights.push({
         type: 'error',
@@ -1002,7 +886,7 @@ const generateFallbackInsights = (expenses, budget) => {
   if (expenses.length >= 5) {
     const recentExpenses = expenses.slice(-5);
     const avgAmount = recentExpenses.reduce((sum, e) => sum + parseFloat(e.amount), 0) / recentExpenses.length;
-    
+
     if (avgAmount > 200) {
       insights.push({
         type: 'info',
@@ -1020,7 +904,7 @@ const generateFallbackInsights = (expenses, budget) => {
 // Enhanced fallback recommendations with personalized tips
 const generateFallbackRecommendations = (expenses, budget) => {
   const recommendations = [];
-  
+
   DebugUtils.log('NVIDIA_AI', 'Generating fallback recommendations', {
     expenseCount: expenses.length,
     hasBudget: !!budget
@@ -1033,7 +917,7 @@ const generateFallbackRecommendations = (expenses, budget) => {
     categorySpending[cat] = (categorySpending[cat] || 0) + parseFloat(expense.amount);
   });
 
-  const topCategory = Object.entries(categorySpending).sort(([,a], [,b]) => b - a)[0];
+  const topCategory = Object.entries(categorySpending).sort(([, a], [, b]) => b - a)[0];
 
   // Category-specific recommendations
   if (topCategory) {
@@ -1044,9 +928,9 @@ const generateFallbackRecommendations = (expenses, budget) => {
 
   // Budget-based recommendations
   if (budget?.monthly > 0) {
-    const totalSpent = Object.values(categorySpending).reduce((a,b) => a+b, 0);
+    const totalSpent = Object.values(categorySpending).reduce((a, b) => a + b, 0);
     const percentage = (totalSpent / budget.monthly) * 100;
-    
+
     if (percentage > 80) {
       recommendations.push({
         type: 'warning',
@@ -1073,7 +957,7 @@ const generateFallbackRecommendations = (expenses, budget) => {
 // Get category-specific recommendations
 const getCategoryRecommendations = (category, amount) => {
   const recommendations = [];
-  
+
   switch (category) {
     case 'food':
       if (amount > 2000) {
@@ -1086,7 +970,7 @@ const getCategoryRecommendations = (category, amount) => {
         });
       }
       break;
-      
+
     case 'transportation':
       if (amount > 1000) {
         recommendations.push({
@@ -1098,7 +982,7 @@ const getCategoryRecommendations = (category, amount) => {
         });
       }
       break;
-      
+
     case 'entertainment':
       if (amount > 1500) {
         recommendations.push({
@@ -1110,7 +994,7 @@ const getCategoryRecommendations = (category, amount) => {
         });
       }
       break;
-      
+
     case 'shopping':
       recommendations.push({
         type: 'success',
@@ -1120,7 +1004,7 @@ const getCategoryRecommendations = (category, amount) => {
         color: '#FF9800'
       });
       break;
-      
+
     default:
       recommendations.push({
         type: 'info',
@@ -1130,7 +1014,7 @@ const getCategoryRecommendations = (category, amount) => {
         color: '#607D8B'
       });
   }
-  
+
   return recommendations;
 };
 
@@ -1144,7 +1028,7 @@ const getCategoryIcon = (category) => {
     utilities: 'build-outline',
     others: 'ellipsis-horizontal-outline'
   };
-  
+
   return icons[category] || 'wallet-outline';
 };
 
@@ -1169,8 +1053,8 @@ export const processExpenseForAlerts = async (userId, expense, currentBudget, ca
 
     return alerts.map(alert => ({
       id: alert.id,
-      type: alert.level === 'exceeded' ? 'error' : 
-            alert.level === 'critical' ? 'warning' : 'info',
+      type: alert.level === 'exceeded' ? 'error' :
+        alert.level === 'critical' ? 'warning' : 'info',
       title: alert.title,
       message: alert.message,
       icon: alert.icon,

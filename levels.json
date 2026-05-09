@@ -1,0 +1,118 @@
+[
+  {
+    "level": 1,
+    "levelName": "Budgeting",
+    "day": 1,
+    "financialConcept": "Division (50/30/20 Rule)",
+    "koinDialogue": "Welcome to budgeting! The golden rule is Division. Before you spend, split your money: Needs, Wants, and Savings. Let's log your basics today to set a baseline.",
+    "tasks": [
+      "Log exactly 2 Needs expenses & 1 Wants expense.",
+      "Travel to School/Office and record a Transport expense.",
+      "End day with Needs <= 50% and Wants <= 30%."
+    ]
+  },
+  {
+    "level": 1,
+    "levelName": "Budgeting",
+    "day": 2,
+    "financialConcept": "Diversification (Spending variation)",
+    "koinDialogue": "Don't spend all your budget on just one thing! Diversification means spreading your spending across different categories so your lifestyle is balanced safely.",
+    "tasks": [
+      "Log expenses across at least 4 different categories.",
+      "Include at least 2 distinct Needs (e.g., Food + Transport).",
+      "Ensure no single expense goes over 40% of the day's total spend."
+    ]
+  },
+  {
+    "level": 1,
+    "levelName": "Budgeting",
+    "day": 3,
+    "financialConcept": "Stress Test (Unexpected costs)",
+    "koinDialogue": "Surprise! A wild expense appeared. A good budget has a buffer to absorb shocks. Let's see if you can handle an Unplanned Expense without breaking the 50/30 limits!",
+    "tasks": [
+      "Log 4+ total expenses today.",
+      "Log 1 unplanned expense using the 'Other' category.",
+      "Finish the day with your 50/30/20 division perfectly intact."
+    ]
+  },
+  {
+    "level": 2,
+    "levelName": "Goals",
+    "day": 4,
+    "financialConcept": "Inflation (Purchasing power)",
+    "koinDialogue": "Have you noticed prices going up? That's Inflation eating your purchasing power! To keep up, money needs to grow. We need to raise our targets to survive the price hike.",
+    "tasks": [
+      "Log 1 Need at Home and 1 Need at School/Office to cover rising essentials.",
+      "Log 1 expense in the 'Other' category to simulate an inflation surcharge.",
+      "End the day with Needs <= 50% and total spending under 85% of your daily budget."
+    ]
+  },
+  {
+    "level": 2,
+    "levelName": "Goals",
+    "day": 5,
+    "financialConcept": "Risk vs. Return (Capital allocation)",
+    "koinDialogue": "Want your money to grow? You must choose: Low risk means safe but slow growth. High risk means potential for more, but you might lose some. How will you place your bets?",
+    "tasks": [
+      "Log exactly 3 Needs today (safe, essential spending).",
+      "Log exactly 1 Want at the Store (your risky splurge).",
+      "Keep Wants under 30% of today's total spend."
+    ]
+  },
+  {
+    "level": 2,
+    "levelName": "Goals",
+    "day": 6,
+    "financialConcept": "Rebalancing (Portfolio parity)",
+    "koinDialogue": "After taking risks, it's time to Rebalance! A smart saver adjusts their goals constantly to make sure one doesn't fall too far behind the other.",
+    "tasks": [
+      "Log 2 Needs and 2 Wants to balance your spending across both types.",
+      "Keep Needs between 40%-60% and Wants between 20%-40% of the day's total.",
+      "Visit at least 3 different map locations today."
+    ]
+  },
+  {
+    "level": 3,
+    "levelName": "Saving",
+    "day": 7,
+    "financialConcept": "Simple Interest (Linear growth)",
+    "koinDialogue": "Let's put your money to work! Simple Interest pays you a flat rate on your original savings. Keep your spending strictly to basics today to lock in your principal amount.",
+    "tasks": [
+      "Log exactly 1 Needs expense today. No Wants allowed.",
+      "Keep total spending under 20% of your weekly budget."
+    ]
+  },
+  {
+    "level": 3,
+    "levelName": "Saving",
+    "day": 8,
+    "financialConcept": "Compound Interest (Exponential growth)",
+    "koinDialogue": "Here is the ultimate money hack: Compound Interest! This means earning interest on top of your past interest. It starts slow, but grows like an avalanche!",
+    "tasks": [
+      "Travel to School/Office via commute and log 1 Transport expense.",
+      "Keep total daily spend <= 15% of your weekly budget."
+    ]
+  },
+  {
+    "level": 3,
+    "levelName": "Saving",
+    "day": 9,
+    "financialConcept": "Temptation Test (Discipline)",
+    "koinDialogue": "Head to the Mall! The secret to compound growth is patience and avoiding the temptation to drain your account. Let's practice controlled exposure.",
+    "tasks": [
+      "Visit the Mall and log exactly 1 Needs expense (e.g., Groceries).",
+      "Log 0 Wants for the entire day."
+    ]
+  },
+  {
+    "level": 3,
+    "levelName": "Saving",
+    "day": 10,
+    "financialConcept": "Mastery Audit (Final review)",
+    "koinDialogue": "You mastered division, survived inflation, and harnessed compound interest! Finish strong by securing your final savings rate. You are Koin's ultimate Super Saver!",
+    "tasks": [
+      "Reach at least 30% level savings rate.",
+      "Log at least 2 expenses while keeping Wants <= 10% of today's spend."
+    ]
+  }
+]

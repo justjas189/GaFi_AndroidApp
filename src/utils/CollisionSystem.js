@@ -17,10 +17,12 @@ import Map004Data from '../../assets/Game_Graphics/maps/School/Map004.json';
 import Map006Data from '../../assets/Game_Graphics/maps/Mall/Map006.json';
 import Map007Data from '../../assets/Game_Graphics/maps/Mall/Map007.json';
 import Map008Data from '../../assets/Game_Graphics/maps/Mall/Map008.json';
+import Map010Data from '../../assets/Game_Graphics/maps/Office/Map010.json';
 import TilesetsData from '../../assets/Game_Graphics/maps/Tilesets.json';
 import MallTilesetsData from '../../assets/Game_Graphics/maps/Mall_Tilesets.json';
 import MallFloorTilesetsData from '../../assets/Game_Graphics/maps/Mall/Tilesets.json';
 import SchoolTilesetsData from '../../assets/Game_Graphics/maps/School/Tilesets.json';
+import OfficeTilesetsData from '../../assets/Game_Graphics/maps/Office/Tilesets.json';
 
 class CollisionSystem {
   constructor() {
@@ -137,6 +139,26 @@ class CollisionSystem {
         }
 
         console.log(`✅ Collision system initialized for MALL 3F: ${this.mapWidth}x${this.mapHeight} tiles`);
+        console.log(`   Loaded ${this.tilesetFlags.length} tile flags`);
+        this.initialized = true;
+        return true;
+      }
+
+      // Office map (Map010)
+      if (mapId === 'office') {
+        this.mapData = Map010Data.data;
+        this.mapWidth = Map010Data.width;
+        this.mapHeight = Map010Data.height;
+
+        const officeTileset = OfficeTilesetsData.find(t => t && t.id === 8);
+        if (officeTileset) {
+          this.tilesetFlags = officeTileset.flags;
+        } else {
+          console.error('Tileset ID 8 (Office) not found');
+          this.tilesetFlags = [];
+        }
+
+        console.log(`✅ Collision system initialized for OFFICE: ${this.mapWidth}x${this.mapHeight} tiles`);
         console.log(`   Loaded ${this.tilesetFlags.length} tile flags`);
         this.initialized = true;
         return true;

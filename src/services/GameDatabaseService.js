@@ -635,7 +635,10 @@ class GameDatabaseService {
   }) {
     try {
       const userId = await this._getUserId();
-      if (!userId) throw new Error('Not authenticated');
+      if (!userId) {
+        console.log('incrementUserLevelStats skipped: Not authenticated');
+        return;
+      }
 
       // Step 1: Ensure the row exists (race-safe upsert with DO NOTHING semantics)
       await supabase

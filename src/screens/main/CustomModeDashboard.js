@@ -16,12 +16,12 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemeContext } from '../../context/ThemeContext';
 import { AuthContext } from '../../context/AuthContext';
 import { DataContext } from '../../context/DataContext';
 import { supabase } from '../../config/supabase';
-import gameDatabaseService from '../../services/GameDatabaseService';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -78,17 +78,12 @@ const CATEGORY_META = {
 };
 
 const WALLET_META = {
-  GCash: { icon: 'phone-portrait', color: '#007DFE' },
-  Maya: { icon: 'phone-portrait', color: '#00C853' },
-  BDO: { icon: 'business', color: '#003087' },
-  BPI: { icon: 'business', color: '#CC0000' },
-  Landbank: { icon: 'business', color: '#006633' },
-  Cash: { icon: 'cash', color: '#4CAF50' },
-  PNB: { icon: 'business', color: '#00529B' },
-  UnionBank: { icon: 'business', color: '#F4811F' },
+  'TRADITIONAL BANK': { icon: 'business', color: '#3F51B5' },
+  'EWALLET': { icon: 'phone-portrait', color: '#007DFE' },
+  'PHYSICAL SAVING': { icon: 'cash', color: '#4CAF50' },
 };
 const DEFAULT_WALLET = { icon: 'wallet', color: '#795548' };
-const WALLET_PRESETS = ['GCash', 'Maya', 'BDO', 'BPI', 'Landbank', 'PNB', 'UnionBank', 'Cash'];
+const WALLET_PRESETS = ['TRADITIONAL BANK', 'EWALLET', 'PHYSICAL SAVING'];
 
 const GOAL_FILTERS = ['All', 'Active', 'Achieved'];
 const GOAL_SORTS = [
@@ -140,6 +135,35 @@ const formatShortDate = (dateStr) => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
+const formatInputDate = (date) => {
+  if (!date) return '';
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const yyyy = date.getFullYear();
+  return `${mm}/${dd}/${yyyy}`;
+};
+
+const parseInputDate = (value) => {
+  if (!value) return null;
+  const match = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!match) return null;
+  const month = parseInt(match[1], 10);
+  const day = parseInt(match[2], 10);
+  const year = parseInt(match[3], 10);
+  if (month < 1 || month > 12) return null;
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+  return date;
+};
+
+const formatIsoDate = (date) => {
+  if (!date) return null;
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const yyyy = date.getFullYear();
+  return `${yyyy}-${mm}-${dd}`;
+};
+
 const daysUntil = (dateStr) => {
   if (!dateStr) return null;
   const diff = new Date(dateStr) - new Date();
@@ -147,17 +171,20 @@ const daysUntil = (dateStr) => {
 };
 
 const getBudgetHealthScore = (breakdown, monthlyBudget) => {
-  if (monthlyBudget <= 0) return 0;
-  const nb = breakdown.needs.budget;
-  const wb = breakdown.wants.budget;
-  const sb = breakdown.savings.budget;
-  const ns = breakdown.needs.spent;
-  const ws = breakdown.wants.spent;
-  const sa = breakdown.savings.actual;
-  const needsScore = nb > 0 ? (ns <= nb ? 1 : Math.max(0, 1 - (ns - nb) / nb)) : 1;
-  const wantsScore = wb > 0 ? (ws <= wb ? 1 : Math.max(0, 1 - (ws - wb) / wb)) : 1;
+  if (!monthlyBudget || monthlyBudget <= 0) return 0;
+  const nb = breakdown.needs.budget || 0;
+  const wb = breakdown.wants.budget || 0;
+  const sb = breakdown.savings.budget || 0;
+  const ns = breakdown.needs.spent || 0;
+  const ws = breakdown.wants.spent || 0;
+  const sa = breakdown.savings.actual || 0;
+  const needsScore = nb > 0 ? (ns <= nb ? 1 : Math.max(0, 1 - (ns - nb) / nb)) : (ns === 0 ? 1 : 0);
+  const wantsScore = wb > 0 ? (ws <= wb ? 1 : Math.max(0, 1 - (ws - wb) / wb)) : (ws === 0 ? 1 : 0);
   const savingsScore = sb > 0 ? Math.min(sa / sb, 1) : sa > 0 ? 1 : 0.5;
-  return Math.round((needsScore * 0.35 + wantsScore * 0.35 + savingsScore * 0.3) * 100);
+  const raw = (needsScore * 0.35 + wantsScore * 0.35 + savingsScore * 0.3) * 100;
+  const score = Math.round(raw);
+  if (!isFinite(score) || isNaN(score)) return 0;
+  return Math.max(0, Math.min(100, score));
 };
 
 const getHealthLabel = (score) => {
@@ -207,6 +234,8 @@ export default function CustomModeDashboard({ navigation }) {
   const [newGoalTitle, setNewGoalTitle] = useState('');
   const [newGoalTarget, setNewGoalTarget] = useState('');
   const [newGoalDeadline, setNewGoalDeadline] = useState('');
+  const [newGoalDeadlineDate, setNewGoalDeadlineDate] = useState(null);
+  const [showGoalDatePicker, setShowGoalDatePicker] = useState(false);
   const [goalSubmitting, setGoalSubmitting] = useState(false);
   const [showEditGoal, setShowEditGoal] = useState(false);
   const [editGoalData, setEditGoalData] = useState(null);
@@ -219,6 +248,7 @@ export default function CustomModeDashboard({ navigation }) {
   const [transactions, setTransactions] = useState([]);
   const [showAddWallet, setShowAddWallet] = useState(false);
   const [newWalletName, setNewWalletName] = useState('');
+  const [newWalletAmount, setNewWalletAmount] = useState('');
   const [showTxnModal, setShowTxnModal] = useState(false);
   const [txnType, setTxnType] = useState('deposit');
   const [selectedWallet, setSelectedWallet] = useState(null);
@@ -245,7 +275,15 @@ export default function CustomModeDashboard({ navigation }) {
   }, [expenses]);
 
   const monthlyBudget = budget?.monthly || 0;
-  const remaining = monthlyBudget - totalSpent;
+
+  // Spendable budget = income - expenses - goal allocations - net savings
+  const totalGoalAllocations = useMemo(
+    () => savingsGoals
+      .filter((g) => !g.is_achieved)
+      .reduce((s, g) => s + (parseFloat(g.current_amount) || 0), 0),
+    [savingsGoals],
+  );
+  const remaining = monthlyBudget - totalSpent - totalGoalAllocations - totalInWallets;
 
   const budgetBreakdown = useMemo(() => {
     let needsSpent = 0;
@@ -312,9 +350,9 @@ export default function CustomModeDashboard({ navigation }) {
     (transactions || []).forEach((t) => {
       const d = new Date(t.created_at);
       if (d >= start && d <= end) {
-        const amt = parseFloat(t.amount) || 0;
-        if (t.transaction_type === 'deposit') deps += amt;
-        else wds += amt;
+        const amt = t.signed_amount != null ? t.signed_amount : (parseFloat(t.amount) || 0);
+        if (amt > 0) deps += amt;
+        else wds += Math.abs(amt);
       }
     });
     return { monthlyDeposits: deps, monthlyWithdrawals: wds };
@@ -329,47 +367,61 @@ export default function CustomModeDashboard({ navigation }) {
     if (!user?.id) return;
     try {
       const { data, error } = await supabase
-        .from('savings_goals')
+        .from('goals_custom_mode')
         .select('*')
         .eq('user_id', user.id)
-        .gt('target_amount', 0)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      setSavingsGoals(data || []);
+      // Map new column names to the shape the UI already expects
+      const mapped = (data || []).map((g) => ({
+        ...g,
+        deadline: g.target_date,
+        is_achieved: g.is_completed,
+      }));
+      setSavingsGoals(mapped);
     } catch (err) {
       console.warn('fetchGoals:', err.message);
     }
   }, [user?.id]);
 
-  const fetchWallets = useCallback(async () => {
+  const fetchSavingsData = useCallback(async () => {
     if (!user?.id) return;
     try {
       const { data, error } = await supabase
-        .from('savings_goals')
+        .from('savings_logs_custom_mode')
         .select('*')
         .eq('user_id', user.id)
-        .eq('target_amount', 0)
-        .order('created_at', { ascending: false });
+        .order('logged_at', { ascending: false });
       if (error) throw error;
-      setWallets(data || []);
-    } catch (err) {
-      console.warn('fetchWallets:', err.message);
-    }
-  }, [user?.id]);
 
-  const fetchTransactions = useCallback(async () => {
-    if (!user?.id) return;
-    try {
-      const { data, error } = await supabase
-        .from('savings_transactions')
-        .select('*, savings_goals(title)')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(50);
-      if (error) throw error;
-      setTransactions(data || []);
+      const logs = data || [];
+
+      // Map logs into transaction-like objects so renderTransactionRow still works
+      setTransactions(
+        logs.map((log) => {
+          const raw = parseFloat(log.amount) || 0;
+          return {
+            id: log.id,
+            amount: Math.abs(raw),
+            signed_amount: raw,
+            transaction_type: raw >= 0 ? 'deposit' : 'withdrawal',
+            note: null,
+            created_at: log.logged_at,
+            savings_goals: { title: log.location },
+          };
+        }),
+      );
+
+      // Derive wallet-like aggregates per location
+      const locMap = {};
+      logs.forEach((log) => {
+        const loc = log.location;
+        if (!locMap[loc]) locMap[loc] = { id: loc, title: loc, current_amount: 0 };
+        locMap[loc].current_amount += parseFloat(log.amount) || 0;
+      });
+      setWallets(Object.values(locMap));
     } catch (err) {
-      console.warn('fetchTransactions:', err.message);
+      console.warn('fetchSavingsData:', err.message);
     }
   }, [user?.id]);
 
@@ -377,33 +429,27 @@ export default function CustomModeDashboard({ navigation }) {
     if (!user?.id) return;
     try {
       const { data } = await supabase
-        .from('custom_mode_sessions')
-        .select('custom_rules')
+        .from('budgets_custom_mode')
+        .select('needs_pct, wants_pct, savings_pct')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
         .maybeSingle();
-      if (data?.custom_rules && typeof data.custom_rules === 'object') {
-        const r = data.custom_rules;
-        if (r.needs != null && r.wants != null && r.savings != null) {
-          setBudgetRules({ needs: r.needs, wants: r.wants, savings: r.savings });
-        }
+      if (data) {
+        setBudgetRules({ needs: data.needs_pct, wants: data.wants_pct, savings: data.savings_pct });
       }
     } catch (_) { /* fallback to default 50/30/20 */ }
   }, [user?.id]);
 
   useEffect(() => {
     fetchGoals();
-    fetchWallets();
-    fetchTransactions();
+    fetchSavingsData();
     fetchBudgetRules();
-  }, [fetchGoals, fetchWallets, fetchTransactions, fetchBudgetRules]);
+  }, [fetchGoals, fetchSavingsData, fetchBudgetRules]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([fetchGoals(), fetchWallets(), fetchTransactions(), fetchBudgetRules()]);
+    await Promise.all([fetchGoals(), fetchSavingsData(), fetchBudgetRules()]);
     setRefreshing(false);
-  }, [fetchGoals, fetchWallets, fetchTransactions, fetchBudgetRules]);
+  }, [fetchGoals, fetchSavingsData, fetchBudgetRules]);
 
   // ── Tab switch ──────────────────────────────────────────────────────
 
@@ -461,7 +507,9 @@ export default function CustomModeDashboard({ navigation }) {
 
   const adjustEditRule = (key, delta) => {
     setEditRules((prev) => {
-      const newVal = Math.max(0, Math.min(100, prev[key] + delta));
+      let newVal = Math.max(0, Math.min(100, prev[key] + delta));
+      // Enforce 20% minimum floor for Savings
+      if (key === 'savings' && newVal < 20) newVal = 20;
       return { ...prev, [key]: newVal };
     });
   };
@@ -469,6 +517,10 @@ export default function CustomModeDashboard({ navigation }) {
   const editRulesTotal = editRules.needs + editRules.wants + editRules.savings;
 
   const handleSaveBudgetRules = async () => {
+    if (editRules.savings < 20) {
+      Alert.alert('Invalid', 'Savings must be at least 20%.');
+      return;
+    }
     if (editRulesTotal !== 100) {
       Alert.alert('Invalid', 'Needs + Wants + Savings must equal 100%.');
       return;
@@ -476,17 +528,31 @@ export default function CustomModeDashboard({ navigation }) {
     setBudgetRules({ ...editRules });
     setShowBudgetEditor(false);
     try {
-      await gameDatabaseService.createCustomSession({
-        modeType: 'budgeting',
-        customRules: editRules,
-        weeklyBudget: monthlyBudget / 4,
-        startDate: new Date(),
-        endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      });
+      await supabase.from('budgets_custom_mode').upsert({
+        user_id: user.id,
+        needs_pct: editRules.needs,
+        wants_pct: editRules.wants,
+        savings_pct: editRules.savings,
+        total_income: monthlyBudget,
+      }, { onConflict: 'user_id' });
     } catch (_) { /* non-critical */ }
   };
 
   // ── Goal handlers ───────────────────────────────────────────────────
+
+  const handleGoalDeadlineChange = (value) => {
+    setNewGoalDeadline(value);
+    const parsed = parseInputDate(value.trim());
+    setNewGoalDeadlineDate(parsed);
+  };
+
+  const handleGoalDateChange = (event, selectedDate) => {
+    setShowGoalDatePicker(Platform.OS === 'ios');
+    if (selectedDate) {
+      setNewGoalDeadlineDate(selectedDate);
+      setNewGoalDeadline(formatInputDate(selectedDate));
+    }
+  };
 
   const handleAddGoal = async () => {
     const target = parseFloat(newGoalTarget);
@@ -494,19 +560,25 @@ export default function CustomModeDashboard({ navigation }) {
       Alert.alert('Invalid Input', 'Please enter a valid goal name and target amount.');
       return;
     }
+    if (newGoalDeadline.trim() && !newGoalDeadlineDate) {
+      Alert.alert('Invalid Date', 'Please enter a valid date in MM/DD/YYYY format.');
+      return;
+    }
     setGoalSubmitting(true);
     try {
-      const { error } = await supabase.from('savings_goals').insert({
+      const { error } = await supabase.from('goals_custom_mode').insert({
         user_id: user.id,
         title: newGoalTitle.trim(),
         target_amount: target,
         current_amount: 0,
-        deadline: newGoalDeadline.trim() || null,
+        is_completed: false,
+        target_date: formatIsoDate(newGoalDeadlineDate),
       });
       if (error) throw error;
       setNewGoalTitle('');
       setNewGoalTarget('');
       setNewGoalDeadline('');
+      setNewGoalDeadlineDate(null);
       setShowAddGoal(false);
       await fetchGoals();
     } catch (err) {
@@ -525,11 +597,11 @@ export default function CustomModeDashboard({ navigation }) {
     }
     try {
       const { error } = await supabase
-        .from('savings_goals')
+        .from('goals_custom_mode')
         .update({
           title: editGoalData.title.trim(),
           target_amount: target,
-          deadline: editGoalData.deadline || null,
+          target_date: editGoalData.deadline || null,
         })
         .eq('id', editGoalData.id);
       if (error) throw error;
@@ -549,7 +621,7 @@ export default function CustomModeDashboard({ navigation }) {
         style: 'destructive',
         onPress: async () => {
           try {
-            const { error } = await supabase.from('savings_goals').delete().eq('id', goal.id);
+            const { error } = await supabase.from('goals_custom_mode').delete().eq('id', goal.id);
             if (error) throw error;
             await fetchGoals();
           } catch (err) {
@@ -570,11 +642,10 @@ export default function CustomModeDashboard({ navigation }) {
       const newAmount = (parseFloat(allocateGoal.current_amount) || 0) + amt;
       const isAchieved = newAmount >= parseFloat(allocateGoal.target_amount);
       const { error } = await supabase
-        .from('savings_goals')
+        .from('goals_custom_mode')
         .update({
           current_amount: newAmount,
-          is_achieved: isAchieved,
-          ...(isAchieved ? { achieved_at: new Date().toISOString() } : {}),
+          is_completed: isAchieved,
         })
         .eq('id', allocateGoal.id);
       if (error) throw error;
@@ -590,31 +661,30 @@ export default function CustomModeDashboard({ navigation }) {
     }
   };
 
-  // ── Wallet handlers ─────────────────────────────────────────────────
+  // ── Savings log handlers ─────────────────────────────────────────────
 
   const handleAddWallet = async () => {
     if (!newWalletName.trim()) {
-      Alert.alert('Invalid', 'Please enter or select a wallet name.');
+      Alert.alert('Invalid', 'Please select a savings location.');
       return;
     }
-    const exists = wallets.some(
-      (w) => w.title.toLowerCase() === newWalletName.trim().toLowerCase(),
-    );
-    if (exists) {
-      Alert.alert('Duplicate', 'A wallet with this name already exists.');
+    const amt = parseFloat(newWalletAmount);
+    if (isNaN(amt) || amt <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid amount to log.');
       return;
     }
     try {
-      const { error } = await supabase.from('savings_goals').insert({
+      const { error } = await supabase.from('savings_logs_custom_mode').insert({
         user_id: user.id,
-        title: newWalletName.trim(),
-        target_amount: 0,
-        current_amount: 0,
+        amount: amt,
+        location: newWalletName.trim(),
       });
       if (error) throw error;
+      Alert.alert('Saved!', `${formatCurrency(amt)} logged to ${newWalletName.trim()}`);
       setNewWalletName('');
+      setNewWalletAmount('');
       setShowAddWallet(false);
-      await fetchWallets();
+      await fetchSavingsData();
     } catch (err) {
       Alert.alert('Error', err.message);
     }
@@ -628,31 +698,28 @@ export default function CustomModeDashboard({ navigation }) {
     }
     const currentBalance = parseFloat(selectedWallet.current_amount) || 0;
     if (txnType === 'withdrawal' && amt > currentBalance) {
-      Alert.alert('Insufficient Funds', `This wallet only has ${formatCurrency(currentBalance)}.`);
+      Alert.alert(
+        'Insufficient Balance',
+        `${selectedWallet.title} only has ${formatCurrency(currentBalance)}.`,
+      );
       return;
     }
+    // Deposits are positive, withdrawals are negative in the ledger
+    const ledgerAmount = txnType === 'deposit' ? amt : -amt;
     try {
-      const { error: txnErr } = await supabase.from('savings_transactions').insert({
+      const { error } = await supabase.from('savings_logs_custom_mode').insert({
         user_id: user.id,
-        savings_goal_id: selectedWallet.id,
-        amount: amt,
-        transaction_type: txnType,
-        note: txnNote.trim() || (txnType === 'deposit' ? 'Deposit' : 'Withdrawal'),
+        amount: ledgerAmount,
+        location: selectedWallet.title,
       });
-      if (txnErr) throw txnErr;
-      const newBalance = txnType === 'deposit' ? currentBalance + amt : currentBalance - amt;
-      const { error: updateErr } = await supabase
-        .from('savings_goals')
-        .update({ current_amount: newBalance })
-        .eq('id', selectedWallet.id);
-      if (updateErr) throw updateErr;
+      if (error) throw error;
       const label = txnType === 'deposit' ? 'deposited to' : 'withdrawn from';
       Alert.alert('Success', `${formatCurrency(amt)} ${label} ${selectedWallet.title}`);
       setTxnAmount('');
       setTxnNote('');
       setShowTxnModal(false);
       setSelectedWallet(null);
-      await Promise.all([fetchWallets(), fetchTransactions()]);
+      await fetchSavingsData();
     } catch (err) {
       Alert.alert('Error', err.message);
     }
@@ -661,19 +728,22 @@ export default function CustomModeDashboard({ navigation }) {
   const handleDeleteWallet = (wallet) => {
     const bal = parseFloat(wallet.current_amount) || 0;
     const msg = bal > 0
-      ? `"${wallet.title}" still has ${formatCurrency(bal)}. Delete anyway?`
-      : `Delete "${wallet.title}"?`;
-    Alert.alert('Delete Wallet', msg, [
+      ? `"${wallet.title}" has ${formatCurrency(bal)} in logged savings. Delete all entries?`
+      : `Delete all "${wallet.title}" entries?`;
+    Alert.alert('Delete Location Logs', msg, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
           try {
-            await supabase.from('savings_transactions').delete().eq('savings_goal_id', wallet.id);
-            const { error } = await supabase.from('savings_goals').delete().eq('id', wallet.id);
+            const { error } = await supabase
+              .from('savings_logs_custom_mode')
+              .delete()
+              .eq('user_id', user.id)
+              .eq('location', wallet.title);
             if (error) throw error;
-            await Promise.all([fetchWallets(), fetchTransactions()]);
+            await fetchSavingsData();
           } catch (err) {
             Alert.alert('Error', err.message);
           }
@@ -695,7 +765,7 @@ export default function CustomModeDashboard({ navigation }) {
     });
   };
 
-  const fabLabel = { budgeting: 'Log Expense', goals: 'New Goal', saving: 'New Wallet' };
+  const fabLabel = { budgeting: 'Log Expense', goals: 'New Goal', saving: 'Log Savings' };
 
   // ── Styles ──────────────────────────────────────────────────────────
 
@@ -769,8 +839,26 @@ export default function CustomModeDashboard({ navigation }) {
     const isComplete = item.is_achieved;
     const days = daysUntil(item.deadline);
     const remainingAmt = Math.max(0, target - current);
-    const monthsLeft = days != null && days > 0 ? days / 30 : null;
-    const suggestedMonthly = monthsLeft && monthsLeft > 0 && !isComplete ? remainingAmt / monthsLeft : null;
+
+    // Dynamic savings tip: pick the right time unit based on how far the deadline is
+    let savingsTip = null;
+    if (!isComplete && remainingAmt > 0 && days != null && days > 0) {
+      if (days <= 7) {
+        // Less than a week — show daily target
+        const perDay = remainingAmt / days;
+        savingsTip = `Save ${formatCurrency(perDay)}/day to reach this on time`;
+      } else if (days <= 30) {
+        // Less than a month — show weekly target
+        const weeks = days / 7;
+        const perWeek = remainingAmt / weeks;
+        savingsTip = `Save ${formatCurrency(perWeek)}/week to reach this on time`;
+      } else {
+        // More than a month — show monthly target
+        const months = days / 30;
+        const perMonth = remainingAmt / months;
+        savingsTip = `Save ${formatCurrency(perMonth)}/month to reach this on time`;
+      }
+    }
 
     return (
       <View key={item.id} style={[s.goalCard, isComplete && { borderColor: colors.success, borderWidth: 1.5 }]}>
@@ -837,8 +925,8 @@ export default function CustomModeDashboard({ navigation }) {
           )}
         </View>
 
-        {/* Suggested monthly contribution */}
-        {suggestedMonthly != null && (
+        {/* Suggested savings tip — dynamic time unit */}
+        {savingsTip != null && (
           <View
             style={{
               flexDirection: 'row',
@@ -851,7 +939,7 @@ export default function CustomModeDashboard({ navigation }) {
           >
             <Ionicons name="bulb-outline" size={14} color={colors.info} />
             <Text style={{ fontSize: 11, color: colors.info, marginLeft: 6 }}>
-              Save {formatCurrency(suggestedMonthly)}/month to reach this on time
+              {savingsTip}
             </Text>
           </View>
         )}
@@ -962,10 +1050,10 @@ export default function CustomModeDashboard({ navigation }) {
     <>
       {/* Summary Card */}
       <View style={s.summaryCard}>
-        <Text style={s.summaryLabel}>Current Balance</Text>
-        <Text style={[s.summaryValue, { color: remaining >= 0 ? colors.success : colors.error }]}>
+        <Text style={s.summaryLabel}>Spendable Budget</Text>
+        {/* <Text style={[s.summaryValue, { color: remaining >= 0 ? colors.success : colors.error }]}>
           {formatCurrency(remaining)}
-        </Text>
+        </Text> */}
         <View style={s.summaryDivider} />
         <View style={s.summaryRow}>
           <View style={s.summaryCol}>
@@ -976,6 +1064,16 @@ export default function CustomModeDashboard({ navigation }) {
           <View style={s.summaryCol}>
             <Text style={s.summarySmallLabel}>Expenses</Text>
             <Text style={[s.summarySmallValue, { color: colors.expense }]}>{formatCurrency(totalSpent)}</Text>
+          </View>
+          <View style={s.summaryColDivider} />
+          <View style={s.summaryCol}>
+            <Text style={s.summarySmallLabel}>Goals</Text>
+            <Text style={[s.summarySmallValue, { color: colors.savings || '#2196F3' }]}>{formatCurrency(totalGoalAllocations)}</Text>
+          </View>
+          <View style={s.summaryColDivider} />
+          <View style={s.summaryCol}>
+            <Text style={s.summarySmallLabel}>Saved</Text>
+            <Text style={[s.summarySmallValue, { color: colors.success }]}>{formatCurrency(totalInWallets)}</Text>
           </View>
         </View>
       </View>
@@ -1179,35 +1277,50 @@ export default function CustomModeDashboard({ navigation }) {
       {/* Savings Rate Gauge */}
       <View style={s.section}>
         <View style={s.sectionHeader}>
-          <Ionicons name="trending-up" size={20} color={rateInfo.color} />
+          <Ionicons name="trending-up" size={20} color={monthlyDeposits === 0 && totalInWallets === 0 ? colors.textSecondary : rateInfo.color} />
           <Text style={s.sectionTitle}>Savings Rate</Text>
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <View style={[s.healthCircle, { borderColor: rateInfo.color }]}>
-            <Text style={[s.healthScore, { color: rateInfo.color, fontSize: 20 }]}>{savingsRate.toFixed(0)}%</Text>
-          </View>
-          <View style={{ flex: 1, marginLeft: 16 }}>
-            <Text style={{ fontSize: 18, fontWeight: '700', color: rateInfo.color }}>{rateInfo.label}</Text>
-            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
-              {monthlyBudget > 0
-                ? `You've saved ${savingsRate.toFixed(1)}% of your ${isEmployee ? 'income' : 'allowance'} this month.`
-                : 'Set a monthly budget to track your savings rate.'}
+        {monthlyDeposits === 0 && totalInWallets === 0 ? (
+          /* Empty State: no savings data yet */
+          <View style={s.emptyState}>
+            <Ionicons name="leaf-outline" size={44} color={colors.primary} />
+            <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text, marginTop: 10, textAlign: 'center' }}>
+              No savings logged yet
+            </Text>
+            <Text style={{ fontSize: 13, color: colors.textSecondary, marginTop: 6, textAlign: 'center', lineHeight: 19, paddingHorizontal: 12 }}>
+              You haven't logged any savings yet. Start setting aside some cash today — even a small amount makes a difference!
             </Text>
           </View>
-        </View>
-        {/* Rate bar */}
-        <View style={{ marginTop: 12 }}>
-          <View style={s.barTrack}>
-            <View
-              style={[s.barFill, { width: `${Math.min(savingsRate, 100)}%`, backgroundColor: rateInfo.color }]}
-            />
-          </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-            <Text style={{ fontSize: 10, color: colors.textSecondary }}>0%</Text>
-            <Text style={{ fontSize: 10, color: colors.textSecondary }}>Target: 20%</Text>
-            <Text style={{ fontSize: 10, color: colors.textSecondary }}>100%</Text>
-          </View>
-        </View>
+        ) : (
+          <>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={[s.healthCircle, { borderColor: rateInfo.color }]}>
+                <Text style={[s.healthScore, { color: rateInfo.color, fontSize: 20 }]}>{savingsRate.toFixed(0)}%</Text>
+              </View>
+              <View style={{ flex: 1, marginLeft: 16 }}>
+                <Text style={{ fontSize: 18, fontWeight: '700', color: rateInfo.color }}>{rateInfo.label}</Text>
+                <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
+                  {monthlyBudget > 0
+                    ? `You've saved ${savingsRate.toFixed(1)}% of your ${isEmployee ? 'income' : 'allowance'} this month.`
+                    : 'Set a monthly budget to track your savings rate.'}
+                </Text>
+              </View>
+            </View>
+            {/* Rate bar */}
+            <View style={{ marginTop: 12 }}>
+              <View style={s.barTrack}>
+                <View
+                  style={[s.barFill, { width: `${Math.min(savingsRate, 100)}%`, backgroundColor: rateInfo.color }]}
+                />
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+                <Text style={{ fontSize: 10, color: colors.textSecondary }}>0%</Text>
+                <Text style={{ fontSize: 10, color: colors.textSecondary }}>Target: 20%</Text>
+                <Text style={{ fontSize: 10, color: colors.textSecondary }}>100%</Text>
+              </View>
+            </View>
+          </>
+        )}
       </View>
 
       {/* Wallets */}
@@ -1432,32 +1545,46 @@ export default function CustomModeDashboard({ navigation }) {
               { key: 'needs', label: 'Needs', color: '#4CAF50' },
               { key: 'wants', label: 'Wants', color: '#FF9800' },
               { key: 'savings', label: 'Savings', color: '#2196F3' },
-            ].map(({ key, label, color }) => (
-              <View key={key} style={{ marginBottom: 16 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ fontSize: 14, fontWeight: '600', color }}>{label}</Text>
-                  <Text style={{ fontSize: 16, fontWeight: '700', color }}>{editRules[key]}%</Text>
+            ].map(({ key, label, color }) => {
+              const isSavings = key === 'savings';
+              const atFloor = isSavings && editRules[key] <= 20;
+              return (
+                <View key={key} style={{ marginBottom: 16 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 14, fontWeight: '600', color }}>{label}{isSavings ? ' (min 20%)' : ''}</Text>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color }}>{editRules[key]}%</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginTop: 8 }}>
+                    {/* Hide minus button when savings is at the 20% floor */}
+                    {!(isSavings && atFloor) ? (
+                      <TouchableOpacity style={s.adjButton} onPress={() => adjustEditRule(key, -5)}>
+                        <Ionicons name="remove" size={20} color={colors.text} />
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={[s.adjButton, { opacity: 0 }]} />
+                    )}
+                    <TextInput
+                      style={[s.ruleInput, { color }]}
+                      keyboardType="numeric"
+                      value={String(editRules[key])}
+                      onChangeText={(t) => {
+                        const v = parseInt(t, 10);
+                        if (!isNaN(v)) {
+                          // Enforce 20% floor for savings
+                          const clamped = isSavings ? Math.max(20, Math.min(100, v)) : Math.max(0, Math.min(100, v));
+                          setEditRules((prev) => ({ ...prev, [key]: clamped }));
+                        } else if (t === '') {
+                          setEditRules((prev) => ({ ...prev, [key]: isSavings ? 20 : 0 }));
+                        }
+                      }}
+                    />
+                    <TouchableOpacity style={s.adjButton} onPress={() => adjustEditRule(key, 5)}>
+                      <Ionicons name="add" size={20} color={colors.text} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginTop: 8 }}>
-                  <TouchableOpacity style={s.adjButton} onPress={() => adjustEditRule(key, -5)}>
-                    <Ionicons name="remove" size={20} color={colors.text} />
-                  </TouchableOpacity>
-                  <TextInput
-                    style={[s.ruleInput, { color }]}
-                    keyboardType="numeric"
-                    value={String(editRules[key])}
-                    onChangeText={(t) => {
-                      const v = parseInt(t, 10);
-                      if (!isNaN(v) && v >= 0 && v <= 100) setEditRules((prev) => ({ ...prev, [key]: v }));
-                      else if (t === '') setEditRules((prev) => ({ ...prev, [key]: 0 }));
-                    }}
-                  />
-                  <TouchableOpacity style={s.adjButton} onPress={() => adjustEditRule(key, 5)}>
-                    <Ionicons name="add" size={20} color={colors.text} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
+              );
+            })}
 
             <View style={[s.totalIndicator, editRulesTotal !== 100 && { backgroundColor: colors.error + '15' }]}>
               <Text style={{ fontSize: 14, fontWeight: '700', color: editRulesTotal === 100 ? colors.success : colors.error }}>
@@ -1497,8 +1624,37 @@ export default function CustomModeDashboard({ navigation }) {
               <Text style={s.inputLabel}>Target Amount (₱)</Text>
               <TextInput style={s.input} placeholder="0.00" placeholderTextColor={colors.placeholder} keyboardType="numeric" value={newGoalTarget} onChangeText={setNewGoalTarget} />
 
-              <Text style={s.inputLabel}>Deadline (optional, YYYY-MM-DD)</Text>
-              <TextInput style={s.input} placeholder="2026-12-31" placeholderTextColor={colors.placeholder} value={newGoalDeadline} onChangeText={setNewGoalDeadline} />
+              <Text style={s.inputLabel}>Deadline (optional, MM/DD/YYYY)</Text>
+              <View style={s.dateInputRow}>
+                <TextInput
+                  style={s.dateInputField}
+                  placeholder="MM/DD/YYYY"
+                  placeholderTextColor={colors.placeholder}
+                  keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'numeric'}
+                  maxLength={10}
+                  value={newGoalDeadline}
+                  onChangeText={handleGoalDeadlineChange}
+                  onBlur={() => {
+                    if (newGoalDeadlineDate) setNewGoalDeadline(formatInputDate(newGoalDeadlineDate));
+                  }}
+                />
+                <TouchableOpacity
+                  style={s.dateIconButton}
+                  onPress={() => setShowGoalDatePicker((prev) => !prev)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+                </TouchableOpacity>
+              </View>
+
+              {showGoalDatePicker && (
+                <DateTimePicker
+                  value={newGoalDeadlineDate || new Date()}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={handleGoalDateChange}
+                />
+              )}
 
               <View style={s.modalActions}>
                 <TouchableOpacity style={s.modalCancelBtn} onPress={() => setShowAddGoal(false)}>
@@ -1594,16 +1750,16 @@ export default function CustomModeDashboard({ navigation }) {
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={s.modalOverlay}>
             <View style={s.modalCard}>
-              <Text style={s.modalTitle}>Add Savings Location</Text>
+              <Text style={s.modalTitle}>Log Savings</Text>
               <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 16 }}>
-                Choose a preset or type a custom name.
+                Pick where you saved and enter the amount.
               </Text>
 
+              <Text style={s.inputLabel}>Savings Location</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
                 {WALLET_PRESETS.map((name) => {
                   const meta = WALLET_META[name] || DEFAULT_WALLET;
                   const selected = newWalletName === name;
-                  const alreadyExists = wallets.some((w) => w.title.toLowerCase() === name.toLowerCase());
                   return (
                     <TouchableOpacity
                       key={name}
@@ -1616,38 +1772,34 @@ export default function CustomModeDashboard({ navigation }) {
                         backgroundColor: selected ? meta.color : colors.surface,
                         borderWidth: 1.5,
                         borderColor: selected ? meta.color : colors.border,
-                        opacity: alreadyExists ? 0.4 : 1,
                       }}
-                      onPress={() => !alreadyExists && setNewWalletName(name)}
-                      disabled={alreadyExists}
+                      onPress={() => setNewWalletName(name)}
                     >
                       <Ionicons name={meta.icon} size={16} color={selected ? '#FFF' : meta.color} style={{ marginRight: 6 }} />
                       <Text style={{ fontSize: 13, fontWeight: selected ? '700' : '500', color: selected ? '#FFF' : colors.text }}>
                         {name}
                       </Text>
-                      {alreadyExists && (
-                        <Ionicons name="checkmark-circle" size={14} color={colors.success} style={{ marginLeft: 4 }} />
-                      )}
                     </TouchableOpacity>
                   );
                 })}
               </View>
 
-              <Text style={s.inputLabel}>Or enter custom name</Text>
+              <Text style={s.inputLabel}>Amount (₱)</Text>
               <TextInput
                 style={s.input}
-                placeholder="e.g., Piggy Bank"
+                placeholder="0.00"
                 placeholderTextColor={colors.placeholder}
-                value={newWalletName}
-                onChangeText={setNewWalletName}
+                keyboardType="numeric"
+                value={newWalletAmount}
+                onChangeText={setNewWalletAmount}
               />
 
               <View style={s.modalActions}>
-                <TouchableOpacity style={s.modalCancelBtn} onPress={() => { setShowAddWallet(false); setNewWalletName(''); }}>
+                <TouchableOpacity style={s.modalCancelBtn} onPress={() => { setShowAddWallet(false); setNewWalletName(''); setNewWalletAmount(''); }}>
                   <Text style={s.modalCancelText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={s.modalConfirmBtn} onPress={handleAddWallet}>
-                  <Text style={s.modalConfirmText}>Add Wallet</Text>
+                  <Text style={s.modalConfirmText}>Log Savings</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1784,7 +1936,7 @@ const createStyles = (colors) =>
       }),
     },
     summaryLabel: {
-      fontSize: 13,
+      fontSize: 15,
       color: colors.textSecondary,
       textTransform: 'uppercase',
       letterSpacing: 1,
@@ -1819,7 +1971,7 @@ const createStyles = (colors) =>
       marginBottom: 2,
     },
     summarySmallValue: {
-      fontSize: 16,
+      fontSize: 13,
       fontWeight: '700',
       color: colors.text,
     },
@@ -2049,6 +2201,27 @@ const createStyles = (colors) =>
       color: colors.text,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
+    },
+    dateInputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+      borderRadius: 10,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+    },
+    dateInputField: {
+      flex: 1,
+      paddingHorizontal: 14,
+      paddingVertical: Platform.OS === 'ios' ? 12 : 10,
+      fontSize: 15,
+      color: colors.text,
+    },
+    dateIconButton: {
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      borderLeftWidth: StyleSheet.hairlineWidth,
+      borderLeftColor: colors.border,
     },
     budgetStatus: {
       backgroundColor: colors.surface,
