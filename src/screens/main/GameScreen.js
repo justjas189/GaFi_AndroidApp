@@ -1,7 +1,7 @@
 import React, { useState, useRef, useContext, useEffect, useCallback, useMemo } from 'react';
 import { View, StyleSheet, ImageBackground, Dimensions, TouchableWithoutFeedback, Animated, Modal, Text, TextInput, TouchableOpacity, Alert, ScrollView, Easing, Image, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
 import { AuthContext } from '../../context/AuthContext';
 import { DataContext } from '../../context/DataContext';
@@ -317,12 +317,12 @@ const STORY_MODE_ALLOWED_MAPS = {
 // ─── NPC Sprite Assets ───────────────────────────────────────────────────────
 const NPC_SPRITES = {
   Library_Worker: require('../../../assets/Game_Graphics/Character_Animation/Workers/Library_Worker.png'),
-  Food_Worker:    require('../../../assets/Game_Graphics/Character_Animation/Workers/Food_Worker.png'),
-  Clothing_Worker:require('../../../assets/Game_Graphics/Character_Animation/Workers/Clothing_Worker.png'),
+  Food_Worker: require('../../../assets/Game_Graphics/Character_Animation/Workers/Food_Worker.png'),
+  Clothing_Worker: require('../../../assets/Game_Graphics/Character_Animation/Workers/Clothing_Worker.png'),
   Grocery_Worker: require('../../../assets/Game_Graphics/Character_Animation/Workers/Grocery_Worker.png'),
-  Cafe_Worker:    require('../../../assets/Game_Graphics/Character_Animation/Workers/Cafe_Worker.png'),
-  Games_Worker:   require('../../../assets/Game_Graphics/Character_Animation/Workers/Games_Worker.png'),
-  Gym_Worker:     require('../../../assets/Game_Graphics/Character_Animation/Workers/Gym_Worker.png'),
+  Cafe_Worker: require('../../../assets/Game_Graphics/Character_Animation/Workers/Cafe_Worker.png'),
+  Games_Worker: require('../../../assets/Game_Graphics/Character_Animation/Workers/Games_Worker.png'),
+  Gym_Worker: require('../../../assets/Game_Graphics/Character_Animation/Workers/Gym_Worker.png'),
 };
 
 // ─── NPC Placement Config ────────────────────────────────────────────────────
@@ -331,25 +331,25 @@ const NPC_SPRITES = {
 // All maps are 11 tiles wide × 24 tiles tall (48 px per tile).
 const NPC_POSITIONS = {
   school: [
-    { id: 'library_worker',  sprite: 'Library_Worker',  tileX: 10, tileY: 15, direction: 'left'  },
-    { id: 'canteen_worker',  sprite: 'Food_Worker',     tileX: 10, tileY: 21, direction: 'left'  },
+    { id: 'library_worker', sprite: 'Library_Worker', tileX: 10, tileY: 15, direction: 'left' },
+    { id: 'canteen_worker', sprite: 'Food_Worker', tileX: 10, tileY: 21, direction: 'left' },
   ],
   mall_1f: [
     { id: 'clothing_worker', sprite: 'Clothing_Worker', tileX: 1, tileY: 12, direction: 'right' },
-    { id: 'grocery_worker',  sprite: 'Grocery_Worker',  tileX: 10, tileY: 5,  direction: 'left'  },
+    { id: 'grocery_worker', sprite: 'Grocery_Worker', tileX: 10, tileY: 5, direction: 'left' },
   ],
   mall_2f: [
-    { id: 'foodcourt_worker',sprite: 'Food_Worker',     tileX: 7, tileY: 4,  direction: 'down'  },
-    { id: 'cafe_worker',     sprite: 'Cafe_Worker',     tileX: 6, tileY: 21, direction: 'right' },
+    { id: 'foodcourt_worker', sprite: 'Food_Worker', tileX: 7, tileY: 4, direction: 'down' },
+    { id: 'cafe_worker', sprite: 'Cafe_Worker', tileX: 6, tileY: 21, direction: 'right' },
   ],
   mall_3f: [
-    { id: 'games_worker',    sprite: 'Games_Worker',    tileX: 5, tileY: 3,  direction: 'down'  },
-    { id: 'gym_worker',      sprite: 'Gym_Worker',      tileX: 10, tileY: 16, direction: 'left'  },
+    { id: 'games_worker', sprite: 'Games_Worker', tileX: 5, tileY: 3, direction: 'down' },
+    { id: 'gym_worker', sprite: 'Gym_Worker', tileX: 10, tileY: 16, direction: 'left' },
   ],
   office: [
-    { id: 'receptionist',    sprite: 'Library_Worker',  tileX: 2, tileY: 7,  direction: 'right' },
-    { id: 'office_staff',    sprite: 'Clothing_Worker', tileX: 8, tileY: 8,  direction: 'left'  },
-    { id: 'pantry_staff',    sprite: 'Food_Worker',     tileX: 2, tileY: 17, direction: 'up'    },
+    { id: 'receptionist', sprite: 'Library_Worker', tileX: 2, tileY: 7, direction: 'right' },
+    { id: 'office_staff', sprite: 'Clothing_Worker', tileX: 8, tileY: 8, direction: 'left' },
+    { id: 'pantry_staff', sprite: 'Food_Worker', tileX: 2, tileY: 17, direction: 'up' },
   ],
 };
 
@@ -358,6 +358,7 @@ export default function BuildScreen() {
   const { user } = useContext(AuthContext);
   const { addExpense, expenses } = useContext(DataContext);
   const { startGameTutorial: startContextTutorial, markConditionComplete, cancelTutorial, tutorialPhase } = useTutorial();
+  const navigation = useNavigation();
 
   // ─── Responsive dimensions ─────────────────────────────────────────
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -370,13 +371,13 @@ export default function BuildScreen() {
     }),
     [screenWidth, screenHeight],
   );
-  
+
   // Current map state
   const [currentMapId, setCurrentMapId] = useState('dorm');
   const currentMap = MAPS[currentMapId];
 
   const profileUserType = user?.userType === 'employee' ? 'employee' : 'student';
-  
+
   // Character position — resolve spawn point from percentages using initial screen size
   const initialSpawn = { x: INITIAL_WIDTH * (currentMap.spawnPoint.xPct ?? 0.5), y: INITIAL_HEIGHT * (currentMap.spawnPoint.yPct ?? 0.5) };
   const [characterPosition, setCharacterPosition] = useState(initialSpawn);
@@ -391,7 +392,7 @@ export default function BuildScreen() {
   const [todaySpending, setTodaySpending] = useState(0);
   const walkingPulse = useRef(new Animated.Value(1)).current;
   const walkingPulseAnimationRef = useRef(null);
-  
+
   // Expense modal state
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [expenseAmount, setExpenseAmount] = useState('');
@@ -435,11 +436,11 @@ export default function BuildScreen() {
       animatedY.removeListener(yId);
     };
   }, [animatedX, animatedY]);
-  
+
   // Travel modal state
   const [showTravelModal, setShowTravelModal] = useState(false);
   const [travelDestinations, setTravelDestinations] = useState([]);
-  
+
   // Transport mode state
   const [showTransportModal, setShowTransportModal] = useState(false);
   const [selectedDestination, setSelectedDestination] = useState(null);
@@ -447,10 +448,10 @@ export default function BuildScreen() {
   const [fareAmount, setFareAmount] = useState('');
   const [didBuyFuel, setDidBuyFuel] = useState(null); // null, true, or false
   const [fuelAmount, setFuelAmount] = useState('');
-  
+
   // Main menu state
   const [showMainMenu, setShowMainMenu] = useState(true);
-  const [gameMode, setGameMode] = useState(null); // 'story', 'custom', or 'tutorial'
+  const [gameMode, setGameMode] = useState(null); // 'story' or 'tutorial'
   const [showHowToPlay, setShowHowToPlay] = useState(false); // Legacy - not used anymore
   const [tutorialStep, setTutorialStep] = useState(0);
   const [tutorialActive, setTutorialActive] = useState(false); // In-game tutorial mode
@@ -468,13 +469,13 @@ export default function BuildScreen() {
     if (gameMode !== 'story') return destinations;
     return destinations.filter((destId) => isStoryModeMapAllowed(destId));
   }, [gameMode, isStoryModeMapAllowed]);
-  
+
   // Abandon / End Session modal state
   const [showAbandonModal, setShowAbandonModal] = useState(false);
-  
+
   // Koin Tutorial Guide Image
   const KOIN_TUTORIAL_IMAGE = require('../../../assets/mascot/koin_tutorial.png');
-  
+
   // Helper: mark a tutorial condition as met and auto-advance if it matches current step
   const markTutorialCondition = (conditionKey) => {
     setTutorialConditions(prev => {
@@ -500,7 +501,7 @@ export default function BuildScreen() {
       }, 600);
     }
   };
-  
+
   // Helper: check if current tutorial step's condition is met
   const isTutorialStepComplete = () => {
     const step = TUTORIAL_STEPS[tutorialStep];
@@ -509,7 +510,7 @@ export default function BuildScreen() {
     if (step.conditionKey && tutorialConditions.has(step.conditionKey)) return true;
     return false;
   };
-  
+
   // In-game Tutorial steps configuration — step-by-step, action-gated
   const TUTORIAL_STEPS = [
     // {
@@ -639,7 +640,7 @@ export default function BuildScreen() {
       highlight: null,
     },
   ];
-  
+
   // Start interactive tutorial
   const startTutorial = () => {
     setShowMainMenu(false);
@@ -655,7 +656,7 @@ export default function BuildScreen() {
     gameDatabaseService.saveTutorialProgress({ currentStep: 0, stepsCompleted: [], tutorialCompleted: false });
     gameDatabaseService.logActivity({ activityType: 'tutorial_step', details: { step: 0, action: 'started' } });
   };
-  
+
   // End tutorial — the in-game part is done, Koin will continue with the App Tour
   const endTutorial = useCallback(() => {
     setTutorialActive(false);
@@ -685,7 +686,7 @@ export default function BuildScreen() {
       endTutorial();
     }
   }, [tutorialPhase, endTutorial]);
-  
+
   // Story Mode state
   const [showStoryIntro, setShowStoryIntro] = useState(false);
   const [storyLevel, setStoryLevel] = useState(1); // 1, 2, or 3
@@ -696,13 +697,13 @@ export default function BuildScreen() {
   const [storyEndDate, setStoryEndDate] = useState(null);
   const [showLevelComplete, setShowLevelComplete] = useState(false);
   const [levelPassed, setLevelPassed] = useState(false);
-  const [activeSessionId, setActiveSessionId] = useState(null); // Supabase session id for story/custom
+  const [activeSessionId, setActiveSessionId] = useState(null); // Supabase session id for story
   const [dailyTaskCompletion, setDailyTaskCompletion] = useState({}); // { [conditionKey]: true }
   const [dailyTaskRuntimeByDay, setDailyTaskRuntimeByDay] = useState({}); // { [dayNumber]: {...runtime} }
   const [activeStoryDay, setActiveStoryDay] = useState(1);
   const dailyTaskAnnouncedDayRef = useRef(null);
   const isHydratingDailyTaskStateRef = useRef(false);
-  
+
   // Level 1 (Budgeting) - 50/30/20 Rule tracking
   const [budgetCategories, setBudgetCategories] = useState({
     needs: { budget: 0, spent: 0 },      // 50% - Food, Transport, Bills
@@ -722,7 +723,7 @@ export default function BuildScreen() {
     'Education': 0,
     'Other': 0,
   });
-  
+
   // Level 2 (Goal Setting) - Savings goals tracking
   const [savingsGoals, setSavingsGoals] = useState([]);
   const [goalAllocations, setGoalAllocations] = useState({});
@@ -733,20 +734,20 @@ export default function BuildScreen() {
   const [dailyTaskPopupPayload, setDailyTaskPopupPayload] = useState(null);
   const [allocationAmount, setAllocationAmount] = useState('');
   const [selectedGoal, setSelectedGoal] = useState(null);
-  
+
   // Level completion results
   const [levelResults, setLevelResults] = useState(null);
-  
+
   // Custom Mode unlock state (locked until Level 3 completed)
   const [customModeUnlocked, setCustomModeUnlocked] = useState(false);
-  
+
   // Story completion dialogue (after Level 3 victory)
   const [showCompletionDialogue, setShowCompletionDialogue] = useState(false);
   const [completionPage, setCompletionPage] = useState(0);
   const [completionDisplayedText, setCompletionDisplayedText] = useState('');
   const [completionTypingDone, setCompletionTypingDone] = useState(false);
   const completionTimerRef = useRef(null);
-  
+
   // Completion dialogue script — concise and rewarding
   const COMPLETION_SCRIPTS = [
     { text: "You did it! All three levels — complete! I'm so proud of you!" },
@@ -755,7 +756,7 @@ export default function BuildScreen() {
     { text: "Set your own budget rules, design savings goals, and push yourself further." },
     { text: "This isn't the end — it's just the beginning. Keep going, financial master!" },
   ];
-  
+
   // Pre-Level Introduction state (Pokémon-style dialogue)
   const [showLevelIntro, setShowLevelIntro] = useState(false);
   const [introLevel, setIntroLevel] = useState(null);
@@ -763,7 +764,7 @@ export default function BuildScreen() {
   const [introDisplayedText, setIntroDisplayedText] = useState('');
   const [introTypingDone, setIntroTypingDone] = useState(false);
   const introTimerRef = useRef(null);
-  
+
   // Level intro dialogue scripts — each level gets multiple pages
   const LEVEL_INTRO_SCRIPTS = {
     1: [
@@ -801,17 +802,9 @@ export default function BuildScreen() {
       { text: "Complete this, and you'll truly be a financial master. I believe in you!" },
     ],
   };
-  
-  // Custom Mode state
-  const [showCustomSetup, setShowCustomSetup] = useState(false);
-  const [customModeType, setCustomModeType] = useState(null); // 'budgeting', 'goals', 'saving'
-  const [customBudgetRules, setCustomBudgetRules] = useState({ needs: 50, wants: 30, savings: 20 });
-  const [customGoals, setCustomGoals] = useState([{ name: '', target: '' }]);
-  const [customSavingsTarget, setCustomSavingsTarget] = useState('20');
-  const [customWeeks, setCustomWeeks] = useState(1);
-  const [showCustomSettingsModal, setShowCustomSettingsModal] = useState(false);
-  const [settingsModeType, setSettingsModeType] = useState(null); // tracks which type is selected inside the settings modal
-  
+
+  // Custom Mode state - moved to CustomModeDashboard
+
   // Character Animation State
   const [selectedCharacter, setSelectedCharacter] = useState('girl'); // 'girl', 'jasper', 'businessman', 'businesswoman'
   const [characterDirection, setCharacterDirection] = useState('down'); // 'up', 'down', 'left', 'right'
@@ -824,7 +817,7 @@ export default function BuildScreen() {
   const [notebookSubCategory, setNotebookSubCategory] = useState(null);
   const [showNotebookSubCategoryDropdown, setShowNotebookSubCategoryDropdown] = useState(false);
   const [unlockedSkins, setUnlockedSkins] = useState(['girl', 'jasper']); // Default skins
-  
+
   // Expense categories for Notebook Quick Add
   const EXPENSE_CATEGORIES = [
     { id: 'Food & Dining', name: 'Food & Dining', icon: '🍔', color: '#FF9800' },
@@ -839,7 +832,7 @@ export default function BuildScreen() {
     { id: 'Education', name: 'Education', icon: '🎓', color: '#673AB7' },
     { id: 'Other', name: 'Other', icon: '📦', color: '#795548' },
   ];
-  
+
   // Character sprite configurations - including purchasable skins
   const CHARACTER_SPRITES = {
     girl: {
@@ -927,7 +920,7 @@ export default function BuildScreen() {
       color: '#1565C0',
     },
   };
-  
+
   // Sprite frame configuration (24 frames total: 6 per direction)
   const SPRITE_CONFIG = {
     framesPerDirection: 6,
@@ -988,8 +981,8 @@ export default function BuildScreen() {
 
   // Cached active sessions (populated during hydration, consumed when user selects a level)
   const cachedActiveStoryRef = useRef(null);
-  const cachedActiveCustomRef = useRef(null);
-  
+
+
   // Story Level Configurations - Restructured
   // Level 1: Budgeting (50/30/20 rule)
   // Level 2: Goal Setting (allocate to savings goals)
@@ -1024,7 +1017,7 @@ export default function BuildScreen() {
       goalText: 'Save 30% of your budget',
     },
   };
-  
+
   // Category to budget type mapping for Level 1
   const CATEGORY_BUDGET_MAP = {
     'Food & Dining': 'needs',
@@ -1284,8 +1277,8 @@ export default function BuildScreen() {
       setShowDailyTaskPopup(false);
     }
   }, [gameMode, showLevelComplete, showDailyTaskPopup]);
-    
-  
+
+
   // Handle layout to get actual content dimensions
   const handleContentLayout = (event) => {
     const { width: w, height: h } = event.nativeEvent.layout;
@@ -1302,7 +1295,7 @@ export default function BuildScreen() {
       // Debug: print passability map to console
       collisionSystem.debugPrintPassabilityMap();
     }
-    
+
     // Reset character to spawn point when map changes
     const newMap = MAPS[currentMapId];
     if (newMap) {
@@ -1402,7 +1395,7 @@ export default function BuildScreen() {
         const progress = await gameDatabaseService.loadGameProgress();
         if (!progress) return;
 
-        const { userLevels, character, tutorial, activeStory, activeCustom, unlockedLevels: unlocked, introSeen } = progress;
+        const { userLevels, character, tutorial, activeStory, unlockedLevels: unlocked, introSeen } = progress;
 
         // 1. Unlocked story levels
         if (unlocked && unlocked.length > 0) {
@@ -1414,7 +1407,7 @@ export default function BuildScreen() {
         if (userLevels?.story_level_3_completed) {
           setCustomModeUnlocked(true);
           // Keep AsyncStorage in sync for offline/fast access
-          AsyncStorage.setItem(`customModeUnlocked_${user.id}`, 'true').catch(() => {});
+          AsyncStorage.setItem(`customModeUnlocked_${user.id}`, 'true').catch(() => { });
         } else {
           // Fallback: check AsyncStorage (legacy / offline)
           const cmUnlocked = await AsyncStorage.getItem(`customModeUnlocked_${user.id}`);
@@ -1457,11 +1450,6 @@ export default function BuildScreen() {
         if (activeStory) {
           cachedActiveStoryRef.current = activeStory;
           console.log(`📦 Cached active story session ${activeStory.id} (Level ${activeStory.level})`);
-        }
-        // 5. Cache active custom session for later resumption (DO NOT auto-navigate)
-        if (activeCustom) {
-          cachedActiveCustomRef.current = activeCustom;
-          console.log(`📦 Cached active custom session ${activeCustom.id} (${activeCustom.mode_type})`);
         }
 
         // Always stay on Main Menu — user chooses when to resume
@@ -1617,7 +1605,7 @@ export default function BuildScreen() {
         .eq('user_id', user?.id)
         .gte('date', startOfDay)
         .lt('date', endOfDay);
-      
+
       if (data) {
         const total = data.reduce((sum, expense) => sum + parseFloat(expense.amount), 0);
         setTodaySpending(total);
@@ -1630,22 +1618,22 @@ export default function BuildScreen() {
   // Fetch weekly spending for Story Mode
   const fetchWeeklySpending = async () => {
     if (!storyStartDate || !storyEndDate) return;
-    
+
     try {
       const startDateStr = storyStartDate.toISOString().split('T')[0];
       const endDateStr = storyEndDate.toISOString().split('T')[0];
-      
+
       const { data, error } = await supabase
         .from('expenses')
         .select('amount, date, category')
         .eq('user_id', user?.id)
         .gte('date', startDateStr)
         .lte('date', endDateStr);
-      
+
       if (data) {
         const total = data.reduce((sum, expense) => sum + expense.amount, 0);
         setWeeklySpending(total);
-        
+
         // Re-derive per-category spending from actual expense data
         // This ensures budgetCategories stay accurate after reload.
         // IMPORTANT: DB may store categories in lowercase (via BudgetDatabaseService),
@@ -1660,22 +1648,21 @@ export default function BuildScreen() {
           if (budgetType === 'needs') derivedNeedsSpent += expense.amount;
           else if (budgetType === 'wants') derivedWantsSpent += expense.amount;
         });
-        
+
         // Update categorySpending with derived values
         setCategorySpending(prev => ({ ...prev, ...derivedCategorySpending }));
-        
+
         // Update budgetCategories needs/wants spent (preserves budget limits)
         const isLevelBudgeting =
-          (gameMode === 'story' && STORY_LEVELS[storyLevel]?.type === 'budgeting') ||
-          (gameMode === 'custom' && customModeType === 'budgeting');
+          (gameMode === 'story' && STORY_LEVELS[storyLevel]?.type === 'budgeting');
         if (isLevelBudgeting) {
           setBudgetCategories(prev => ({
-            needs:   { ...prev.needs,   spent: derivedNeedsSpent },
-            wants:   { ...prev.wants,   spent: derivedWantsSpent },
+            needs: { ...prev.needs, spent: derivedNeedsSpent },
+            wants: { ...prev.wants, spent: derivedWantsSpent },
             savings: { ...prev.savings, spent: prev.savings.spent },
           }));
         }
-        
+
         // Check if week is complete and evaluate level
         const now = new Date();
         if (now >= storyEndDate) {
@@ -1702,12 +1689,12 @@ export default function BuildScreen() {
   // Calculate 50/30/20 budget category percentages for Level 1
   const getBudgetCategoryPercentages = () => {
     if (weeklyBudget <= 0) return { needs: 0, wants: 0, savings: 0 };
-    
+
     const needsSpent = budgetCategories.needs?.spent || 0;
     const wantsSpent = budgetCategories.wants?.spent || 0;
     const totalSpent = weeklySpending;
     const savingsAmount = weeklyBudget - totalSpent;
-    
+
     return {
       needs: Math.round((needsSpent / weeklyBudget) * 100),
       wants: Math.round((wantsSpent / weeklyBudget) * 100),
@@ -1724,32 +1711,28 @@ export default function BuildScreen() {
     return Math.max(0, diffDays);
   };
 
-  // Check if level is completed - handles all 3 level types (Story & Custom Mode)
+  // Check if level is completed - handles all 3 level types
   const checkLevelCompletion = async (totalSpent) => {
     const currentLevel = STORY_LEVELS[storyLevel];
     let passed = false;
     let results = {};
-    
-    // Determine if we're in Custom Mode and get the appropriate thresholds
-    const isCustom = gameMode === 'custom';
-    
+
     if (currentLevel.type === 'budgeting') {
       // Level 1: Check budget rule compliance
-      // Use custom rules if in custom mode, otherwise use story mode defaults
-      const needsLimit = isCustom ? customBudgetRules.needs : 50;
-      const wantsLimit = isCustom ? customBudgetRules.wants : 30;
-      const savingsMin = isCustom ? customBudgetRules.savings : 20;
-      
+      const needsLimit = 50;
+      const wantsLimit = 30;
+      const savingsMin = 20;
+
       const needsPercent = (budgetCategories.needs.spent / weeklyBudget) * 100;
       const wantsPercent = (budgetCategories.wants.spent / weeklyBudget) * 100;
       const savingsPercent = ((weeklyBudget - totalSpent) / weeklyBudget) * 100;
-      
+
       const needsOk = needsPercent <= needsLimit;
       const wantsOk = wantsPercent <= wantsLimit;
       const savingsOk = savingsPercent >= savingsMin;
-      
+
       passed = needsOk && wantsOk && savingsOk;
-      
+
       results = {
         type: 'budgeting',
         needsPercent: needsPercent.toFixed(1),
@@ -1764,17 +1747,17 @@ export default function BuildScreen() {
         wantsLimit,
         savingsMin,
       };
-      
+
     } else if (currentLevel.type === 'goals') {
       // Level 2: Check if user reached goal progress
       const totalAllocated = Object.values(goalAllocations).reduce((sum, amt) => sum + amt, 0);
       const totalGoalTarget = savingsGoals.reduce((sum, g) => sum + g.target, 0);
       const goalProgress = totalGoalTarget > 0 ? (totalAllocated / totalGoalTarget) : 0;
-      
-      // For custom mode, require reaching the custom goals; for story mode, 80% of goal
-      const minProgress = isCustom ? 0.80 : currentLevel.minGoalProgress;
+
+      // For story mode, require 80% of goal
+      const minProgress = currentLevel.minGoalProgress;
       passed = goalProgress >= minProgress;
-      
+
       results = {
         type: 'goals',
         totalAllocated,
@@ -1783,17 +1766,16 @@ export default function BuildScreen() {
         savingsGoals,
         minProgress: minProgress * 100,
       };
-      
+
     } else if (currentLevel.type === 'saving') {
       // Level 3: Saving percentage
-      // Use custom savings target if in custom mode
-      const savingsGoalPercent = isCustom ? (parseFloat(customSavingsTarget) / 100) : currentLevel.savingsGoal;
-      
+      const savingsGoalPercent = currentLevel.savingsGoal;
+
       const actualSavings = (weeklyBudget - totalSpent) / weeklyBudget;
       const savingsPercent = actualSavings * 100;
-      
+
       passed = actualSavings >= savingsGoalPercent;
-      
+
       results = {
         type: 'saving',
         savingsPercent: savingsPercent.toFixed(1),
@@ -1818,26 +1800,25 @@ export default function BuildScreen() {
         passed = passed && allDailyTasksComplete;
       }
     }
-    
+
     setLevelPassed(passed);
     setLevelResults(results);
-    
+
     // Only unlock next story levels in Story Mode
     if (gameMode === 'story' && passed && storyLevel < 3 && !unlockedLevels.includes(storyLevel + 1)) {
       setUnlockedLevels([...unlockedLevels, storyLevel + 1]);
     }
-    
+
     // Unlock Custom Mode when Level 3 is completed successfully
     if (gameMode === 'story' && passed && storyLevel === 3 && !customModeUnlocked) {
       setCustomModeUnlocked(true);
-      AsyncStorage.setItem(`customModeUnlocked_${user?.id}`, 'true').catch(() => {});
+      AsyncStorage.setItem(`customModeUnlocked_${user?.id}`, 'true').catch(() => { });
     }
-    
+
     setShowLevelComplete(true);
 
     // Clear cached active sessions since this one is now completed
     if (gameMode === 'story') cachedActiveStoryRef.current = null;
-    if (gameMode === 'custom') cachedActiveCustomRef.current = null;
 
     // ── Persist level completion to Supabase ──
     const xpEarned = passed ? (storyLevel === 1 ? 100 : storyLevel === 2 ? 150 : 200) : 0;
@@ -1851,8 +1832,6 @@ export default function BuildScreen() {
     if (activeSessionId) {
       if (gameMode === 'story') {
         gameDatabaseService.completeStorySession(activeSessionId, { passed, starsEarned, xpEarned, resultsData: results, weeklySpending: totalSpent });
-      } else if (gameMode === 'custom') {
-        gameDatabaseService.completeCustomSession(activeSessionId, { passed, xpEarned, resultsData: results, weeklySpending: totalSpent });
       }
       gameDatabaseService.logActivity({ activityType: 'level_complete', sessionId: activeSessionId, details: { level: storyLevel, passed, stars: starsEarned, mode: gameMode }, xpEarned });
     }
@@ -1892,21 +1871,21 @@ export default function BuildScreen() {
         .select('monthly')
         .eq('user_id', user?.id)
         .single();
-      
+
       let monthlyBudget = 5000; // Default fallback
       if (budgetData?.monthly) {
         monthlyBudget = budgetData.monthly;
       }
-      
+
       // Calculate weekly budget (monthly / 4)
       const calculatedWeeklyBudget = monthlyBudget / 4;
       setWeeklyBudget(calculatedWeeklyBudget);
-      
+
       // Set start and end dates based on level day count
       const startDate = new Date(); // exact moment user pressed Start
       const levelDurationDays = getStoryDurationDays(level);
       const endDate = new Date(startDate.getTime() + levelDurationDays * ONE_DAY_MS);
-      
+
       setStoryStartDate(startDate);
       setStoryEndDate(endDate);
       setStoryLevel(level);
@@ -1916,7 +1895,7 @@ export default function BuildScreen() {
       setDailyTaskRuntimeByDay({});
       setActiveStoryDay(1);
       dailyTaskAnnouncedDayRef.current = null;
-      
+
       // Reset category spending tracking
       setCategorySpending({
         'Food & Dining': 0,
@@ -1926,10 +1905,10 @@ export default function BuildScreen() {
         'Entertainment': 0,
         'Other': 0
       });
-      
+
       // Level-specific setup
       const levelConfig = STORY_LEVELS[level];
-      
+
       if (levelConfig.type === 'budgeting') {
         // Level 1: Set up 50/30/20 budget categories
         setBudgetCategories({
@@ -1945,12 +1924,12 @@ export default function BuildScreen() {
         ]);
         setGoalAllocations({ emergency: 0, wants: 0 });
       }
-      
+
       // Close intro and start game
       setShowStoryIntro(false);
       setCurrentMapId('dorm');
       setShowMainMenu(false);
-      
+
       console.log(`📖 Story Mode Level ${level} (${levelConfig.type}) started!`);
       console.log(`   Weekly Budget: ₱${calculatedWeeklyBudget}`);
       console.log(`   Duration: ${levelDurationDays} day(s)`);
@@ -1978,23 +1957,23 @@ export default function BuildScreen() {
         persistDailyTaskState(session.id, {}, {});
       }
       gameDatabaseService.logActivity({ activityType: 'level_start', details: { level, type: levelConfig.type, mode: 'story' }, sessionId: session?.id });
-      
+
     } catch (error) {
       console.error('Error starting story level:', error);
       Alert.alert('Error', 'Could not start story mode. Please try again.');
     }
   };
 
-  // Effect to fetch weekly spending when in story/custom mode
+  // Effect to fetch weekly spending when in story mode
   useEffect(() => {
-    if ((gameMode === 'story' || gameMode === 'custom') && storyStartDate && storyEndDate) {
+    if (gameMode === 'story' && storyStartDate && storyEndDate) {
       fetchWeeklySpending();
     }
   }, [gameMode, storyStartDate, storyEndDate, expenses]);
 
-  // Check if the story/custom week has ended
+  // Check if the story week has ended
   useEffect(() => {
-    if ((gameMode === 'story' || gameMode === 'custom') && storyEndDate && !showLevelComplete) {
+    if (gameMode === 'story' && storyEndDate && !showLevelComplete) {
       const now = new Date();
       if (now >= storyEndDate) {
         // Week has ended, check completion
@@ -2010,8 +1989,8 @@ export default function BuildScreen() {
       'Are you sure you want to end this week and check your progress?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'End Week', 
+        {
+          text: 'End Week',
           style: 'destructive',
           onPress: () => checkLevelCompletion(weeklySpending)
         }
@@ -2030,18 +2009,18 @@ export default function BuildScreen() {
   // Check and award achievements
   const checkAchievements = async (activityType, activityData = {}) => {
     if (!user?.id) return;
-    
+
     try {
       const newAchievements = await AchievementService.checkAndAwardAchievements(
         user.id,
         activityType,
         activityData
       );
-      
+
       // Show popup for first new achievement
       if (newAchievements && newAchievements.length > 0) {
         showAchievementPopup(newAchievements[0]);
-        
+
         // If multiple achievements, show them sequentially
         if (newAchievements.length > 1) {
           newAchievements.slice(1).forEach((achievement, index) => {
@@ -2059,26 +2038,26 @@ export default function BuildScreen() {
   // Fetch expense stats for achievement tracking
   const fetchExpenseStats = async () => {
     if (!user?.id) return;
-    
+
     try {
       // Get total expense count
       const { data: allExpenses, error } = await supabase
         .from('expenses')
         .select('category')
         .eq('user_id', user.id);
-      
+
       if (error) {
         console.warn('Could not fetch expense stats:', error?.message || error);
         return expenseStats;
       }
-      
+
       const stats = {
         total: allExpenses?.length || 0,
         foodCount: allExpenses?.filter(e => e.category === 'Food & Dining').length || 0,
         shoppingCount: allExpenses?.filter(e => e.category === 'Shopping').length || 0,
         electronicsCount: allExpenses?.filter(e => e.category === 'Electronics').length || 0
       };
-      
+
       setExpenseStats(stats);
       return stats;
     } catch (error) {
@@ -2118,7 +2097,7 @@ export default function BuildScreen() {
     // Use contentSize for accurate bounds detection
     const cw = contentSize.width;
     const ch = contentSize.height;
-    
+
     for (const location of currentMap.locations) {
       const bounds = location.bounds;
       const inBounds = (
@@ -2127,7 +2106,7 @@ export default function BuildScreen() {
         y >= ch * bounds.top &&
         y <= ch * bounds.bottom
       );
-      
+
       if (inBounds) {
         console.log(`📍 Found location: ${location.name} at (${x}, ${y})`);
         console.log(`   Bounds: left=${(cw * bounds.left).toFixed(0)}, right=${(cw * bounds.right).toFixed(0)}, top=${(ch * bounds.top).toFixed(0)}, bottom=${(ch * bounds.bottom).toFixed(0)}`);
@@ -2234,7 +2213,7 @@ export default function BuildScreen() {
       setSelectedDestination(null);
       return;
     }
-    
+
     // Validate inputs based on transport mode
     if (transportMode === 'commute') {
       const fare = parseFloat(fareAmount);
@@ -2255,7 +2234,7 @@ export default function BuildScreen() {
         }
       }
     }
-    
+
     // ── Capture values before clearing state ──
     const savedDestination = selectedDestination;
     const savedTransportMode = transportMode;
@@ -2326,7 +2305,7 @@ export default function BuildScreen() {
       [category]: (prev[category] || 0) + amount
     }));
 
-    if (gameMode === 'story' || gameMode === 'custom') {
+    if (gameMode === 'story') {
       const budgetType = CATEGORY_BUDGET_MAP[category] || 'wants';
       setBudgetCategories(prev => ({
         ...prev,
@@ -2377,7 +2356,7 @@ export default function BuildScreen() {
         }
 
         // Persist session spending to Supabase (fire-and-forget)
-        if (activeSessionId && (gameMode === 'story' || gameMode === 'custom')) {
+        if (activeSessionId && gameMode === 'story') {
           const updatedSpending = weeklySpending + amount;
           const updatedCategorySpending = { ...categorySpending, [category]: (categorySpending[category] || 0) + amount };
           const budgetType = CATEGORY_BUDGET_MAP[category] || 'wants';
@@ -2391,11 +2370,7 @@ export default function BuildScreen() {
             wantsSpent: updatedWantsSpent,
             savingsAmount: weeklyBudget - updatedSpending,
           };
-          if (gameMode === 'story') {
-            gameDatabaseService.updateStorySessionSpending(activeSessionId, sessionUpdate);
-          } else {
-            gameDatabaseService.updateCustomSessionSpending(activeSessionId, sessionUpdate);
-          }
+          gameDatabaseService.updateStorySessionSpending(activeSessionId, sessionUpdate);
         }
 
         // Log activity (fire-and-forget)
@@ -2424,11 +2399,11 @@ export default function BuildScreen() {
 
     setShowTransportModal(false);
     setCurrentMapId(mapId);
-    
+
     // Find the exit location to spawn at
     const exitLocation = newMap.locations.find(loc => loc.action === 'travel');
     let spawnX, spawnY;
-    
+
     if (exitLocation && exitLocation.exitSpawnPoint) {
       // Spawn at the exit point (percentage-based coordinates)
       spawnX = contentSize.width * exitLocation.exitSpawnPoint.x;
@@ -2439,7 +2414,7 @@ export default function BuildScreen() {
       spawnX = fallback.x;
       spawnY = fallback.y;
     }
-    
+
     const spawn = { x: spawnX, y: spawnY };
     commitCharacterPosition(spawn);
     const halfChar = getCharSize() / 2;
@@ -2453,21 +2428,21 @@ export default function BuildScreen() {
         dayState.mallVisited = true;
       });
     }
-    
+
     // Track visited locations for achievements
-    const newVisitedLocations = visitedLocations.includes(mapId) 
-      ? visitedLocations 
+    const newVisitedLocations = visitedLocations.includes(mapId)
+      ? visitedLocations
       : [...visitedLocations, mapId];
     setVisitedLocations(newVisitedLocations);
-    
+
     // Check travel and exploration achievements (fire-and-forget, no blocking)
     Promise.all([
       checkAchievements('first_travel', {}),
-      checkAchievements('location_visited', { 
-        locationId: mapId, 
-        visitedLocations: newVisitedLocations 
+      checkAchievements('location_visited', {
+        locationId: mapId,
+        visitedLocations: newVisitedLocations
       }),
-    ]).catch(() => {});
+    ]).catch(() => { });
 
     // ── Log map travel to Supabase ──
     gameDatabaseService.logActivity({
@@ -2477,9 +2452,9 @@ export default function BuildScreen() {
       sessionId: activeSessionId,
     });
     gameDatabaseService.incrementUserLevelStats({ mapsTraveled: 1 });
-    
+
     // Arrival message removed - no alert needed
-    
+
     // Reset transport state
     setSelectedDestination(null);
     setTransportMode(null);
@@ -2539,7 +2514,7 @@ export default function BuildScreen() {
       if (floorId === 'mall_3f') markTutorialCondition('arrived_at_mall_3f');
       // Track going down an escalator (from higher to lower floor)
       if ((previousMapId === 'mall_3f' && floorId === 'mall_2f') ||
-          (previousMapId === 'mall_2f' && floorId === 'mall_1f')) {
+        (previousMapId === 'mall_2f' && floorId === 'mall_1f')) {
         markTutorialCondition('went_down_escalator');
       }
     }
@@ -2566,29 +2541,29 @@ export default function BuildScreen() {
 
     const fromTile = collisionSystem.pixelsToTiles(fromX, fromY, contentSize.width, contentSize.height);
     const toTile = collisionSystem.pixelsToTiles(toX, toY, contentSize.width, contentSize.height);
-    
+
     logMovement(`📍 Calculating path from tile (${fromTile.x}, ${fromTile.y}) to (${toTile.x}, ${toTile.y})`);
-    
+
     const path = [];
     let currentX = fromTile.x;
     let currentY = fromTile.y;
-    
+
     // Simple pathfinding: move towards target one tile at a time
     // This uses a greedy approach - always move towards the goal
     const maxSteps = 100; // Prevent infinite loops
     let steps = 0;
-    
+
     while ((currentX !== toTile.x || currentY !== toTile.y) && steps < maxSteps) {
       steps++;
-      
+
       // Determine best direction to move
       const dx = toTile.x - currentX;
       const dy = toTile.y - currentY;
-      
+
       // Try to move in the primary direction first
       let moved = false;
       const directions = [];
-      
+
       // Prioritize movement based on larger distance
       if (Math.abs(dx) >= Math.abs(dy)) {
         if (dx > 0) directions.push({ x: 1, y: 0, name: 'right' });
@@ -2601,19 +2576,19 @@ export default function BuildScreen() {
         if (dx > 0) directions.push({ x: 1, y: 0, name: 'right' });
         if (dx < 0) directions.push({ x: -1, y: 0, name: 'left' });
       }
-      
+
       // Try each direction
       for (const dir of directions) {
         const nextX = currentX + dir.x;
         const nextY = currentY + dir.y;
-        
+
         // Check if the next tile is passable (also block NPC tiles)
         if (collisionSystem.isPassable(nextX, nextY) && !isNPCTile(nextX, nextY)) {
           // Check directional blocking from current tile
           if (!collisionSystem.isDirectionBlocked(currentX, currentY, dir.name)) {
             currentX = nextX;
             currentY = nextY;
-            
+
             // Convert tile back to pixel coordinates
             const pixelPos = collisionSystem.tilesToPixels(currentX, currentY, contentSize.width, contentSize.height);
             path.push({ x: pixelPos.x, y: pixelPos.y, tileX: currentX, tileY: currentY });
@@ -2622,14 +2597,14 @@ export default function BuildScreen() {
           }
         }
       }
-      
+
       // If we couldn't move in any direction, stop pathfinding
       if (!moved) {
         logMovement(`🚫 Path blocked at tile (${currentX}, ${currentY})`);
         break;
       }
     }
-    
+
     logMovement(`📍 Path calculated: ${path.length} steps`);
     return path;
   };
@@ -2639,15 +2614,15 @@ export default function BuildScreen() {
     const halfChar = getCharSize() / 2;
     const targetX = targetPixelX - halfChar;
     const targetY = targetPixelY - halfChar;
-    
+
     // Get current position from the animated value's current value
     const currentX = animatedPositionRef.current.x + halfChar;
     const currentY = animatedPositionRef.current.y + halfChar;
-    
+
     // Calculate direction based on movement
     const deltaX = targetPixelX - currentX;
     const deltaY = targetPixelY - currentY;
-    
+
     // Set character direction based on movement
     let nextDirection = null;
     if (Math.abs(deltaX) > Math.abs(deltaY)) {
@@ -2660,7 +2635,7 @@ export default function BuildScreen() {
       lastDirectionRef.current = nextDirection;
       setCharacterDirection(nextDirection);
     }
-    
+
     // Duration per tile (consistent speed)
     const TILE_MOVE_DURATION = 200; // 200ms per tile
 
@@ -2679,10 +2654,10 @@ export default function BuildScreen() {
         easing: Easing.linear,
       }),
     ]);
-    
+
     // Store reference for potential cancellation
     currentAnimationRef.current = animation;
-    
+
     animation.start(({ finished }) => {
       if (finished) {
         characterPositionRef.current = { x: targetPixelX, y: targetPixelY };
@@ -2698,10 +2673,10 @@ export default function BuildScreen() {
       currentAnimationRef.current.stop();
       currentAnimationRef.current = null;
     }
-    
+
     // Clear the movement path
     movementPathRef.current = [];
-    
+
     const halfChar = getCharSize() / 2;
     animatedX.stopAnimation();
     animatedY.stopAnimation();
@@ -2712,7 +2687,7 @@ export default function BuildScreen() {
     };
     characterPositionRef.current = nextPosition;
     setCharacterPosition(nextPosition);
-    
+
     return nextPosition;
   };
 
@@ -2727,11 +2702,11 @@ export default function BuildScreen() {
       if (finalPosition && (finalPosition.x !== characterPosition.x || finalPosition.y !== characterPosition.y)) {
         setCharacterPosition(finalPosition);
       }
-      
+
       // Only check for location action at the FINAL destination (where user tapped)
       if (targetDestinationRef.current) {
         const location = getLocationAtPosition(
-          targetDestinationRef.current.x, 
+          targetDestinationRef.current.x,
           targetDestinationRef.current.y
         );
         if (location) {
@@ -2742,16 +2717,16 @@ export default function BuildScreen() {
       }
       return;
     }
-    
+
     // Get next step
     const nextStep = movementPathRef.current.shift();
-    
+
     // Update location display
     const nextLocation = getLocationName(nextStep.x, nextStep.y);
     commitCurrentLocation(nextLocation);
-    
+
     logMovement(`🚶 Moving to tile (${nextStep.tileX}, ${nextStep.tileY})`);
-    
+
     // Move to next tile
     moveOneStep(nextStep.x, nextStep.y, () => {
       // Continue to next step (no intermediate event checks)
@@ -2761,23 +2736,23 @@ export default function BuildScreen() {
 
   const handleScreenPress = (event) => {
     const { locationX, locationY } = event.nativeEvent;
-    
+
     // Tutorial: mark 'walked' condition when user taps to move
     if (tutorialActive && gameMode === 'tutorial') {
       markTutorialCondition('walked');
     }
-    
+
     logMovement('===== TAP DEBUG =====');
     logMovement('Current map:', currentMapId);
     logMovement('Content dimensions:', contentSize.width, 'x', contentSize.height);
     logMovement('Tap at:', locationX.toFixed(0), locationY.toFixed(0));
-    logMovement('Tap % of content:', (locationX/contentSize.width*100).toFixed(1) + '%', 'x', (locationY/contentSize.height*100).toFixed(1) + '%');
-    
+    logMovement('Tap % of content:', (locationX / contentSize.width * 100).toFixed(1) + '%', 'x', (locationY / contentSize.height * 100).toFixed(1) + '%');
+
     // Check what location this tap is in
     const tapLocation = getLocationAtPosition(locationX, locationY);
     logMovement('Tap location:', tapLocation ? tapLocation.name : 'None');
     logMovement('====================');
-    
+
     // If already moving, stop current movement and redirect to new destination
     let startPosition = characterPositionRef.current || characterPosition;
     if (isWalking || isMovingRef.current) {
@@ -2789,40 +2764,40 @@ export default function BuildScreen() {
     if (collisionSystem.initialized) {
       // Get tile info for debugging
       const tileCoords = collisionSystem.pixelsToTiles(
-        locationX, 
-        locationY, 
-        contentSize.width, 
+        locationX,
+        locationY,
+        contentSize.width,
         contentSize.height
       );
       const tileInfo = collisionSystem.getTileInfo(tileCoords.x, tileCoords.y);
       logMovement('🧱 Target tile info:', JSON.stringify(tileInfo));
-      
+
       // Check if destination tile is passable (also treat NPC tiles as blocked)
       if (!tileInfo.passable || isNPCTile(tileCoords.x, tileCoords.y)) {
         logMovement('🚫 Destination tile is not passable (or occupied by NPC)!');
         // Find nearest passable position (excluding NPC tiles)
         const nearestPassable = findNearestPassableExcludingNPCs(
-          locationX, 
+          locationX,
           locationY
         );
-        
+
         // Store the original tap destination (for event checking)
         targetDestinationRef.current = { x: locationX, y: locationY };
-        
+
         // Calculate path to nearest passable position instead
         const path = calculatePath(
-          startPosition.x, 
-          startPosition.y, 
-          nearestPassable.x, 
+          startPosition.x,
+          startPosition.y,
+          nearestPassable.x,
           nearestPassable.y
         );
-        
+
         if (path.length === 0) {
           logMovement('🚫 No valid path found!');
           targetDestinationRef.current = null;
           return;
         }
-        
+
         // Start tile-by-tile movement
         movementPathRef.current = path;
         isMovingRef.current = true;
@@ -2830,47 +2805,47 @@ export default function BuildScreen() {
         processMovementPath();
         return;
       }
-      
+
       // Store the tap destination (for event checking when movement completes)
       targetDestinationRef.current = { x: locationX, y: locationY };
-      
+
       // Calculate path to destination
       const path = calculatePath(
-        startPosition.x, 
-        startPosition.y, 
-        locationX, 
+        startPosition.x,
+        startPosition.y,
+        locationX,
         locationY
       );
-      
+
       if (path.length === 0) {
         logMovement('🚫 No valid path found or already at destination!');
         targetDestinationRef.current = null;
         return;
       }
-      
+
       // Start tile-by-tile movement
       movementPathRef.current = path;
       isMovingRef.current = true;
       setIsWalking(true);
       processMovementPath();
-      
+
     } else {
       // For maps without collision (school), use direct movement
       setIsWalking(true);
       commitCurrentLocation(getLocationName(locationX, locationY));
-      
+
       const halfChar = getCharSize() / 2;
       const targetX = locationX - halfChar;
       const targetY = locationY - halfChar;
-      
+
       const currentX = startPosition.x;
       const currentY = startPosition.y;
       const distance = Math.sqrt(
         Math.pow(locationX - currentX, 2) + Math.pow(locationY - currentY, 2)
       );
-      
+
       const duration = Math.max(500, distance * 3);
-      
+
       const animation = Animated.parallel([
         Animated.timing(animatedX, {
           toValue: targetX,
@@ -2883,9 +2858,9 @@ export default function BuildScreen() {
           useNativeDriver: true,
         }),
       ]);
-      
+
       currentAnimationRef.current = animation;
-      
+
       animation.start(({ finished }) => {
         if (finished) {
           setIsWalking(false);
@@ -2893,7 +2868,7 @@ export default function BuildScreen() {
           if (characterPosition.x !== locationX || characterPosition.y !== locationY) {
             setCharacterPosition({ x: locationX, y: locationY });
           }
-          
+
           const location = getLocationAtPosition(locationX, locationY);
           if (location) {
             logMovement(`✅ Character reached ${location.name}!`);
@@ -2911,28 +2886,28 @@ export default function BuildScreen() {
       Alert.alert('Insufficient Funds', `You only have ₱${available.toFixed(2)} available.`);
       return;
     }
-    
+
     // Update goal allocations
     setGoalAllocations(prev => ({
       ...prev,
       [goalId]: (prev[goalId] || 0) + amount
     }));
-    
+
     // Update weekly spending (allocating counts as "spending" towards goals)
     setWeeklySpending(prev => prev + amount);
-    
+
     // Update budget categories for tracking
     setBudgetCategories(prev => {
       const totalBudget = weeklyBudget;
       const totalSavings = Object.values(goalAllocations).reduce((sum, val) => sum + val, 0) + amount;
-      
+
       return {
         needs: prev.needs,
         wants: prev.wants,
         savings: { ...prev.savings, spent: totalSavings }
       };
     });
-    
+
     // Show allocation success feedback
     const goal = savingsGoals.find(g => g.id === goalId);
 
@@ -2947,18 +2922,18 @@ export default function BuildScreen() {
     const totalGoalTarget = savingsGoals.reduce((sum, g) => sum + g.target, 0);
     const totalAllocated = Object.values(goalAllocations).reduce((sum, val) => sum + val, 0) + amount;
     const overallProgress = totalGoalTarget > 0 ? ((totalAllocated / totalGoalTarget) * 100).toFixed(0) : 0;
-    
+
     Alert.alert(
       '✅ Allocated!',
       `₱${amount} added to ${goal?.name || 'goal'}!\n\nOverall Progress: ${overallProgress}%`,
       [{ text: 'OK' }]
     );
-    
+
     // NOTE: Level completion is only checked when the week ends (in useEffect),
     // NOT after each allocation. This allows players to keep allocating throughout the week.
 
     // ── Persist goal allocations to DB ──
-    if (activeSessionId && (gameMode === 'story' || gameMode === 'custom')) {
+    if (activeSessionId && gameMode === 'story') {
       // Build updated allocations map (with this new allocation included)
       const updatedAllocations = { ...goalAllocations, [goalId]: (goalAllocations[goalId] || 0) + amount };
       const totalAllocatedNow = Object.values(updatedAllocations).reduce((sum, val) => sum + val, 0);
@@ -2976,18 +2951,6 @@ export default function BuildScreen() {
           weeklySpending: weeklySpending + amount,
           totalAllocated: totalAllocatedNow,
           goalsData: updatedGoalsData,
-          savingsAmount: weeklyBudget - (weeklySpending + amount),
-        });
-      } else {
-        // Custom mode: save goals_progress array for hydration
-        const goalsProgressArr = savingsGoals.map(g => ({
-          name: g.name,
-          target: g.target,
-          allocated: updatedAllocations[g.id] || 0,
-        }));
-        gameDatabaseService.updateCustomSessionSpending(activeSessionId, {
-          weeklySpending: weeklySpending + amount,
-          goalsProgress: goalsProgressArr,
           savingsAmount: weeklyBudget - (weeklySpending + amount),
         });
       }
@@ -3067,7 +3030,7 @@ export default function BuildScreen() {
         Alert.alert('Sync Error', 'Your expense may not have been saved. Please check your expenses list.');
       } else {
         console.log('✅ Expense saved successfully via DataContext');
-        
+
         const expenseAmountNum = parseFloat(savedAmount);
         const normalizedCategory = normalizeCategory(savedCategory);
 
@@ -3088,16 +3051,16 @@ export default function BuildScreen() {
             }
           });
         }
-        
+
         // Update category spending tracking (for all levels)
         setCategorySpending(prev => ({
           ...prev,
           [savedCategory]: (prev[savedCategory] || 0) + expenseAmountNum
         }));
-        
+
         // Level 1 (Budgeting): Update 50/30/20 category budgets
-        if ((gameMode === 'story' || gameMode === 'custom') &&
-            (STORY_LEVELS[storyLevel]?.type === 'budgeting' || customModeType === 'budgeting')) {
+        if (gameMode === 'story' &&
+          STORY_LEVELS[storyLevel]?.type === 'budgeting') {
           const budgetType = CATEGORY_BUDGET_MAP[savedCategory] || 'wants';
           setBudgetCategories(prev => ({
             ...prev,
@@ -3107,7 +3070,7 @@ export default function BuildScreen() {
             }
           }));
         }
-        
+
         // Update expense stats and check achievements
         const newStats = {
           total: expenseStats.total + 1,
@@ -3116,13 +3079,13 @@ export default function BuildScreen() {
           electronicsCount: savedCategory === 'Electronics' ? expenseStats.electronicsCount + 1 : expenseStats.electronicsCount,
         };
         setExpenseStats(newStats);
-        
+
         // Get category count for the saved category
         let categoryCount = 0;
         if (savedCategory === 'Food') categoryCount = newStats.foodCount;
         else if (savedCategory === 'Shopping') categoryCount = newStats.shoppingCount;
         else if (savedCategory === 'Electronics') categoryCount = newStats.electronicsCount;
-        
+
         // Check expense achievements
         await checkAchievements('expense_recorded', {
           totalExpenses: newStats.total,
@@ -3141,33 +3104,23 @@ export default function BuildScreen() {
         });
         gameDatabaseService.incrementUserLevelStats({ expensesRecorded: 1 });
 
-        // Update session spending if in story/custom mode
-        if (activeSessionId && (gameMode === 'story' || gameMode === 'custom')) {
+        // Update session spending if in story mode
+        if (activeSessionId && gameMode === 'story') {
           const updatedSpending = weeklySpending + expenseAmountNum;
           const updatedCategorySpending = { ...categorySpending, [savedCategory]: (categorySpending[savedCategory] || 0) + expenseAmountNum };
-          
+
           // Calculate updated needs/wants spent
           const budgetType = CATEGORY_BUDGET_MAP[savedCategory] || 'wants';
           const updatedNeedsSpent = budgetCategories.needs.spent + (budgetType === 'needs' ? expenseAmountNum : 0);
           const updatedWantsSpent = budgetCategories.wants.spent + (budgetType === 'wants' ? expenseAmountNum : 0);
-          
-          if (gameMode === 'story') {
-            gameDatabaseService.updateStorySessionSpending(activeSessionId, {
-              weeklySpending: updatedSpending,
-              categorySpending: updatedCategorySpending,
-              needsSpent: updatedNeedsSpent,
-              wantsSpent: updatedWantsSpent,
-              savingsAmount: weeklyBudget - updatedSpending,
-            });
-          } else {
-            gameDatabaseService.updateCustomSessionSpending(activeSessionId, {
-              weeklySpending: updatedSpending,
-              categorySpending: updatedCategorySpending,
-              needsSpent: updatedNeedsSpent,
-              wantsSpent: updatedWantsSpent,
-              savingsAmount: weeklyBudget - updatedSpending,
-            });
-          }
+
+          gameDatabaseService.updateStorySessionSpending(activeSessionId, {
+            weeklySpending: updatedSpending,
+            categorySpending: updatedCategorySpending,
+            needsSpent: updatedNeedsSpent,
+            wantsSpent: updatedWantsSpent,
+            savingsAmount: weeklyBudget - updatedSpending,
+          });
         }
       }
 
@@ -3175,7 +3128,7 @@ export default function BuildScreen() {
     } catch (error) {
       console.error('❌ Error saving expense:', error);
       Alert.alert(
-        'Sync Error', 
+        'Sync Error',
         `Your expense may not have been saved: ${error.message || 'Unknown error'}`
       );
     }
@@ -4217,7 +4170,7 @@ export default function BuildScreen() {
       ],
       info: 'rgba(149, 165, 166, 0.4)',     // Gray for info
     };
-    
+
     if (action === 'expense') {
       return colors.expense[index % colors.expense.length];
     }
@@ -4237,7 +4190,7 @@ export default function BuildScreen() {
       ],
       info: '#95A5A6',      // Gray for info
     };
-    
+
     if (action === 'expense') {
       return colors.expense[index % colors.expense.length];
     }
@@ -4295,7 +4248,7 @@ export default function BuildScreen() {
 
         // Skip out-of-bounds tiles
         if (tileX < 0 || tileX >= collisionSystem.mapWidth ||
-            tileY < 0 || tileY >= collisionSystem.mapHeight) continue;
+          tileY < 0 || tileY >= collisionSystem.mapHeight) continue;
 
         // Skip passable tiles — only overlay non-passable tiles (walls, tables, furniture)
         if (collisionSystem.isPassable(tileX, tileY)) continue;
@@ -4387,7 +4340,7 @@ export default function BuildScreen() {
         contentSize.width, contentSize.height
       );
       const npcLeft = pixelPos.x - halfChar;
-      const npcTop  = pixelPos.y - halfChar;
+      const npcTop = pixelPos.y - halfChar;
 
       // Depth: NPC below player → in front; NPC above/same → behind
       const inFront = npc.tileY > charTile.y;
@@ -4547,8 +4500,8 @@ export default function BuildScreen() {
     if (session.category_spending) setCategorySpending(session.category_spending);
     if (session.needs_spent != null || session.wants_spent != null) {
       setBudgetCategories({
-        needs:   { budget: session.needs_budget || 0, spent: session.needs_spent || 0 },
-        wants:   { budget: session.wants_budget || 0, spent: session.wants_spent || 0 },
+        needs: { budget: session.needs_budget || 0, spent: session.needs_spent || 0 },
+        wants: { budget: session.wants_budget || 0, spent: session.wants_spent || 0 },
         savings: { budget: session.savings_budget || 0, spent: 0 },
       });
     }
@@ -4567,66 +4520,7 @@ export default function BuildScreen() {
     console.log(`🔄 Resumed active story session ${session.id} (Level ${session.level})`);
   };
 
-  /**
-   * Apply a cached/fetched custom session to component state and navigate to gameplay.
-   */
-  const resumeCustomSession = (session) => {
-    setGameMode('custom');
-    setActiveSessionId(session.id);
-    setWeeklyBudget(session.weekly_budget || 0);
-    setStoryStartDate(new Date(session.start_date));
-    setStoryEndDate(new Date(session.end_date));
-    setWeeklySpending(session.weekly_spending || 0);
-    if (session.category_spending) setCategorySpending(session.category_spending);
-    if (session.custom_rules) {
-      setCustomBudgetRules(session.custom_rules);
-      // Restore weeks from start/end dates
-      const diffMs = new Date(session.end_date) - new Date(session.start_date);
-      const weeksFromDates = Math.round(diffMs / (7 * 24 * 60 * 60 * 1000));
-      setCustomWeeks(weeksFromDates || 1);
-    }
 
-    const modeType = session.mode_type;
-    if (modeType) setCustomModeType(modeType);
-    if (modeType === 'budgeting') {
-      setStoryLevel(1);
-      const rules = session.custom_rules || { needs: 50, wants: 30, savings: 20 };
-      setBudgetCategories({
-        needs:   { budget: (session.weekly_budget || 0) * (rules.needs / 100), spent: parseFloat(session.needs_spent) || 0 },
-        wants:   { budget: (session.weekly_budget || 0) * (rules.wants / 100), spent: parseFloat(session.wants_spent) || 0 },
-        savings: { budget: (session.weekly_budget || 0) * (rules.savings / 100), spent: 0 },
-      });
-    } else if (modeType === 'goals') {
-      setStoryLevel(2);
-      if (session.custom_goals) {
-        const goals = session.custom_goals.map((g, i) => ({
-          id: `custom_${i}`, name: g.name, icon: ['🎯','💎','🌟','🎁','✨'][i % 5], target: g.target || 0
-        }));
-        setSavingsGoals(goals);
-        // Restore customGoals form state so Settings modal shows correct data
-        setCustomGoals(session.custom_goals.map(g => ({ name: g.name, target: String(g.target || '') })));
-        const allocs = {};
-        goals.forEach(g => { allocs[g.id] = 0; });
-        if (session.goals_progress) {
-          session.goals_progress.forEach(gp => {
-            const matchGoal = goals.find(g => g.name === gp.name);
-            if (matchGoal) allocs[matchGoal.id] = gp.allocated || 0;
-          });
-        }
-        setGoalAllocations(allocs);
-      }
-    } else if (modeType === 'saving') {
-      setStoryLevel(3);
-      if (session.custom_savings_target != null) {
-        setCustomSavingsTarget(String(session.custom_savings_target));
-      }
-    }
-
-    setShowCustomSetup(false);
-    setShowMainMenu(false);
-    setCurrentMapId('dorm');
-    console.log(`🔄 Resumed active custom session ${session.id} (${modeType})`);
-  };
 
   /**
    * Unified handler when the user taps a story level button.
@@ -4722,19 +4616,11 @@ export default function BuildScreen() {
           sessionId: activeSessionId,
           details: { level: storyLevel, mode: 'story' },
         });
-      } else if (gameMode === 'custom') {
-        await gameDatabaseService.abandonCustomSession(activeSessionId);
-        gameDatabaseService.logActivity({
-          activityType: 'session_abandoned',
-          sessionId: activeSessionId,
-          details: { mode: 'custom', modeType: customModeType },
-        });
       }
     }
 
     // Clear cached active sessions
     if (gameMode === 'story') cachedActiveStoryRef.current = null;
-    if (gameMode === 'custom') cachedActiveCustomRef.current = null;
 
     // Reset game state and return to main menu
     setActiveSessionId(null);
@@ -4845,1760 +4731,6 @@ export default function BuildScreen() {
     setIntroPage(0);
     setIntroDisplayedText('');
   };
-
-  const handleCustomMode = async () => {
-    // Clear any leftover tutorial state
-    if (tutorialActive) {
-      setTutorialActive(false);
-      cancelTutorial();
-      setTutorialStep(0);
-    }
-
-    // Check for a cached active custom session first, then DB fallback
-    let activeCustom = cachedActiveCustomRef.current;
-    if (!activeCustom) {
-      activeCustom = await gameDatabaseService.findActiveCustomSession();
-    }
-
-    if (activeCustom) {
-      // Resume existing custom session — no data reset
-      resumeCustomSession(activeCustom);
-      return;
-    }
-
-    // No active session — show custom setup
-    setShowCustomSetup(true);
-    setShowMainMenu(false);
-  };
-
-  // Start Custom Mode with user-defined settings
-  const startCustomMode = async () => {
-    try {
-      // Get user's monthly budget from DataContext/Supabase
-      const { data: budgetData, error } = await supabase
-        .from('budgets')
-        .select('monthly')
-        .eq('user_id', user?.id)
-        .single();
-      
-      let monthlyBudget = 5000; // Default fallback
-      if (budgetData?.monthly) {
-        monthlyBudget = budgetData.monthly;
-      }
-      
-      // Calculate weekly budget (monthly / 4)
-      const calculatedWeeklyBudget = monthlyBudget / 4;
-      setWeeklyBudget(calculatedWeeklyBudget);
-      
-      // Set start and end dates — duration based on customWeeks
-      const startDate = new Date(); // exact moment user pressed Start
-      const endDate = new Date(startDate.getTime() + customWeeks * 7 * 24 * 60 * 60 * 1000); // customWeeks weeks
-      
-      setStoryStartDate(startDate);
-      setStoryEndDate(endDate);
-      setWeeklySpending(0);
-      setLevelResults(null);
-      
-      // Reset category spending tracking
-      setCategorySpending({
-        'Food & Dining': 0,
-        'Shopping': 0,
-        'Electronics': 0,
-        'Transport': 0,
-        'Entertainment': 0,
-        'Other': 0
-      });
-      
-      // Set up based on custom mode type
-      if (customModeType === 'budgeting') {
-        // Custom Budget Rules
-        const needsPercent = customBudgetRules.needs / 100;
-        const wantsPercent = customBudgetRules.wants / 100;
-        const savingsPercent = customBudgetRules.savings / 100;
-        
-        setBudgetCategories({
-          needs: { budget: calculatedWeeklyBudget * needsPercent, spent: 0 },
-          wants: { budget: calculatedWeeklyBudget * wantsPercent, spent: 0 },
-          savings: { budget: calculatedWeeklyBudget * savingsPercent, spent: 0 }
-        });
-        setStoryLevel(1); // Use level 1 UI
-        
-      } else if (customModeType === 'goals') {
-        // Custom Savings Goals
-        const goals = customGoals
-          .filter(g => g.name.trim() && g.target)
-          .map((g, index) => ({
-            id: `custom_${index}`,
-            name: g.name.trim(),
-            icon: ['🎯', '💎', '🌟', '🎁', '✨'][index % 5],
-            target: parseFloat(g.target) || 0
-          }));
-        
-        setSavingsGoals(goals);
-        const allocations = {};
-        goals.forEach(g => { allocations[g.id] = 0; });
-        setGoalAllocations(allocations);
-        setStoryLevel(2); // Use level 2 UI
-        
-      } else if (customModeType === 'saving') {
-        // Custom Savings Target
-        const savingsTarget = parseFloat(customSavingsTarget) / 100;
-        setStoryLevel(3); // Use level 3 UI
-        // Store custom savings target for level completion check
-        // We'll use customSavingsTarget state directly in checkLevelCompletion
-      }
-      
-      // Set game mode and close setup
-      setGameMode('custom');
-      setShowCustomSetup(false);
-      setCurrentMapId('dorm');
-      
-      console.log(`🎮 Custom Mode (${customModeType}) started!`);
-      console.log(`   Weekly Budget: ₱${calculatedWeeklyBudget}`);
-
-      // ── Persist custom session to Supabase ──
-      const customGoalsForDB = customModeType === 'goals'
-        ? customGoals.filter(g => g.name.trim() && g.target).map(g => ({ name: g.name.trim(), target: parseFloat(g.target) || 0 }))
-        : null;
-      const session = await gameDatabaseService.createCustomSession({
-        modeType: customModeType,
-        customRules: customBudgetRules,
-        weeklyBudget: calculatedWeeklyBudget,
-        startDate,
-        endDate,
-        customGoals: customGoalsForDB,
-        customSavingsTarget: customModeType === 'saving' ? Math.min(parseFloat(customSavingsTarget) || 0, 100) : null,
-      });
-      if (session) setActiveSessionId(session.id);
-      gameDatabaseService.logActivity({ activityType: 'level_start', details: { type: customModeType, mode: 'custom', rules: customBudgetRules }, sessionId: session?.id });
-      
-    } catch (error) {
-      console.error('Error starting custom mode:', error);
-      Alert.alert('Error', 'Could not start custom mode. Please try again.');
-    }
-  };
-
-  // Apply settings changes from the Custom Settings modal (mid-game edits)
-  const applyCustomSettings = (newModeType) => {
-    // If user is changing the challenge type entirely, reconfigure state
-    if (newModeType !== customModeType) {
-      setCustomModeType(newModeType);
-
-      if (newModeType === 'budgeting') {
-        const needsPercent = customBudgetRules.needs / 100;
-        const wantsPercent = customBudgetRules.wants / 100;
-        const savingsPercent = customBudgetRules.savings / 100;
-        setBudgetCategories({
-          needs: { budget: weeklyBudget * needsPercent, spent: budgetCategories.needs?.spent || 0 },
-          wants: { budget: weeklyBudget * wantsPercent, spent: budgetCategories.wants?.spent || 0 },
-          savings: { budget: weeklyBudget * savingsPercent, spent: 0 },
-        });
-        setStoryLevel(1);
-      } else if (newModeType === 'goals') {
-        const goals = customGoals
-          .filter(g => g.name.trim() && parseFloat(g.target) > 0)
-          .map((g, index) => ({
-            id: `custom_${index}`,
-            name: g.name.trim(),
-            icon: ['🎯', '💎', '🌟', '🎁', '✨'][index % 5],
-            target: parseFloat(g.target) || 0,
-          }));
-        if (goals.length > 0) {
-          setSavingsGoals(goals);
-          const allocations = {};
-          goals.forEach(g => { allocations[g.id] = 0; });
-          setGoalAllocations(allocations);
-        }
-        setStoryLevel(2);
-      } else if (newModeType === 'saving') {
-        setStoryLevel(3);
-      }
-    } else {
-      // Same mode type — user only edited values (percentages, goals, savings target)
-      if (newModeType === 'budgeting') {
-        const needsPercent = customBudgetRules.needs / 100;
-        const wantsPercent = customBudgetRules.wants / 100;
-        const savingsPercent = customBudgetRules.savings / 100;
-        setBudgetCategories(prev => ({
-          needs: { budget: weeklyBudget * needsPercent, spent: prev.needs?.spent || 0 },
-          wants: { budget: weeklyBudget * wantsPercent, spent: prev.wants?.spent || 0 },
-          savings: { budget: weeklyBudget * savingsPercent, spent: 0 },
-        }));
-      } else if (newModeType === 'goals') {
-        const goals = customGoals
-          .filter(g => g.name.trim() && parseFloat(g.target) > 0)
-          .map((g, index) => ({
-            id: `custom_${index}`,
-            name: g.name.trim(),
-            icon: ['🎯', '💎', '🌟', '🎁', '✨'][index % 5],
-            target: parseFloat(g.target) || 0,
-          }));
-        if (goals.length > 0) {
-          setSavingsGoals(goals);
-          // Preserve existing allocations where possible
-          const allocations = {};
-          goals.forEach(g => { allocations[g.id] = goalAllocations[g.id] || 0; });
-          setGoalAllocations(allocations);
-        }
-      }
-      // For 'saving', customSavingsTarget is already updated via state
-    }
-
-    // Update end date based on customWeeks
-    const newEndDate = new Date(storyStartDate.getTime() + customWeeks * 7 * 24 * 60 * 60 * 1000);
-    setStoryEndDate(newEndDate);
-
-    setShowCustomSettingsModal(false);
-    console.log(`⚙️ Custom settings applied: mode=${newModeType}, weeks=${customWeeks}`);
-
-    // Invalidate cached session so re-entering custom mode fetches fresh data from DB
-    cachedActiveCustomRef.current = null;
-
-    // ── Persist updated custom settings to DB (single call) ──
-    if (activeSessionId) {
-      const updatedGoalsForDB = (newModeType === 'goals')
-        ? customGoals.filter(g => g.name.trim() && parseFloat(g.target) > 0).map(g => ({ name: g.name.trim(), target: parseFloat(g.target) || 0 }))
-        : null;
-      gameDatabaseService.updateCustomSessionSpending(activeSessionId, {
-        weeklySpending,
-        needsSpent: budgetCategories.needs?.spent || 0,
-        wantsSpent: budgetCategories.wants?.spent || 0,
-        savingsAmount: weeklyBudget - weeklySpending,
-        goalsProgress: updatedGoalsForDB
-          ? updatedGoalsForDB.map(g => ({ name: g.name, target: g.target, allocated: goalAllocations[`custom_${updatedGoalsForDB.indexOf(g)}`] || 0 }))
-          : null,
-        customRules: newModeType === 'budgeting' ? customBudgetRules : null,
-        customGoals: (newModeType === 'goals' && updatedGoalsForDB) ? updatedGoalsForDB : null,
-        customSavingsTarget: newModeType === 'saving' ? Math.min(parseFloat(customSavingsTarget) || 0, 100) : null,
-        modeType: newModeType,
-        endDate: newEndDate.toISOString(),
-      });
-    }
-  };
-
-  // Render Custom Settings Modal (in-game settings for Custom Mode)
-  const renderCustomSettingsModal = () => {
-    const budgetTotal = customBudgetRules.needs + customBudgetRules.wants + customBudgetRules.savings;
-    const budgetValid = budgetTotal === 100;
-    const goalsValid = customGoals.some(g => g.name.trim() && parseFloat(g.target) > 0);
-    const savingsValid = parseFloat(customSavingsTarget) > 0 && parseFloat(customSavingsTarget) <= 100;
-
-    return (
-      <Modal
-        visible={showCustomSettingsModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowCustomSettingsModal(false)}
-      >
-        <View style={settingsStyles.backdrop}>
-          <View style={settingsStyles.container}>
-            {/* Header */}
-            <View style={settingsStyles.header}>
-              <Text style={settingsStyles.title}>⚙️ Custom Settings</Text>
-              <TouchableOpacity onPress={() => setShowCustomSettingsModal(false)}>
-                <Ionicons name="close" size={24} color="#F5DEB3" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={settingsStyles.body} showsVerticalScrollIndicator={false}>
-              {/* Mode Selector */}
-              <Text style={settingsStyles.sectionLabel}>Challenge Type</Text>
-              <View style={settingsStyles.modeRow}>
-                {[
-                  { key: 'budgeting', icon: '📊', label: 'Budgeting' },
-                  { key: 'goals', icon: '🎯', label: 'Goals' },
-                  { key: 'saving', icon: '💰', label: 'Saving' },
-                ].map(m => (
-                  <TouchableOpacity
-                    key={m.key}
-                    style={[
-                      settingsStyles.modeChip,
-                      settingsModeType === m.key && settingsStyles.modeChipActive,
-                    ]}
-                    onPress={() => setSettingsModeType(m.key)}
-                  >
-                    <Text style={settingsStyles.modeChipIcon}>{m.icon}</Text>
-                    <Text style={[
-                      settingsStyles.modeChipLabel,
-                      settingsModeType === m.key && settingsStyles.modeChipLabelActive,
-                    ]}>{m.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* Budgeting Settings */}
-              {settingsModeType === 'budgeting' && (
-                <View style={settingsStyles.section}>
-                  <Text style={settingsStyles.sectionLabel}>Budget Split</Text>
-                  {[
-                    { key: 'needs', label: '🏠 Needs', color: '#4CAF50' },
-                    { key: 'wants', label: '🎮 Wants', color: '#FF9800' },
-                    { key: 'savings', label: '💰 Savings', color: '#3498DB' },
-                  ].map(cat => (
-                    <View key={cat.key} style={settingsStyles.sliderRow}>
-                      <Text style={settingsStyles.sliderLabel}>{cat.label}</Text>
-                      <View style={settingsStyles.sliderControls}>
-                        <TouchableOpacity
-                          style={settingsStyles.adjBtn}
-                          onPress={() => setCustomBudgetRules(prev => ({ ...prev, [cat.key]: Math.max(0, prev[cat.key] - 5) }))}
-                        >
-                          <Ionicons name="remove" size={16} color="#FFF" />
-                        </TouchableOpacity>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                          <TextInput
-                            style={[settingsStyles.sliderValue, { color: cat.color, backgroundColor: 'rgba(45,45,68,0.9)', borderRadius: 6, paddingHorizontal: 4, borderWidth: 1, borderColor: '#5A5A7A' }]}
-                            value={String(customBudgetRules[cat.key])}
-                            onChangeText={(text) => {
-                              const val = parseInt(text.replace(/[^0-9]/g, ''));
-                              setCustomBudgetRules(prev => ({ ...prev, [cat.key]: isNaN(val) ? 0 : Math.min(100, val) }));
-                            }}
-                            keyboardType="numeric"
-                            maxLength={3}
-                          />
-                          <Text style={{ color: cat.color, fontWeight: 'bold', fontSize: 16 }}>%</Text>
-                        </View>
-                        <TouchableOpacity
-                          style={settingsStyles.adjBtn}
-                          onPress={() => setCustomBudgetRules(prev => ({ ...prev, [cat.key]: Math.min(100, prev[cat.key] + 5) }))}
-                        >
-                          <Ionicons name="add" size={16} color="#FFF" />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ))}
-                  <Text style={[settingsStyles.totalText, !budgetValid && { color: '#FF4444' }]}>
-                    Total: {budgetTotal}% {budgetValid ? '✅' : `(${budgetTotal < 100 ? 'need ' + (100 - budgetTotal) + '% more' : (budgetTotal - 100) + '% over'})`}
-                  </Text>
-                </View>
-              )}
-
-              {/* Goals Settings */}
-              {settingsModeType === 'goals' && (
-                <View style={settingsStyles.section}>
-                  <Text style={settingsStyles.sectionLabel}>Savings Goals</Text>
-                  {customGoals.map((goal, index) => (
-                    <View key={index} style={settingsStyles.goalRow}>
-                      <TextInput
-                        style={settingsStyles.goalNameInput}
-                        placeholder="Goal name"
-                        placeholderTextColor="#666"
-                        value={goal.name}
-                        onChangeText={(text) => {
-                          const g = [...customGoals];
-                          g[index].name = text;
-                          setCustomGoals(g);
-                        }}
-                      />
-                      <TextInput
-                        style={settingsStyles.goalAmtInput}
-                        placeholder="₱"
-                        placeholderTextColor="#666"
-                        keyboardType="numeric"
-                        value={goal.target}
-                        onChangeText={(text) => {
-                          const g = [...customGoals];
-                          g[index].target = text.replace(/[^0-9.]/g, '');
-                          setCustomGoals(g);
-                        }}
-                      />
-                      {customGoals.length > 1 && (
-                        <TouchableOpacity onPress={() => setCustomGoals(customGoals.filter((_, i) => i !== index))}>
-                          <Ionicons name="close-circle" size={22} color="#E74C3C" />
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  ))}
-                  {customGoals.length < 5 && (
-                    <TouchableOpacity
-                      style={settingsStyles.addGoalBtn}
-                      onPress={() => setCustomGoals([...customGoals, { name: '', target: '' }])}
-                    >
-                      <Ionicons name="add-circle" size={18} color="#4CAF50" />
-                      <Text style={settingsStyles.addGoalText}>Add Goal</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              )}
-
-              {/* Saving Settings */}
-              {settingsModeType === 'saving' && (
-                <View style={settingsStyles.section}>
-                  <Text style={settingsStyles.sectionLabel}>Savings Target</Text>
-                  <View style={settingsStyles.savingsRow}>
-                    <TouchableOpacity
-                      style={settingsStyles.adjBtn}
-                      onPress={() => setCustomSavingsTarget(prev => Math.max(5, parseInt(prev) - 5).toString())}
-                    >
-                      <Ionicons name="remove" size={20} color="#FFF" />
-                    </TouchableOpacity>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <TextInput
-                        style={[settingsStyles.savingsBigValue, { backgroundColor: 'rgba(45,45,68,0.9)', borderRadius: 8, paddingHorizontal: 8, borderWidth: 1, borderColor: '#5A5A7A', minWidth: 55, textAlign: 'center' }]}
-                        value={customSavingsTarget}
-                        onChangeText={(text) => {
-                          const cleaned = text.replace(/[^0-9]/g, '');
-                          setCustomSavingsTarget(cleaned === '' ? '0' : String(Math.min(100, parseInt(cleaned))));
-                        }}
-                        keyboardType="numeric"
-                        maxLength={3}
-                      />
-                      <Text style={settingsStyles.savingsBigValue}>%</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={settingsStyles.adjBtn}
-                      onPress={() => setCustomSavingsTarget(prev => Math.min(80, parseInt(prev) + 5).toString())}
-                    >
-                      <Ionicons name="add" size={20} color="#FFF" />
-                    </TouchableOpacity>
-                  </View>
-                  <View style={settingsStyles.quickRow}>
-                    {[10, 20, 30, 40, 50].map(p => (
-                      <TouchableOpacity
-                        key={p}
-                        style={[settingsStyles.quickBtn, customSavingsTarget === p.toString() && settingsStyles.quickBtnActive]}
-                        onPress={() => setCustomSavingsTarget(p.toString())}
-                      >
-                        <Text style={[settingsStyles.quickBtnText, customSavingsTarget === p.toString() && { color: '#FFF' }]}>{p}%</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              )}
-
-              {/* Duration Settings - shown for all mode types */}
-              <View style={settingsStyles.section}>
-                <Text style={settingsStyles.sectionLabel}>📅 Duration</Text>
-                <View style={settingsStyles.savingsRow}>
-                  <TouchableOpacity
-                    style={settingsStyles.adjBtn}
-                    onPress={() => setCustomWeeks(prev => Math.max(1, prev - 1))}
-                  >
-                    <Ionicons name="remove" size={20} color="#FFF" />
-                  </TouchableOpacity>
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <TextInput
-                      style={[settingsStyles.savingsBigValue, { backgroundColor: 'rgba(45,45,68,0.9)', borderRadius: 8, paddingHorizontal: 8, borderWidth: 1, borderColor: '#5A5A7A', minWidth: 50, textAlign: 'center' }]}
-                      value={String(customWeeks)}
-                      onChangeText={(text) => {
-                        const val = parseInt(text.replace(/[^0-9]/g, ''));
-                        setCustomWeeks(isNaN(val) ? 1 : Math.min(52, Math.max(1, val)));
-                      }}
-                      keyboardType="numeric"
-                      maxLength={2}
-                    />
-                    <Text style={[settingsStyles.savingsBigValue, { fontSize: 18, marginLeft: 4 }]}>{customWeeks === 1 ? 'week' : 'weeks'}</Text>
-                  </View>
-                  <TouchableOpacity
-                    style={settingsStyles.adjBtn}
-                    onPress={() => setCustomWeeks(prev => Math.min(52, prev + 1))}
-                  >
-                    <Ionicons name="add" size={20} color="#FFF" />
-                  </TouchableOpacity>
-                </View>
-                <View style={settingsStyles.quickRow}>
-                  {[1, 2, 3, 4].map(w => (
-                    <TouchableOpacity
-                      key={w}
-                      style={[settingsStyles.quickBtn, customWeeks === w && settingsStyles.quickBtnActive]}
-                      onPress={() => setCustomWeeks(w)}
-                    >
-                      <Text style={[settingsStyles.quickBtnText, customWeeks === w && { color: '#FFF' }]}>{w}w</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <Text style={[settingsStyles.totalText, { color: '#D4C4A8', marginTop: 4 }]}>= {customWeeks * 7} days total</Text>
-              </View>
-            </ScrollView>
-
-            {/* Apply Button */}
-            <TouchableOpacity
-              style={[
-                settingsStyles.applyBtn,
-                (settingsModeType === 'budgeting' && !budgetValid) && settingsStyles.applyBtnDisabled,
-                (settingsModeType === 'goals' && !goalsValid) && settingsStyles.applyBtnDisabled,
-                (settingsModeType === 'saving' && !savingsValid) && settingsStyles.applyBtnDisabled,
-              ]}
-              onPress={() => applyCustomSettings(settingsModeType)}
-              disabled={
-                (settingsModeType === 'budgeting' && !budgetValid) ||
-                (settingsModeType === 'goals' && !goalsValid) ||
-                (settingsModeType === 'saving' && !savingsValid)
-              }
-            >
-              <Text style={settingsStyles.applyBtnText}>Apply Changes</Text>
-              <Ionicons name="checkmark-circle" size={20} color="#FFF" />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    );
-  };
-
-  // Custom Settings Modal Styles
-  const settingsStyles = StyleSheet.create({
-    backdrop: {
-      flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.6)',
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    container: {
-      width: '90%',
-      maxHeight: '85%',
-      backgroundColor: '#1a1a2e',
-      borderRadius: 16,
-      borderWidth: 2,
-      borderColor: '#5A5A7A',
-      overflow: 'hidden',
-    },
-    header: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      paddingHorizontal: screenWidth * 0.05,
-      paddingVertical: screenHeight * 0.02,
-      borderBottomWidth: 1,
-      borderBottomColor: 'rgba(255,255,255,0.1)',
-    },
-    title: {
-      fontSize: Math.round(screenWidth * 0.05),
-      fontWeight: 'bold',
-      color: '#F5DEB3',
-    },
-    body: {
-      paddingHorizontal: screenWidth * 0.05,
-      paddingVertical: screenHeight * 0.015,
-    },
-    sectionLabel: {
-      fontSize: Math.round(screenWidth * 0.035),
-      fontWeight: '600',
-      color: '#D4C4A8',
-      marginBottom: screenHeight * 0.012,
-      marginTop: 8,
-    },
-    section: {
-      marginTop: 4,
-    },
-    modeRow: {
-      flexDirection: 'row',
-      gap: 8,
-      marginBottom: screenHeight * 0.015,
-    },
-    modeChip: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 4,
-      paddingVertical: screenHeight * 0.012,
-      borderRadius: Math.round(screenWidth * 0.025),
-      backgroundColor: 'rgba(45, 45, 68, 0.9)',
-      borderWidth: 2,
-      borderColor: '#5A5A7A',
-    },
-    modeChipActive: {
-      borderColor: '#F5DEB3',
-      backgroundColor: 'rgba(245, 222, 179, 0.15)',
-    },
-    modeChipIcon: {
-      fontSize: Math.round(screenWidth * 0.04),
-    },
-    modeChipLabel: {
-      fontSize: Math.round(screenWidth * 0.03),
-      color: '#888',
-      fontWeight: '600',
-    },
-    modeChipLabelActive: {
-      color: '#F5DEB3',
-    },
-    sliderRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: screenHeight * 0.012,
-    },
-    sliderLabel: {
-      fontSize: Math.round(screenWidth * 0.035),
-      color: '#F5DEB3',
-    },
-    sliderControls: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Math.round(screenWidth * 0.025),
-    },
-    adjBtn: {
-      width: Math.round(screenWidth * 0.08),
-      height: Math.round(screenWidth * 0.08),
-      borderRadius: Math.round(screenWidth * 0.04),
-      backgroundColor: 'rgba(90, 90, 122, 0.8)',
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    sliderValue: {
-      fontSize: Math.round(screenWidth * 0.04),
-      fontWeight: 'bold',
-      width: Math.round(screenWidth * 0.105),
-      textAlign: 'center',
-    },
-    totalText: {
-      textAlign: 'center',
-      fontSize: Math.round(screenWidth * 0.035),
-      color: '#4CAF50',
-      fontWeight: '600',
-      marginTop: 4,
-    },
-    goalRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      marginBottom: screenHeight * 0.012,
-    },
-    goalNameInput: {
-      flex: 1,
-      backgroundColor: 'rgba(45, 45, 68, 0.9)',
-      borderRadius: 8,
-      paddingHorizontal: Math.round(screenWidth * 0.03),
-      paddingVertical: screenHeight * 0.01,
-      color: '#FFF',
-      fontSize: Math.round(screenWidth * 0.035),
-      borderWidth: 1,
-      borderColor: '#5A5A7A',
-    },
-    goalAmtInput: {
-      width: Math.round(screenWidth * 0.2),
-      backgroundColor: 'rgba(45, 45, 68, 0.9)',
-      borderRadius: 8,
-      paddingHorizontal: Math.round(screenWidth * 0.03),
-      paddingVertical: screenHeight * 0.01,
-      color: '#FFF',
-      fontSize: Math.round(screenWidth * 0.035),
-      borderWidth: 1,
-      borderColor: '#5A5A7A',
-      textAlign: 'center',
-    },
-    addGoalBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      alignSelf: 'center',
-      paddingVertical: 6,
-    },
-    addGoalText: {
-      color: '#4CAF50',
-      fontSize: Math.round(screenWidth * 0.033),
-    },
-    savingsRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: Math.round(screenWidth * 0.05),
-      marginVertical: screenHeight * 0.012,
-    },
-    savingsBigValue: {
-      fontSize: Math.round(screenWidth * 0.08),
-      fontWeight: 'bold',
-      color: '#F5DEB3',
-    },
-    quickRow: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      gap: 8,
-      marginTop: 8,
-    },
-    quickBtn: {
-      paddingHorizontal: Math.round(screenWidth * 0.03),
-      paddingVertical: 6,
-      borderRadius: 8,
-      backgroundColor: 'rgba(45, 45, 68, 0.9)',
-      borderWidth: 1,
-      borderColor: '#5A5A7A',
-    },
-    quickBtnActive: {
-      borderColor: '#F5DEB3',
-      backgroundColor: 'rgba(245, 222, 179, 0.2)',
-    },
-    quickBtnText: {
-      fontSize: Math.round(screenWidth * 0.033),
-      color: '#888',
-      fontWeight: '600',
-    },
-    applyBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      marginHorizontal: screenWidth * 0.05,
-      marginVertical: screenHeight * 0.02,
-      paddingVertical: screenHeight * 0.017,
-      borderRadius: Math.round(screenWidth * 0.03),
-      backgroundColor: '#4CAF50',
-    },
-    applyBtnDisabled: {
-      backgroundColor: '#555',
-      opacity: 0.5,
-    },
-    applyBtnText: {
-      fontSize: Math.round(screenWidth * 0.04),
-      fontWeight: 'bold',
-      color: '#FFF',
-    },
-  });
-  const renderStoryIntro = () => (
-    <ImageBackground
-      source={require('../../../assets/Game_Graphics/menu/main_menu_bg.jpg')}
-      style={storyStyles.background}
-      resizeMode="cover"
-    >
-      <View style={storyStyles.overlay}>
-        {/* Back Button */}
-        <TouchableOpacity
-          style={storyStyles.backButton}
-          onPress={() => {
-            setShowStoryIntro(false);
-            setGameMode(null);
-          }}
-        >
-          <Ionicons name="arrow-back" size={24} color="#F5DEB3" />
-        </TouchableOpacity>
-
-        {/* Title */}
-        <View style={storyStyles.titleContainer}>
-          <Text style={storyStyles.title}>📖 Story Mode</Text>
-          <Text style={storyStyles.subtitle}>Master your finances!</Text>
-        </View>
-
-        {/* Level Selection */}
-        <View style={storyStyles.levelsContainer}>
-          {[1, 2, 3].map((level) => {
-            const levelConfig = STORY_LEVELS[level];
-            const isUnlocked = unlockedLevels.includes(level);
-            
-            return (
-              <TouchableOpacity
-                key={level}
-                style={[
-                  storyStyles.levelButton,
-                  isUnlocked ? storyStyles.levelUnlocked : storyStyles.levelLocked,
-                ]}
-                onPress={() => isUnlocked && handleLevelSelect(level)}
-                activeOpacity={isUnlocked ? 0.7 : 1}
-                disabled={!isUnlocked}
-              >
-                <View style={storyStyles.levelIconContainer}>
-                  <Text style={storyStyles.levelIcon}>
-                    {isUnlocked ? levelConfig.icon : '🔒'}
-                  </Text>
-                </View>
-                <View style={storyStyles.levelInfo}>
-                  <Text style={[storyStyles.levelName, !isUnlocked && storyStyles.lockedText]}>
-                    Level {level}: {levelConfig.name}
-                  </Text>
-                  <Text style={[storyStyles.levelDesc, !isUnlocked && storyStyles.lockedText]}>
-                    {isUnlocked ? levelConfig.description : 'Complete previous level to unlock'}
-                  </Text>
-                  <View style={storyStyles.levelGoal}>
-                    <Text style={[storyStyles.goalText, !isUnlocked && storyStyles.lockedText]}>
-                      🎯 {levelConfig.goalText}
-                    </Text>
-                  </View>
-                </View>
-                {isUnlocked && (
-                  <Ionicons name="play-circle" size={32} color="#F5DEB3" />
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Info Box */}
-        <View style={storyStyles.infoBox}>
-          <Ionicons name="information-circle" size={20} color="#F5DEB3" />
-          <Text style={storyStyles.infoText}>
-            Daily progression: Level 1 = 3 days, Level 2 = 3 days, Level 3 = 4 days. Complete all tasks each day to advance.
-          </Text>
-        </View>
-      </View>
-    </ImageBackground>
-  );
-
-  // Render Custom Mode Setup Screen
-  const renderCustomSetup = () => {
-    // Calculate if budget rules add up to 100
-    const budgetTotal = customBudgetRules.needs + customBudgetRules.wants + customBudgetRules.savings;
-    const budgetValid = budgetTotal === 100;
-    
-    // Check if goals are valid
-    const goalsValid = customGoals.some(g => g.name.trim() && parseFloat(g.target) > 0);
-    
-    // Check if savings target is valid
-    const savingsValid = parseFloat(customSavingsTarget) > 0 && parseFloat(customSavingsTarget) <= 100;
-    
-    return (
-      <ImageBackground
-        source={require('../../../assets/Game_Graphics/menu/main_menu_bg.jpg')}
-        style={customStyles.background}
-        resizeMode="cover"
-      >
-        <View style={customStyles.overlay}>
-          {/* Back Button */}
-          <TouchableOpacity
-            style={customStyles.backButton}
-            onPress={() => {
-              setShowCustomSetup(false);
-              setShowMainMenu(true);
-              setCustomModeType(null);
-            }}
-          >
-            <Ionicons name="arrow-back" size={24} color="#F5DEB3" />
-          </TouchableOpacity>
-
-          {/* Title */}
-          <View style={customStyles.titleContainer}>
-            <Text style={customStyles.title}>🎮 Custom Mode</Text>
-            <Text style={customStyles.subtitle}>
-              {customModeType ? 'Configure your challenge' : 'Choose your challenge type'}
-            </Text>
-          </View>
-
-          <ScrollView 
-            style={customStyles.scrollContainer}
-            contentContainerStyle={customStyles.scrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {/* Step 1: Select Mode Type */}
-            {!customModeType && (
-              <View style={customStyles.modeSelection}>
-                <TouchableOpacity
-                  style={customStyles.modeButton}
-                  onPress={() => setCustomModeType('budgeting')}
-                >
-                  <Text style={customStyles.modeIcon}>📊</Text>
-                  <View style={customStyles.modeInfo}>
-                    <Text style={customStyles.modeName}>Budget Basics</Text>
-                    <Text style={customStyles.modeDesc}>Set your own budget split percentages</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#F5DEB3" />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={customStyles.modeButton}
-                  onPress={() => setCustomModeType('goals')}
-                >
-                  <Text style={customStyles.modeIcon}>🎯</Text>
-                  <View style={customStyles.modeInfo}>
-                    <Text style={customStyles.modeName}>Goal Setting</Text>
-                    <Text style={customStyles.modeDesc}>Create your own savings goals</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#F5DEB3" />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={customStyles.modeButton}
-                  onPress={() => setCustomModeType('saving')}
-                >
-                  <Text style={customStyles.modeIcon}>💰</Text>
-                  <View style={customStyles.modeInfo}>
-                    <Text style={customStyles.modeName}>Super Saver</Text>
-                    <Text style={customStyles.modeDesc}>Choose your savings percentage target</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#F5DEB3" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Step 2A: Budget Basics Configuration */}
-            {customModeType === 'budgeting' && (
-              <View style={customStyles.configSection}>
-                <TouchableOpacity
-                  style={customStyles.changeTypeButton}
-                  onPress={() => setCustomModeType(null)}
-                >
-                  <Ionicons name="arrow-back" size={16} color="#F5DEB3" />
-                  <Text style={customStyles.changeTypeText}>Change type</Text>
-                </TouchableOpacity>
-
-                <Text style={customStyles.configTitle}>📊 Set Your Budget Split</Text>
-                <Text style={customStyles.configSubtitle}>
-                  Allocate your weekly budget across Needs, Wants, and Savings.
-                  Total must equal 100%.
-                </Text>
-
-                {/* Needs Slider */}
-                <View style={customStyles.sliderContainer}>
-                  <View style={customStyles.sliderHeader}>
-                    <Text style={customStyles.sliderLabel}>🏠 Needs (Food, Transport)</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <TextInput
-                        style={customStyles.sliderInputField}
-                        value={String(customBudgetRules.needs)}
-                        onChangeText={(text) => {
-                          const val = parseInt(text.replace(/[^0-9]/g, ''));
-                          setCustomBudgetRules(prev => ({ ...prev, needs: isNaN(val) ? 0 : Math.min(100, val) }));
-                        }}
-                        keyboardType="numeric"
-                        maxLength={3}
-                      />
-                      <Text style={customStyles.sliderValue}>%</Text>
-                    </View>
-                  </View>
-                  <View style={customStyles.sliderTrack}>
-                    <View 
-                      style={[customStyles.sliderFill, { width: `${customBudgetRules.needs}%`, backgroundColor: '#4CAF50' }]} 
-                    />
-                  </View>
-                  <View style={customStyles.sliderButtons}>
-                    <TouchableOpacity
-                      style={customStyles.sliderBtn}
-                      onPress={() => setCustomBudgetRules(prev => ({ ...prev, needs: Math.max(0, prev.needs - 5) }))}
-                    >
-                      <Ionicons name="remove" size={20} color="#FFF" />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={customStyles.sliderBtn}
-                      onPress={() => setCustomBudgetRules(prev => ({ ...prev, needs: Math.min(100, prev.needs + 5) }))}
-                    >
-                      <Ionicons name="add" size={20} color="#FFF" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {/* Wants Slider */}
-                <View style={customStyles.sliderContainer}>
-                  <View style={customStyles.sliderHeader}>
-                    <Text style={customStyles.sliderLabel}>🎮 Wants (Shopping, Entertainment)</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <TextInput
-                        style={customStyles.sliderInputField}
-                        value={String(customBudgetRules.wants)}
-                        onChangeText={(text) => {
-                          const val = parseInt(text.replace(/[^0-9]/g, ''));
-                          setCustomBudgetRules(prev => ({ ...prev, wants: isNaN(val) ? 0 : Math.min(100, val) }));
-                        }}
-                        keyboardType="numeric"
-                        maxLength={3}
-                      />
-                      <Text style={customStyles.sliderValue}>%</Text>
-                    </View>
-                  </View>
-                  <View style={customStyles.sliderTrack}>
-                    <View 
-                      style={[customStyles.sliderFill, { width: `${customBudgetRules.wants}%`, backgroundColor: '#FF9800' }]} 
-                    />
-                  </View>
-                  <View style={customStyles.sliderButtons}>
-                    <TouchableOpacity
-                      style={customStyles.sliderBtn}
-                      onPress={() => setCustomBudgetRules(prev => ({ ...prev, wants: Math.max(0, prev.wants - 5) }))}
-                    >
-                      <Ionicons name="remove" size={20} color="#FFF" />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={customStyles.sliderBtn}
-                      onPress={() => setCustomBudgetRules(prev => ({ ...prev, wants: Math.min(100, prev.wants + 5) }))}
-                    >
-                      <Ionicons name="add" size={20} color="#FFF" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {/* Savings Slider */}
-                <View style={customStyles.sliderContainer}>
-                  <View style={customStyles.sliderHeader}>
-                    <Text style={customStyles.sliderLabel}>💰 Savings</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <TextInput
-                        style={customStyles.sliderInputField}
-                        value={String(customBudgetRules.savings)}
-                        onChangeText={(text) => {
-                          const val = parseInt(text.replace(/[^0-9]/g, ''));
-                          setCustomBudgetRules(prev => ({ ...prev, savings: isNaN(val) ? 0 : Math.min(100, val) }));
-                        }}
-                        keyboardType="numeric"
-                        maxLength={3}
-                      />
-                      <Text style={customStyles.sliderValue}>%</Text>
-                    </View>
-                  </View>
-                  <View style={customStyles.sliderTrack}>
-                    <View 
-                      style={[customStyles.sliderFill, { width: `${customBudgetRules.savings}%`, backgroundColor: '#3498DB' }]} 
-                    />
-                  </View>
-                  <View style={customStyles.sliderButtons}>
-                    <TouchableOpacity
-                      style={customStyles.sliderBtn}
-                      onPress={() => setCustomBudgetRules(prev => ({ ...prev, savings: Math.max(0, prev.savings - 5) }))}
-                    >
-                      <Ionicons name="remove" size={20} color="#FFF" />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={customStyles.sliderBtn}
-                      onPress={() => setCustomBudgetRules(prev => ({ ...prev, savings: Math.min(100, prev.savings + 5) }))}
-                    >
-                      <Ionicons name="add" size={20} color="#FFF" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {/* Total indicator */}
-                <View style={[customStyles.totalIndicator, !budgetValid && customStyles.totalInvalid]}>
-                  <Text style={customStyles.totalText}>
-                    Total: {budgetTotal}%
-                  </Text>
-                  {!budgetValid && (
-                    <Text style={customStyles.totalWarning}>
-                      {budgetTotal < 100 ? `Add ${100 - budgetTotal}% more` : `Remove ${budgetTotal - 100}%`}
-                    </Text>
-                  )}
-                  {budgetValid && (
-                    <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
-                  )}
-                </View>
-
-                {/* Duration Selector */}
-                <View style={customStyles.durationContainer}>
-                  <Text style={customStyles.durationTitle}>📅 Duration</Text>
-                  <Text style={customStyles.durationSubtitle}>How many weeks should this challenge last?</Text>
-                  <View style={customStyles.durationInputRow}>
-                    <TouchableOpacity
-                      style={customStyles.savingsAdjustBtn}
-                      onPress={() => setCustomWeeks(prev => Math.max(1, prev - 1))}
-                    >
-                      <Ionicons name="remove" size={24} color="#FFF" />
-                    </TouchableOpacity>
-                    <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
-                      <TextInput
-                        style={customStyles.weeksInput}
-                        value={String(customWeeks)}
-                        onChangeText={(text) => {
-                          const val = parseInt(text.replace(/[^0-9]/g, ''));
-                          setCustomWeeks(isNaN(val) ? 1 : Math.min(52, Math.max(1, val)));
-                        }}
-                        keyboardType="numeric"
-                        maxLength={2}
-                      />
-                      <Text style={customStyles.weeksLabel}>{customWeeks === 1 ? 'week' : 'weeks'}</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={customStyles.savingsAdjustBtn}
-                      onPress={() => setCustomWeeks(prev => Math.min(52, prev + 1))}
-                    >
-                      <Ionicons name="add" size={24} color="#FFF" />
-                    </TouchableOpacity>
-                  </View>
-                  <View style={customStyles.quickSelectRow}>
-                    {[1, 2, 3, 4].map((w) => (
-                      <TouchableOpacity
-                        key={w}
-                        style={[
-                          customStyles.quickSelectBtn,
-                          customWeeks === w && customStyles.quickSelectActive
-                        ]}
-                        onPress={() => setCustomWeeks(w)}
-                      >
-                        <Text style={[
-                          customStyles.quickSelectText,
-                          customWeeks === w && customStyles.quickSelectTextActive
-                        ]}>
-                          {w}w
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                  <Text style={customStyles.durationNote}>= {customWeeks * 7} days total</Text>
-                </View>
-
-                {/* Start Button */}
-                <TouchableOpacity
-                  style={[customStyles.startButton, !budgetValid && customStyles.startButtonDisabled]}
-                  onPress={startCustomMode}
-                  disabled={!budgetValid}
-                >
-                  <Text style={customStyles.startButtonText}>Start Challenge</Text>
-                  <Ionicons name="play" size={20} color="#FFF" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Step 2B: Goal Setting Configuration */}
-            {customModeType === 'goals' && (
-              <View style={customStyles.configSection}>
-                <TouchableOpacity
-                  style={customStyles.changeTypeButton}
-                  onPress={() => setCustomModeType(null)}
-                >
-                  <Ionicons name="arrow-back" size={16} color="#F5DEB3" />
-                  <Text style={customStyles.changeTypeText}>Change type</Text>
-                </TouchableOpacity>
-
-                <Text style={customStyles.configTitle}>🎯 Create Your Goals</Text>
-                <Text style={customStyles.configSubtitle}>
-                  Add savings goals you want to work towards. Enter a name and target amount.
-                </Text>
-
-                {/* Goals List */}
-                {customGoals.map((goal, index) => (
-                  <View key={index} style={customStyles.goalInputRow}>
-                    <View style={customStyles.goalInputs}>
-                      <TextInput
-                        style={customStyles.goalNameInput}
-                        placeholder="Goal name (e.g., New Shoes)"
-                        placeholderTextColor="#888"
-                        value={goal.name}
-                        onChangeText={(text) => {
-                          const newGoals = [...customGoals];
-                          newGoals[index].name = text;
-                          setCustomGoals(newGoals);
-                        }}
-                      />
-                      <TextInput
-                        style={customStyles.goalAmountInput}
-                        placeholder="₱ Amount"
-                        placeholderTextColor="#888"
-                        keyboardType="numeric"
-                        value={goal.target}
-                        onChangeText={(text) => {
-                          const newGoals = [...customGoals];
-                          newGoals[index].target = text.replace(/[^0-9.]/g, '');
-                          setCustomGoals(newGoals);
-                        }}
-                      />
-                    </View>
-                    {customGoals.length > 1 && (
-                      <TouchableOpacity
-                        style={customStyles.removeGoalBtn}
-                        onPress={() => {
-                          const newGoals = customGoals.filter((_, i) => i !== index);
-                          setCustomGoals(newGoals);
-                        }}
-                      >
-                        <Ionicons name="close-circle" size={24} color="#E74C3C" />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                ))}
-
-                {/* Add Goal Button */}
-                {customGoals.length < 5 && (
-                  <TouchableOpacity
-                    style={customStyles.addGoalButton}
-                    onPress={() => setCustomGoals([...customGoals, { name: '', target: '' }])}
-                  >
-                    <Ionicons name="add-circle" size={20} color="#4CAF50" />
-                    <Text style={customStyles.addGoalText}>Add Another Goal</Text>
-                  </TouchableOpacity>
-                )}
-
-                {/* Duration Selector */}
-                <View style={customStyles.durationContainer}>
-                  <Text style={customStyles.durationTitle}>📅 Duration</Text>
-                  <Text style={customStyles.durationSubtitle}>How many weeks should this challenge last?</Text>
-                  <View style={customStyles.durationInputRow}>
-                    <TouchableOpacity
-                      style={customStyles.savingsAdjustBtn}
-                      onPress={() => setCustomWeeks(prev => Math.max(1, prev - 1))}
-                    >
-                      <Ionicons name="remove" size={24} color="#FFF" />
-                    </TouchableOpacity>
-                    <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
-                      <TextInput
-                        style={customStyles.weeksInput}
-                        value={String(customWeeks)}
-                        onChangeText={(text) => {
-                          const val = parseInt(text.replace(/[^0-9]/g, ''));
-                          setCustomWeeks(isNaN(val) ? 1 : Math.min(52, Math.max(1, val)));
-                        }}
-                        keyboardType="numeric"
-                        maxLength={2}
-                      />
-                      <Text style={customStyles.weeksLabel}>{customWeeks === 1 ? 'week' : 'weeks'}</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={customStyles.savingsAdjustBtn}
-                      onPress={() => setCustomWeeks(prev => Math.min(52, prev + 1))}
-                    >
-                      <Ionicons name="add" size={24} color="#FFF" />
-                    </TouchableOpacity>
-                  </View>
-                  <View style={customStyles.quickSelectRow}>
-                    {[1, 2, 3, 4].map((w) => (
-                      <TouchableOpacity
-                        key={w}
-                        style={[
-                          customStyles.quickSelectBtn,
-                          customWeeks === w && customStyles.quickSelectActive
-                        ]}
-                        onPress={() => setCustomWeeks(w)}
-                      >
-                        <Text style={[
-                          customStyles.quickSelectText,
-                          customWeeks === w && customStyles.quickSelectTextActive
-                        ]}>
-                          {w}w
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                  <Text style={customStyles.durationNote}>= {customWeeks * 7} days total</Text>
-                </View>
-
-                {/* Start Button */}
-                <TouchableOpacity
-                  style={[customStyles.startButton, !goalsValid && customStyles.startButtonDisabled]}
-                  onPress={startCustomMode}
-                  disabled={!goalsValid}
-                >
-                  <Text style={customStyles.startButtonText}>Start Challenge</Text>
-                  <Ionicons name="play" size={20} color="#FFF" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Step 2C: Super Saver Configuration */}
-            {customModeType === 'saving' && (
-              <View style={customStyles.configSection}>
-                <TouchableOpacity
-                  style={customStyles.changeTypeButton}
-                  onPress={() => setCustomModeType(null)}
-                >
-                  <Ionicons name="arrow-back" size={16} color="#F5DEB3" />
-                  <Text style={customStyles.changeTypeText}>Change type</Text>
-                </TouchableOpacity>
-
-                <Text style={customStyles.configTitle}>💰 Set Your Savings Target</Text>
-                <Text style={customStyles.configSubtitle}>
-                  Choose what percentage of your weekly budget you want to save.
-                </Text>
-
-                {/* Savings Target Input */}
-                <View style={customStyles.savingsTargetContainer}>
-                  <View style={customStyles.savingsInputRow}>
-                    <TouchableOpacity
-                      style={customStyles.savingsAdjustBtn}
-                      onPress={() => setCustomSavingsTarget(prev => Math.max(5, parseInt(prev) - 5).toString())}
-                    >
-                      <Ionicons name="remove" size={28} color="#FFF" />
-                    </TouchableOpacity>
-                    
-                    <View style={customStyles.savingsValueContainer}>
-                      <TextInput
-                        style={customStyles.savingsValueInput}
-                        value={customSavingsTarget}
-                        onChangeText={(text) => {
-                          const cleaned = text.replace(/[^0-9]/g, '');
-                          setCustomSavingsTarget(cleaned === '' ? '0' : String(Math.min(100, parseInt(cleaned))));
-                        }}
-                        keyboardType="numeric"
-                        maxLength={3}
-                      />
-                      <Text style={customStyles.savingsPercent}>%</Text>
-                    </View>
-                    
-                    <TouchableOpacity
-                      style={customStyles.savingsAdjustBtn}
-                      onPress={() => setCustomSavingsTarget(prev => Math.min(80, parseInt(prev) + 5).toString())}
-                    >
-                      <Ionicons name="add" size={28} color="#FFF" />
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Quick Select Buttons */}
-                  <View style={customStyles.quickSelectRow}>
-                    {[10, 20, 30, 40, 50].map((percent) => (
-                      <TouchableOpacity
-                        key={percent}
-                        style={[
-                          customStyles.quickSelectBtn,
-                          customSavingsTarget === percent.toString() && customStyles.quickSelectActive
-                        ]}
-                        onPress={() => setCustomSavingsTarget(percent.toString())}
-                      >
-                        <Text style={[
-                          customStyles.quickSelectText,
-                          customSavingsTarget === percent.toString() && customStyles.quickSelectTextActive
-                        ]}>
-                          {percent}%
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-
-                  {/* Difficulty Indicator */}
-                  <View style={customStyles.difficultyIndicator}>
-                    <Text style={customStyles.difficultyLabel}>Difficulty: </Text>
-                    <Text style={[
-                      customStyles.difficultyValue,
-                      { color: parseInt(customSavingsTarget) <= 15 ? '#4CAF50' : 
-                               parseInt(customSavingsTarget) <= 30 ? '#FF9800' : '#E74C3C' }
-                    ]}>
-                      {parseInt(customSavingsTarget) <= 15 ? '🌱 Easy' : 
-                       parseInt(customSavingsTarget) <= 30 ? '💪 Medium' : '🔥 Hard'}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Duration Selector */}
-                <View style={customStyles.durationContainer}>
-                  <Text style={customStyles.durationTitle}>📅 Duration</Text>
-                  <Text style={customStyles.durationSubtitle}>How many weeks should this challenge last?</Text>
-                  <View style={customStyles.durationInputRow}>
-                    <TouchableOpacity
-                      style={customStyles.savingsAdjustBtn}
-                      onPress={() => setCustomWeeks(prev => Math.max(1, prev - 1))}
-                    >
-                      <Ionicons name="remove" size={24} color="#FFF" />
-                    </TouchableOpacity>
-                    <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
-                      <TextInput
-                        style={customStyles.weeksInput}
-                        value={String(customWeeks)}
-                        onChangeText={(text) => {
-                          const val = parseInt(text.replace(/[^0-9]/g, ''));
-                          setCustomWeeks(isNaN(val) ? 1 : Math.min(52, Math.max(1, val)));
-                        }}
-                        keyboardType="numeric"
-                        maxLength={2}
-                      />
-                      <Text style={customStyles.weeksLabel}>{customWeeks === 1 ? 'week' : 'weeks'}</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={customStyles.savingsAdjustBtn}
-                      onPress={() => setCustomWeeks(prev => Math.min(52, prev + 1))}
-                    >
-                      <Ionicons name="add" size={24} color="#FFF" />
-                    </TouchableOpacity>
-                  </View>
-                  <View style={customStyles.quickSelectRow}>
-                    {[1, 2, 3, 4].map((w) => (
-                      <TouchableOpacity
-                        key={w}
-                        style={[
-                          customStyles.quickSelectBtn,
-                          customWeeks === w && customStyles.quickSelectActive
-                        ]}
-                        onPress={() => setCustomWeeks(w)}
-                      >
-                        <Text style={[
-                          customStyles.quickSelectText,
-                          customWeeks === w && customStyles.quickSelectTextActive
-                        ]}>
-                          {w}w
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                  <Text style={customStyles.durationNote}>= {customWeeks * 7} days total</Text>
-                </View>
-
-                {/* Start Button */}
-                <TouchableOpacity
-                  style={[customStyles.startButton, !savingsValid && customStyles.startButtonDisabled]}
-                  onPress={startCustomMode}
-                  disabled={!savingsValid}
-                >
-                  <Text style={customStyles.startButtonText}>Start Challenge</Text>
-                  <Ionicons name="play" size={20} color="#FFF" />
-                </TouchableOpacity>
-              </View>
-            )}
-          </ScrollView>
-        </View>
-      </ImageBackground>
-    );
-  };
-
-  // Custom Mode Styles
-  const customStyles = StyleSheet.create({
-    background: {
-      flex: 1,
-      width: '100%',
-      height: '100%',
-    },
-    overlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.6)',
-      paddingTop: screenHeight * 0.07,
-    },
-    backButton: {
-      position: 'absolute',
-      top: screenHeight * 0.06,
-      left: screenWidth * 0.05,
-      width: Math.round(screenWidth * 0.11),
-      height: Math.round(screenWidth * 0.11),
-      borderRadius: Math.round(screenWidth * 0.055),
-      backgroundColor: 'rgba(45, 45, 68, 0.9)',
-      justifyContent: 'center',
-      alignItems: 'center',
-      borderWidth: 2,
-      borderColor: '#5A5A7A',
-      zIndex: 10,
-    },
-    titleContainer: {
-      alignItems: 'center',
-      marginBottom: screenHeight * 0.025,
-    },
-    title: {
-      fontSize: Math.round(screenWidth * 0.08),
-      fontWeight: 'bold',
-      color: '#F5DEB3',
-      textShadowColor: '#000',
-      textShadowOffset: { width: 2, height: 2 },
-      textShadowRadius: 0,
-    },
-    subtitle: {
-      fontSize: Math.round(screenWidth * 0.035),
-      color: '#D4C4A8',
-      marginTop: 8,
-    },
-    scrollContainer: {
-      flex: 1,
-    },
-    scrollContent: {
-      paddingHorizontal: screenWidth * 0.05,
-      paddingBottom: screenHeight * 0.05,
-    },
-    modeSelection: {
-      gap: Math.round(screenHeight * 0.015),
-    },
-    modeButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: 'rgba(45, 45, 68, 0.9)',
-      padding: Math.round(screenWidth * 0.04),
-      borderRadius: Math.round(screenWidth * 0.03),
-      borderWidth: 2,
-      borderColor: '#5A5A7A',
-      gap: Math.round(screenWidth * 0.03),
-    },
-    modeIcon: {
-      fontSize: Math.round(screenWidth * 0.08),
-    },
-    modeInfo: {
-      flex: 1,
-    },
-    modeName: {
-      fontSize: Math.round(screenWidth * 0.045),
-      fontWeight: 'bold',
-      color: '#F5DEB3',
-    },
-    modeDesc: {
-      fontSize: Math.round(screenWidth * 0.03),
-      color: '#D4C4A8',
-      marginTop: 4,
-    },
-    configSection: {
-      gap: Math.round(screenHeight * 0.02),
-    },
-    changeTypeButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      alignSelf: 'flex-start',
-      paddingVertical: 8,
-    },
-    changeTypeText: {
-      fontSize: Math.round(screenWidth * 0.035),
-      color: '#F5DEB3',
-    },
-    configTitle: {
-      fontSize: Math.round(screenWidth * 0.055),
-      fontWeight: 'bold',
-      color: '#F5DEB3',
-      textAlign: 'center',
-    },
-    configSubtitle: {
-      fontSize: Math.round(screenWidth * 0.033),
-      color: '#D4C4A8',
-      textAlign: 'center',
-      lineHeight: Math.round(screenWidth * 0.045),
-      marginBottom: 8,
-    },
-    sliderContainer: {
-      backgroundColor: 'rgba(45, 45, 68, 0.9)',
-      borderRadius: Math.round(screenWidth * 0.03),
-      padding: Math.round(screenWidth * 0.04),
-      borderWidth: 2,
-      borderColor: '#5A5A7A',
-    },
-    sliderHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: screenHeight * 0.015,
-    },
-    sliderLabel: {
-      fontSize: Math.round(screenWidth * 0.035),
-      color: '#F5DEB3',
-      fontWeight: '600',
-    },
-    sliderValue: {
-      fontSize: Math.round(screenWidth * 0.05),
-      fontWeight: 'bold',
-      color: '#FF9800',
-    },
-    sliderTrack: {
-      height: 8,
-      backgroundColor: 'rgba(255,255,255,0.2)',
-      borderRadius: 4,
-      marginBottom: 12,
-    },
-    sliderFill: {
-      height: '100%',
-      borderRadius: 4,
-    },
-    sliderButtons: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      gap: 20,
-    },
-    sliderBtn: {
-      width: Math.round(screenWidth * 0.1),
-      height: Math.round(screenWidth * 0.1),
-      borderRadius: Math.round(screenWidth * 0.05),
-      backgroundColor: 'rgba(255,255,255,0.2)',
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    totalIndicator: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      alignItems: 'center',
-      backgroundColor: 'rgba(76, 175, 80, 0.2)',
-      padding: Math.round(screenWidth * 0.03),
-      borderRadius: 8,
-      gap: 8,
-    },
-    totalInvalid: {
-      backgroundColor: 'rgba(231, 76, 60, 0.2)',
-    },
-    totalText: {
-      fontSize: Math.round(screenWidth * 0.04),
-      fontWeight: 'bold',
-      color: '#F5DEB3',
-    },
-    totalWarning: {
-      fontSize: Math.round(screenWidth * 0.03),
-      color: '#E74C3C',
-    },
-    startButton: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      alignItems: 'center',
-      backgroundColor: '#4CAF50',
-      padding: screenWidth * 0.04,
-      borderRadius: 12,
-      gap: 10,
-      marginTop: 8,
-    },
-    startButtonDisabled: {
-      backgroundColor: 'rgba(76, 175, 80, 0.3)',
-    },
-    startButtonText: {
-      fontSize: Math.round(screenWidth * 0.045),
-      fontWeight: 'bold',
-      color: '#FFF',
-    },
-    goalInputRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
-    goalInputs: {
-      flex: 1,
-      flexDirection: 'row',
-      gap: 8,
-    },
-    goalNameInput: {
-      flex: 2,
-      backgroundColor: 'rgba(45, 45, 68, 0.9)',
-      borderRadius: 8,
-      padding: Math.round(screenWidth * 0.03),
-      color: '#FFF',
-      fontSize: Math.round(screenWidth * 0.035),
-      borderWidth: 2,
-      borderColor: '#5A5A7A',
-    },
-    goalAmountInput: {
-      flex: 1,
-      backgroundColor: 'rgba(45, 45, 68, 0.9)',
-      borderRadius: 8,
-      padding: Math.round(screenWidth * 0.03),
-      color: '#FFF',
-      fontSize: Math.round(screenWidth * 0.035),
-      borderWidth: 2,
-      borderColor: '#5A5A7A',
-    },
-    removeGoalBtn: {
-      padding: 4,
-    },
-    addGoalButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: Math.round(screenWidth * 0.03),
-      gap: 8,
-      borderWidth: 2,
-      borderColor: '#4CAF50',
-      borderStyle: 'dashed',
-      borderRadius: 8,
-    },
-    addGoalText: {
-      fontSize: Math.round(screenWidth * 0.035),
-      color: '#4CAF50',
-      fontWeight: '600',
-    },
-    savingsTargetContainer: {
-      backgroundColor: 'rgba(45, 45, 68, 0.9)',
-      borderRadius: 16,
-      padding: screenWidth * 0.06,
-      borderWidth: 2,
-      borderColor: '#5A5A7A',
-      alignItems: 'center',
-    },
-    savingsInputRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: screenWidth * 0.05,
-      marginBottom: screenHeight * 0.025,
-    },
-    savingsAdjustBtn: {
-      width: Math.round(screenWidth * 0.125),
-      height: Math.round(screenWidth * 0.125),
-      borderRadius: Math.round(screenWidth * 0.0625),
-      backgroundColor: 'rgba(255,255,255,0.2)',
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    savingsValueContainer: {
-      flexDirection: 'row',
-      alignItems: 'flex-end',
-    },
-    savingsValue: {
-      fontSize: Math.round(screenWidth * 0.14),
-      fontWeight: 'bold',
-      color: '#FF9800',
-    },
-    savingsPercent: {
-      fontSize: Math.round(screenWidth * 0.06),
-      fontWeight: 'bold',
-      color: '#FF9800',
-      marginBottom: 10,
-    },
-    quickSelectRow: {
-      flexDirection: 'row',
-      gap: 8,
-      marginBottom: screenHeight * 0.02,
-    },
-    quickSelectBtn: {
-      paddingVertical: screenHeight * 0.01,
-      paddingHorizontal: Math.round(screenWidth * 0.035),
-      borderRadius: Math.round(screenWidth * 0.05),
-      backgroundColor: 'rgba(255,255,255,0.1)',
-      borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.2)',
-    },
-    quickSelectActive: {
-      backgroundColor: '#FF9800',
-      borderColor: '#FF9800',
-    },
-    quickSelectText: {
-      fontSize: Math.round(screenWidth * 0.035),
-      color: '#D4C4A8',
-      fontWeight: '600',
-    },
-    quickSelectTextActive: {
-      color: '#FFF',
-    },
-    difficultyIndicator: {
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    difficultyLabel: {
-      fontSize: Math.round(screenWidth * 0.035),
-      color: '#D4C4A8',
-    },
-    difficultyValue: {
-      fontSize: Math.round(screenWidth * 0.035),
-      fontWeight: 'bold',
-    },
-    sliderInputField: {
-      fontSize: Math.round(screenWidth * 0.05),
-      fontWeight: 'bold',
-      color: '#FF9800',
-      backgroundColor: 'rgba(45, 45, 68, 0.9)',
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: '#5A5A7A',
-      paddingHorizontal: screenWidth * 0.02,
-      paddingVertical: 4,
-      minWidth: Math.round(screenWidth * 0.125),
-      textAlign: 'center',
-    },
-    savingsValueInput: {
-      fontSize: Math.round(screenWidth * 0.14),
-      fontWeight: 'bold',
-      color: '#FF9800',
-      backgroundColor: 'rgba(45, 45, 68, 0.9)',
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: '#5A5A7A',
-      paddingHorizontal: 8,
-      minWidth: Math.round(screenWidth * 0.19),
-      textAlign: 'center',
-    },
-    durationContainer: {
-      backgroundColor: 'rgba(45, 45, 68, 0.9)',
-      borderRadius: 16,
-      padding: screenWidth * 0.05,
-      borderWidth: 2,
-      borderColor: '#5A5A7A',
-      alignItems: 'center',
-    },
-    durationTitle: {
-      fontSize: Math.round(screenWidth * 0.045),
-      fontWeight: 'bold',
-      color: '#F5DEB3',
-      marginBottom: 4,
-    },
-    durationSubtitle: {
-      fontSize: Math.round(screenWidth * 0.03),
-      color: '#D4C4A8',
-      textAlign: 'center',
-      marginBottom: screenHeight * 0.015,
-    },
-    durationInputRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: Math.round(screenWidth * 0.05),
-      marginBottom: screenHeight * 0.02,
-    },
-    weeksInput: {
-      fontSize: Math.round(screenWidth * 0.1),
-      fontWeight: 'bold',
-      color: '#FF9800',
-      backgroundColor: 'rgba(30, 30, 50, 0.8)',
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: '#5A5A7A',
-      paddingHorizontal: 10,
-      minWidth: Math.round(screenWidth * 0.14),
-      textAlign: 'center',
-    },
-    weeksLabel: {
-      fontSize: Math.round(screenWidth * 0.045),
-      fontWeight: 'bold',
-      color: '#FF9800',
-      marginLeft: 4,
-      marginBottom: 6,
-    },
-    durationNote: {
-      color: '#D4C4A8',
-      fontSize: Math.round(screenWidth * 0.03),
-      marginTop: 8,
-      textAlign: 'center',
-    },
-  });
 
   // Transport Modal Styles
   const transportStyles = StyleSheet.create({
@@ -7537,7 +5669,7 @@ export default function BuildScreen() {
           {/* Story Mode Button */}
           <TouchableOpacity
             style={[
-              menuStyles.menuButton, 
+              menuStyles.menuButton,
               menuStyles.storyModeButton,
               !tutorialCompleted && menuStyles.lockedModeButton,
             ]}
@@ -7552,7 +5684,7 @@ export default function BuildScreen() {
               {/* {!tutorialCompleted && (
                 <Text style={{ fontSize: 11, color: '#666', marginTop: 2 }}>Complete Tutorial first</Text>
               )}*/}
-            </View> 
+            </View>
           </TouchableOpacity>
 
           {/* Custom Mode Button */}
@@ -7564,7 +5696,7 @@ export default function BuildScreen() {
             ]}
             onPress={() => {
               if (customModeUnlocked) {
-                handleCustomMode();
+                navigation.navigate('CustomModeDashboard');
               } else {
                 Alert.alert(
                   '🔒 Locked',
@@ -7722,7 +5854,7 @@ export default function BuildScreen() {
       lineHeight: Math.round(screenWidth * 0.05),
     },
   });
-  
+
   // Koin Tutorial Styles - In-Game Interactive Tutorial
   const tutorialStyles = StyleSheet.create({
     // ===== Tutorial header (replaces normal header in tutorial mode) =====
@@ -7964,14 +6096,7 @@ export default function BuildScreen() {
     );
   }
 
-  // Show Custom Mode Setup
-  if (showCustomSetup) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        {renderCustomSetup()}
-      </SafeAreaView>
-    );
-  }
+
 
   // Show main menu if active
   if (showMainMenu) {
@@ -8080,13 +6205,13 @@ export default function BuildScreen() {
           <View style={styles.headerLeft}>
             <Text style={styles.headerTitle}>{currentMap.icon} {currentMap.name}</Text>
             <Text style={styles.headerSubtitle}>
-              {gameMode === 'story' ? `Story Mode - Level ${storyLevel}` : 'Custom Mode'}
+              {gameMode === 'story' ? `Story Mode - Level ${storyLevel}` : 'Tutorial'}
             </Text>
           </View>
           <View style={styles.headerRight}>
             <Text style={styles.spendingLabel}>Today's Spending</Text>
             <Text style={styles.spendingAmount}>₱{todaySpending.toFixed(2)}</Text>
-            {(gameMode === 'story' || gameMode === 'custom') && (
+            {gameMode === 'story' && (
               <>
                 <Text style={[styles.spendingLabel, { marginTop: 6 }]}>Weekly Budget</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -8095,14 +6220,6 @@ export default function BuildScreen() {
                   }]}>
                     ₱{getRemainingWeeklyBudget().toFixed(2)}
                   </Text>
-                  {gameMode === 'custom' && (
-                    <TouchableOpacity
-                      onPress={() => { setSettingsModeType(customModeType); setShowCustomSettingsModal(true); }}
-                      style={styles.settingsGearButton}
-                    >
-                      <Ionicons name="settings-sharp" size={18} color="#F5DEB3" />
-                    </TouchableOpacity>
-                  )}
                 </View>
               </>
             )}
@@ -8110,27 +6227,26 @@ export default function BuildScreen() {
         </View>
       )}
 
-      {/* Story/Custom Mode Progress - Level-specific UI */}
-      {(gameMode === 'story' || gameMode === 'custom') && (
+      {/* Story Mode Progress - Level-specific UI */}
+      {gameMode === 'story' && (
         <View style={styles.storyProgressContainer}>
           {/* Level 1: Budget Tracking - Compact Card Layout */}
           {STORY_LEVELS[storyLevel]?.type === 'budgeting' && (() => {
             const percentages = getBudgetCategoryPercentages();
-            // Use custom rules if in custom mode
-            const needsLimit = gameMode === 'custom' ? customBudgetRules.needs : 50;
-            const wantsLimit = gameMode === 'custom' ? customBudgetRules.wants : 30;
-            const savingsMin = gameMode === 'custom' ? customBudgetRules.savings : 20;
+            const needsLimit = 50;
+            const wantsLimit = 30;
+            const savingsMin = 20;
             const ruleText = `${needsLimit}/${wantsLimit}/${savingsMin}`;
-            
+
             const needsOk = percentages.needs <= needsLimit;
             const wantsOk = percentages.wants <= wantsLimit;
             const savingsOk = percentages.savings >= savingsMin;
-            
+
             return (
               <View style={styles.budgetCompactRow}>
                 {/* Rule Label */}
                 <Text style={styles.budgetCompactLabel}>📊 {ruleText}</Text>
-                
+
                 {/* Compact Stats */}
                 <View style={styles.budgetCompactStats}>
                   <View style={[styles.budgetCompactItem, needsOk && styles.budgetItemOk]}>
@@ -8152,7 +6268,7 @@ export default function BuildScreen() {
                     </Text>
                   </View>
                 </View>
-                
+
                 {/* Days & End Week */}
                 <View style={styles.budgetCompactActions}>
                   <Text style={styles.budgetCompactDays}>{getDaysRemaining()}d</Text>
@@ -8163,7 +6279,7 @@ export default function BuildScreen() {
               </View>
             );
           })()}
-          
+
           {/* Level 2: Goal Allocation Tracking - Compact */}
           {STORY_LEVELS[storyLevel]?.type === 'goals' && (
             <View style={styles.budgetCompactRow}>
@@ -8175,8 +6291,8 @@ export default function BuildScreen() {
                   return (
                     <View key={goal.id} style={[styles.budgetCompactItem, progress >= 100 && styles.budgetItemOk]}>
                       <Text style={styles.budgetCompactIcon}>{goal.icon}</Text>
-                      <Text style={[styles.budgetCompactPercent, { 
-                        color: progress >= 100 ? '#4CAF50' : '#3498DB' 
+                      <Text style={[styles.budgetCompactPercent, {
+                        color: progress >= 100 ? '#4CAF50' : '#3498DB'
                       }]}>{progress.toFixed(0)}%</Text>
                     </View>
                   );
@@ -8184,8 +6300,8 @@ export default function BuildScreen() {
               </View>
               <View style={styles.budgetCompactActions}>
                 <Text style={styles.budgetCompactDays}>{getDaysRemaining()}d</Text>
-                <TouchableOpacity 
-                  style={[styles.endWeekBtnCompact, { backgroundColor: '#3498DB' }]} 
+                <TouchableOpacity
+                  style={[styles.endWeekBtnCompact, { backgroundColor: '#3498DB' }]}
                   onPress={() => setShowGoalAllocationModal(true)}
                 >
                   <Ionicons name="add" size={14} color="#FFF" />
@@ -8196,26 +6312,24 @@ export default function BuildScreen() {
               </View>
             </View>
           )}
-          
+
           {/* Level 3: Savings Percentage Tracking - Compact */}
           {STORY_LEVELS[storyLevel]?.type === 'saving' && (() => {
-            const savingsGoalPercent = gameMode === 'custom' 
-              ? parseFloat(customSavingsTarget) 
-              : STORY_LEVELS[storyLevel].savingsGoal * 100;
+            const savingsGoalPercent = STORY_LEVELS[storyLevel].savingsGoal * 100;
             const currentSavings = getSavingsPercentage();
             const savingsOk = currentSavings >= savingsGoalPercent;
-            
+
             return (
               <View style={styles.budgetCompactRow}>
                 <Text style={styles.budgetCompactLabel}>💰 Save {savingsGoalPercent}%</Text>
                 <View style={styles.savingsCompactProgress}>
                   <View style={styles.savingsCompactBar}>
-                    <View style={[styles.savingsCompactFill, { 
+                    <View style={[styles.savingsCompactFill, {
                       width: `${Math.min(100, (currentSavings / savingsGoalPercent) * 100)}%`,
                       backgroundColor: savingsOk ? '#4CAF50' : '#FF9800'
                     }]} />
                   </View>
-                  <Text style={[styles.budgetCompactPercent, { 
+                  <Text style={[styles.budgetCompactPercent, {
                     color: savingsOk ? '#4CAF50' : '#FF9800',
                     marginLeft: 8
                   }]}>{currentSavings.toFixed(1)}%</Text>
@@ -8251,7 +6365,7 @@ export default function BuildScreen() {
         <View style={styles.instructionBanner}>
           <Ionicons name="information-circle" size={24} color="#FF9800" />
           <Text style={styles.instructionText}>
-            <Text style={styles.instructionHighlight}>Tap anywhere</Text> to move your character. 
+            <Text style={styles.instructionHighlight}>Tap anywhere</Text> to move your character.
             Walk to <Text style={styles.instructionHighlight}>doors 🚪</Text> to travel between locations!
           </Text>
         </View>
@@ -8277,7 +6391,7 @@ export default function BuildScreen() {
                 <Text style={styles.modalSubtitle}>Choose your character</Text>
               </View>
             </View>
-            
+
             <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
               <View style={{ gap: 12 }}>
                 {Object.entries(CHARACTER_SPRITES).map(([key, char]) => {
@@ -8312,7 +6426,7 @@ export default function BuildScreen() {
                     >
                       {/* Character sprite preview - matches Store style */}
                       <View style={[
-                        styles.characterPreviewContainer, 
+                        styles.characterPreviewContainer,
                         { backgroundColor: isUnlocked ? char.color + '20' : '#44444440' }
                       ]}>
                         <Image
@@ -8332,13 +6446,13 @@ export default function BuildScreen() {
                       </View>
                       <View style={styles.characterOptionInfo}>
                         <Text style={[
-                          styles.characterOptionName, 
+                          styles.characterOptionName,
                           { color: isUnlocked ? colors.text : '#888' }
                         ]}>
                           {char.icon} {char.name}
                         </Text>
                         <Text style={[
-                          styles.characterOptionDesc, 
+                          styles.characterOptionDesc,
                           { color: isUnlocked ? colors.textSecondary : '#666' }
                         ]}>
                           {isUnlocked ? char.description : '🔒 Purchase in Store'}
@@ -8354,11 +6468,11 @@ export default function BuildScreen() {
                 })}
               </View>
             </ScrollView>
-            
+
             <Text style={{ color: colors.textSecondary, fontSize: 12, textAlign: 'center', marginTop: 16 }}>
               💡 Unlock more skins in Achievements → Store
             </Text>
-            
+
             <TouchableOpacity
               style={{
                 backgroundColor: '#FF9800',
@@ -8561,8 +6675,8 @@ export default function BuildScreen() {
                 </View>
               )}
 
-              {/* Budget Info (if in Story/Custom Mode) */}
-              {(gameMode === 'story' || gameMode === 'custom') && (
+              {/* Budget Info (if in Story Mode) */}
+              {gameMode === 'story' && (
                 <View style={{
                   backgroundColor: colors.surface,
                   borderRadius: 12,
@@ -8587,64 +6701,64 @@ export default function BuildScreen() {
 
               {/* No Spend Today Button — hidden in tutorial */}
               {!(tutorialActive && gameMode === 'tutorial') && (
-              <TouchableOpacity
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: colors.surface,
-                  borderWidth: 2,
-                  borderColor: '#4CAF50',
-                  borderStyle: 'dashed',
-                  borderRadius: 12,
-                  paddingVertical: 14,
-                  paddingHorizontal: 20,
-                  marginBottom: 16,
-                }}
-                onPress={async () => {
-                  setIsSubmitting(true);
-                  try {
-                    // Record a ₱0 entry to mark day as tracked
-                    await addExpense({
-                      amount: 0,
-                      category: 'No Spend Day',
-                      description: 'No expenses today - keeping my streak! 🎯',
-                      created_at: new Date().toISOString(),
-                    });
+                <TouchableOpacity
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: colors.surface,
+                    borderWidth: 2,
+                    borderColor: '#4CAF50',
+                    borderStyle: 'dashed',
+                    borderRadius: 12,
+                    paddingVertical: 14,
+                    paddingHorizontal: 20,
+                    marginBottom: 16,
+                  }}
+                  onPress={async () => {
+                    setIsSubmitting(true);
+                    try {
+                      // Record a ₱0 entry to mark day as tracked
+                      await addExpense({
+                        amount: 0,
+                        category: 'No Spend Day',
+                        description: 'No expenses today - keeping my streak! 🎯',
+                        created_at: new Date().toISOString(),
+                      });
 
-                    // Check achievements for logging activity
-                    const currentStats = await fetchExpenseStats();
-                    await checkAchievements('expense_logged', {
-                      expenseCount: currentStats?.total || expenseStats.total + 1,
-                      category: 'No Spend Day',
-                    });
+                      // Check achievements for logging activity
+                      const currentStats = await fetchExpenseStats();
+                      await checkAchievements('expense_logged', {
+                        expenseCount: currentStats?.total || expenseStats.total + 1,
+                        category: 'No Spend Day',
+                      });
 
-                    // Close modal and reset
-                    setShowNotebookModal(false);
-                    setExpenseAmount('');
-                    setExpenseNote('');
-                    setNotebookCategory('Food & Dining');
+                      // Close modal and reset
+                      setShowNotebookModal(false);
+                      setExpenseAmount('');
+                      setExpenseNote('');
+                      setNotebookCategory('Food & Dining');
 
-                    // Success feedback
-                    Alert.alert(
-                      '🌟 Great Job!',
-                      'No-spend day logged! Your tracking streak continues.',
-                      [{ text: 'Awesome!' }]
-                    );
-                  } catch (error) {
-                    console.error('Error logging no-spend day:', error);
-                    Alert.alert('Error', 'Failed to log. Please try again.');
-                  } finally {
-                    setIsSubmitting(false);
-                  }
-                }}
-                disabled={isSubmitting}
-              >
-                <Ionicons name="checkmark-circle" size={22} color="#4CAF50" style={{ marginRight: 8 }} />
-                <Text style={{ color: '#4CAF50', fontSize: 15, fontWeight: '600' }}>
-                  No Spend Today
-                </Text>
-              </TouchableOpacity>
+                      // Success feedback
+                      Alert.alert(
+                        '🌟 Great Job!',
+                        'No-spend day logged! Your tracking streak continues.',
+                        [{ text: 'Awesome!' }]
+                      );
+                    } catch (error) {
+                      console.error('Error logging no-spend day:', error);
+                      Alert.alert('Error', 'Failed to log. Please try again.');
+                    } finally {
+                      setIsSubmitting(false);
+                    }
+                  }}
+                  disabled={isSubmitting}
+                >
+                  <Ionicons name="checkmark-circle" size={22} color="#4CAF50" style={{ marginRight: 8 }} />
+                  <Text style={{ color: '#4CAF50', fontSize: 15, fontWeight: '600' }}>
+                    No Spend Today
+                  </Text>
+                </TouchableOpacity>
               )}
 
               {/* Action Buttons */}
@@ -8716,7 +6830,7 @@ export default function BuildScreen() {
                       [savedCategory]: (prev[savedCategory] || 0) + savedAmount
                     }));
 
-                    if (gameMode === 'story' || gameMode === 'custom') {
+                    if (gameMode === 'story') {
                       const budgetType = CATEGORY_BUDGET_MAP[savedCategory] || 'wants';
                       setBudgetCategories(prev => ({
                         ...prev,
@@ -8767,7 +6881,7 @@ export default function BuildScreen() {
                         }
 
                         // Persist session spending to Supabase (fire-and-forget)
-                        if (activeSessionId && (gameMode === 'story' || gameMode === 'custom')) {
+                        if (activeSessionId && gameMode === 'story') {
                           const updatedSpending = weeklySpending + savedAmount;
                           const updatedCategorySpending = { ...categorySpending, [savedCategory]: (categorySpending[savedCategory] || 0) + savedAmount };
                           const budgetType = CATEGORY_BUDGET_MAP[savedCategory] || 'wants';
@@ -8781,11 +6895,7 @@ export default function BuildScreen() {
                             wantsSpent: updatedWantsSpent,
                             savingsAmount: weeklyBudget - updatedSpending,
                           };
-                          if (gameMode === 'story') {
-                            gameDatabaseService.updateStorySessionSpending(activeSessionId, sessionUpdate);
-                          } else {
-                            gameDatabaseService.updateCustomSessionSpending(activeSessionId, sessionUpdate);
-                          }
+                          gameDatabaseService.updateStorySessionSpending(activeSessionId, sessionUpdate);
                         }
 
                         // Log to Supabase game activity (fire-and-forget)
@@ -8803,7 +6913,7 @@ export default function BuildScreen() {
                         checkAchievements('expense_logged', {
                           expenseCount: expenseStats.total + 1,
                           category: savedCategory,
-                        }).catch(() => {});
+                        }).catch(() => { });
                       }
                     } catch (error) {
                       console.error('❌ Notebook: Error saving expense:', error);
@@ -8835,13 +6945,13 @@ export default function BuildScreen() {
             <Text style={styles.modalSubtitle}>
               Available: ₱{getRemainingWeeklyBudget().toFixed(2)}
             </Text>
-            
+
             <ScrollView style={{ maxHeight: 300, marginVertical: 16 }}>
               {savingsGoals.map((goal) => {
                 const allocated = goalAllocations[goal.id] || 0;
                 const progress = Math.min(100, (allocated / goal.target) * 100);
                 const remaining = goal.target - allocated;
-                
+
                 return (
                   <View key={goal.id} style={[styles.goalAllocationItem, { marginBottom: 16 }]}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
@@ -8853,24 +6963,24 @@ export default function BuildScreen() {
                         </Text>
                       </View>
                     </View>
-                    
+
                     {/* Progress bar */}
                     <View style={{ height: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4, marginBottom: 8 }}>
-                      <View style={{ 
-                        height: '100%', 
-                        width: `${progress}%`, 
+                      <View style={{
+                        height: '100%',
+                        width: `${progress}%`,
                         backgroundColor: progress >= 100 ? '#4CAF50' : '#3498DB',
-                        borderRadius: 4 
+                        borderRadius: 4
                       }} />
                     </View>
-                    
+
                     {/* Quick allocation buttons */}
                     <View style={{ flexDirection: 'row', gap: 8 }}>
                       {[50, 100, 200].map((amount) => (
                         <TouchableOpacity
                           key={amount}
-                          style={[styles.quickAllocateBtn, { 
-                            opacity: getRemainingWeeklyBudget() < amount ? 0.5 : 1 
+                          style={[styles.quickAllocateBtn, {
+                            opacity: getRemainingWeeklyBudget() < amount ? 0.5 : 1
                           }]}
                           disabled={getRemainingWeeklyBudget() < amount}
                           onPress={() => allocateToGoal(goal.id, amount)}
@@ -8891,7 +7001,7 @@ export default function BuildScreen() {
                 );
               })}
             </ScrollView>
-            
+
             <TouchableOpacity
               style={{
                 backgroundColor: '#3498DB',
@@ -8973,8 +7083,6 @@ export default function BuildScreen() {
         </View>
       </Modal>
 
-      {/* Custom Mode Settings Modal */}
-      {gameMode === 'custom' && renderCustomSettingsModal()}
 
       {/* Level Complete Modal */}
       <Modal
@@ -8989,9 +7097,9 @@ export default function BuildScreen() {
               {levelPassed ? '🎉' : '😔'}
             </Text>
             <Text style={[styles.modalTitle, { textAlign: 'center' }]}>
-              {levelPassed ? (gameMode === 'custom' ? 'Challenge Complete!' : 'Level Complete!') : 'Week Ended'}
+              {levelPassed ? 'Level Complete!' : 'Week Ended'}
             </Text>
-            
+
             {/* Level-specific results */}
             {levelResults && (
               <View style={{ width: '100%', marginBottom: 20 }}>
@@ -9017,7 +7125,7 @@ export default function BuildScreen() {
                     </View>
                   </View>
                 )}
-                
+
                 {levelResults.type === 'goals' && (
                   <View style={{ gap: 8 }}>
                     <Text style={[styles.modalSubtitle, { textAlign: 'center', marginBottom: 12 }]}>
@@ -9034,7 +7142,7 @@ export default function BuildScreen() {
                     </Text>
                   </View>
                 )}
-                
+
                 {levelResults.type === 'saving' && (
                   <View style={{ gap: 8 }}>
                     <Text style={[styles.modalSubtitle, { textAlign: 'center', marginBottom: 12 }]}>
@@ -9066,7 +7174,7 @@ export default function BuildScreen() {
                 )}
               </View>
             )}
-            
+
             <View style={{ width: '100%', gap: 12 }}>
               {/* Next Level button - only for Story Mode levels 1-2 */}
               {gameMode === 'story' && levelPassed && storyLevel < 3 && (
@@ -9089,7 +7197,7 @@ export default function BuildScreen() {
                   </Text>
                 </TouchableOpacity>
               )}
-              
+
               {/* Story Complete button — Level 3 passed → triggers completion dialogue */}
               {gameMode === 'story' && levelPassed && storyLevel === 3 && (
                 <TouchableOpacity
@@ -9114,7 +7222,7 @@ export default function BuildScreen() {
                   </Text>
                 </TouchableOpacity>
               )}
-              
+
               {/* Replay/Try Again button */}
               <TouchableOpacity
                 style={{
@@ -9127,19 +7235,14 @@ export default function BuildScreen() {
                 }}
                 onPress={() => {
                   setShowLevelComplete(false);
-                  if (gameMode === 'custom') {
-                    // For custom mode, restart with same settings
-                    startCustomMode();
-                  } else {
-                    startStoryLevel(storyLevel);
-                  }
+                  startStoryLevel(storyLevel);
                 }}
               >
                 <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' }}>
-                  {levelPassed ? (gameMode === 'custom' ? 'Play Again' : 'Replay Level') : 'Try Again'}
+                  {levelPassed ? 'Replay Level' : 'Try Again'}
                 </Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 style={{
                   backgroundColor: 'rgba(100,100,100,0.5)',
@@ -9230,11 +7333,11 @@ export default function BuildScreen() {
             {tutorialActive && gameMode === 'tutorial' && (
               <View style={{ backgroundColor: '#FFF3E0', borderRadius: 10, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#FF9800' }}>
                 <Text style={{ fontSize: 13, color: '#E65100', textAlign: 'center', fontWeight: '600' }}>
-                  {TUTORIAL_STEPS[tutorialStep]?.id === 'exit_door' 
+                  {TUTORIAL_STEPS[tutorialStep]?.id === 'exit_door'
                     ? '🎓 Choose School to continue the tutorial!'
                     : TUTORIAL_STEPS[tutorialStep]?.id === 'go_to_mall'
-                    ? '🎓 Choose the Mall to continue!'
-                    : '🎓 Pick a destination!'}
+                      ? '🎓 Choose the Mall to continue!'
+                      : '🎓 Pick a destination!'}
                 </Text>
               </View>
             )}
@@ -9298,12 +7401,12 @@ export default function BuildScreen() {
                   {!transportMode && !tutorialViewedCar
                     ? '🎓 First, try the Car option to learn about gas tracking!'
                     : !transportMode && tutorialViewedCar
-                    ? '🎓 Great! Now choose Commute to log your fare!'
-                    : transportMode === 'car'
-                    ? '🎓 You can track gas expenses here! Now go back and try Commute.'
-                    : transportMode === 'commute'
-                    ? '🎓 Enter your commute fare and confirm! This is practice only.'
-                    : '🎓 Pick a transport mode!'
+                      ? '🎓 Great! Now choose Commute to log your fare!'
+                      : transportMode === 'car'
+                        ? '🎓 You can track gas expenses here! Now go back and try Commute.'
+                        : transportMode === 'commute'
+                          ? '🎓 Enter your commute fare and confirm! This is practice only.'
+                          : '🎓 Pick a transport mode!'
                   }
                 </Text>
               </View>
@@ -9345,7 +7448,7 @@ export default function BuildScreen() {
             {/* Commute Fare Input */}
             {transportMode === 'commute' && (
               <View style={transportStyles.inputSection}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={transportStyles.backToModes}
                   onPress={() => setTransportMode(null)}
                 >
@@ -9411,7 +7514,7 @@ export default function BuildScreen() {
             {/* Car/Fuel Input */}
             {transportMode === 'car' && (
               <View style={transportStyles.inputSection}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={transportStyles.backToModes}
                   onPress={() => setTransportMode(null)}
                 >
@@ -9427,7 +7530,7 @@ export default function BuildScreen() {
                 </View>
 
                 <Text style={transportStyles.fuelQuestion}>Did you buy fuel?</Text>
-                
+
                 <View style={transportStyles.fuelOptions}>
                   <TouchableOpacity
                     style={[
@@ -9436,10 +7539,10 @@ export default function BuildScreen() {
                     ]}
                     onPress={() => setDidBuyFuel(true)}
                   >
-                    <Ionicons 
-                      name="checkmark-circle" 
-                      size={24} 
-                      color={didBuyFuel === true ? '#FFF' : '#4CAF50'} 
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={24}
+                      color={didBuyFuel === true ? '#FFF' : '#4CAF50'}
                     />
                     <Text style={[
                       transportStyles.fuelOptionText,
@@ -9454,10 +7557,10 @@ export default function BuildScreen() {
                     ]}
                     onPress={() => setDidBuyFuel(false)}
                   >
-                    <Ionicons 
-                      name="close-circle" 
-                      size={24} 
-                      color={didBuyFuel === false ? '#FFF' : '#888'} 
+                    <Ionicons
+                      name="close-circle"
+                      size={24}
+                      color={didBuyFuel === false ? '#FFF' : '#888'}
                     />
                     <Text style={[
                       transportStyles.fuelOptionText,
@@ -9550,10 +7653,10 @@ export default function BuildScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <View style={[styles.modalIcon, { backgroundColor: expenseCategory === 'Food & Dining' ? '#FF9800' : '#4CAF50' }]}>
-                <Ionicons 
-                  name={expenseCategory === 'Food & Dining' ? 'fast-food' : 'cart'} 
-                  size={30} 
-                  color="white" 
+                <Ionicons
+                  name={expenseCategory === 'Food & Dining' ? 'fast-food' : 'cart'}
+                  size={30}
+                  color="white"
                 />
               </View>
               <View style={styles.modalHeaderText}>
