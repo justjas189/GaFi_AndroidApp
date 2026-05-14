@@ -3,6 +3,7 @@
  */
 
 import { supabase } from '../config/supabase';
+import { getUserIdSafe } from './AuthSessionHelper';
 
 export class FriendService {
   /**
@@ -10,8 +11,13 @@ export class FriendService {
    */
   static async getCurrentUserId() {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      return session?.user?.id || null;
+      const { userId, rateLimited, error } = await getUserIdSafe();
+      if (rateLimited) {
+        console.warn('FriendService: rate limited while getting user ID');
+        return null;
+      }
+      if (error) return null;
+      return userId || null;
     } catch (error) {
       console.error('Error getting current user ID:', error);
       return null;

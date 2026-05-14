@@ -1,9 +1,18 @@
 // context/AuthContext.js
 import React, { createContext, useState, useEffect, useContext } from 'react';
+import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { supabase, supabaseAdmin, formatSupabaseError } from '../config/supabase';
 import notificationService from '../services/OneSignalNotificationService';
+import {
+  clearSessionCache,
+  getRateLimitInfo,
+  getSessionSafe,
+  isRateLimitError,
+  onAuthHelperEvent,
+  updateSessionCache,
+} from '../services/AuthSessionHelper';
 
 export const AuthContext = createContext();
 
@@ -22,13 +31,188 @@ export const AuthProvider = ({ children }) => {
   const [userInfo, setUserInfo] = useState(null);
   const [error, setError] = useState(null);
   const isResettingPasswordRef = React.useRef(false);
+  const isLoggingOutRef = React.useRef(false);
+  const lastRateLimitNoticeRef = React.useRef(0);
+  const unexpectedSignOutTimerRef = React.useRef(null);
+
+  const SIGNED_OUT_GRACE_MS = 30000;
+  const RATE_LIMIT_NOTICE_COOLDOWN_MS = 30000;
+
+  // Helper: build enhanced user info from a Supabase session
+  const applySession = async (session) => {
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('full_name, username, user_type')
+      .eq('id', session.user.id)
+      .single();
+
+    const enhancedUserInfo = {
+      ...session.user,
+      name: profileData?.full_name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+      username: profileData?.username || null,
+      userType: profileData?.user_type || null,
+      email: session.user.email
+    };
+
+    setUserToken(session.access_token);
+    setUserInfo(enhancedUserInfo);
+    updateSessionCache(session);
+    await AsyncStorage.setItem('userToken', session.access_token);
+    await AsyncStorage.setItem('userInfo', JSON.stringify(enhancedUserInfo));
+    if (session.refresh_token) {
+      await AsyncStorage.setItem('userRefreshToken', session.refresh_token);
+    }
+
+    // OneSignal push notifications
+    try {
+      await notificationService.loginUser(session.user.id, session.user.email);
+      await notificationService.updateActiveUserTag();
+    } catch (e) {
+      console.warn('OneSignal login failed (non-critical):', e.message);
+    }
+  };
+
+  const clearUnexpectedSignOutTimer = () => {
+    if (unexpectedSignOutTimerRef.current) {
+      clearTimeout(unexpectedSignOutTimerRef.current);
+      unexpectedSignOutTimerRef.current = null;
+    }
+  };
+
+  const scheduleUnexpectedSignOutCheck = () => {
+    if (unexpectedSignOutTimerRef.current) return;
+
+    const now = Date.now();
+    const rateInfo = getRateLimitInfo();
+    const waitMs = Math.max(SIGNED_OUT_GRACE_MS, rateInfo.rateLimitUntil - now + 1000);
+
+    unexpectedSignOutTimerRef.current = setTimeout(async () => {
+      try {
+        const result = await getSessionSafe({ force: true, retry: 1, retryDelayMs: 1000 });
+        if (result.rateLimited) {
+          clearUnexpectedSignOutTimer();
+          scheduleUnexpectedSignOutCheck();
+          return;
+        }
+        if (result.session) {
+          await applySession(result.session);
+        } else {
+          const backupToken = await AsyncStorage.getItem('userToken');
+          const backupRefreshToken = await AsyncStorage.getItem('userRefreshToken');
+          if (backupToken && backupRefreshToken) {
+            const { data: recoverySession, error: recoveryError } = await supabase.auth.setSession({
+              access_token: backupToken,
+              refresh_token: backupRefreshToken,
+            });
+
+            if (recoveryError && isRateLimitError(recoveryError)) {
+              clearUnexpectedSignOutTimer();
+              scheduleUnexpectedSignOutCheck();
+              return;
+            }
+
+            if (recoverySession?.session && !recoveryError) {
+              await applySession(recoverySession.session);
+              return;
+            }
+          }
+
+          setUserToken(null);
+          setUserInfo(null);
+          updateSessionCache(null);
+        }
+      } catch (e) {
+        console.warn('Unexpected sign-out recovery failed:', e?.message || e);
+        setUserToken(null);
+        setUserInfo(null);
+        updateSessionCache(null);
+      } finally {
+        clearUnexpectedSignOutTimer();
+      }
+    }, Math.max(0, waitMs));
+  };
 
   useEffect(() => {
-    checkLoginStatus();
-    
-    // Set up Supabase auth state listener
+    // ── DO NOT call getSession() prematurely ──
+    // GoTrueClient loads the session from AsyncStorage asynchronously.
+    // We rely on onAuthStateChange's INITIAL_SESSION event, which fires
+    // only AFTER the session is fully restored (or confirmed missing).
+    // This prevents the race condition where getSession() returns null
+    // while the JWT is still being loaded from storage.
+
+    let initialResolved = false;
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state changed:', event, session?.user?.id);
+
+      // ── INITIAL_SESSION: GoTrueClient finished loading from storage ──
+      if (event === 'INITIAL_SESSION') {
+        if (session) {
+          initialResolved = true;
+          await applySession(session);
+          clearUnexpectedSignOutTimer();
+          setIsLoading(false);
+          return;
+        }
+
+        // ── SESSION RECOVERY: Supabase lost the session, but do we have a backup? ──
+        try {
+          const backupToken = await AsyncStorage.getItem('userToken');
+          const backupRefreshToken = await AsyncStorage.getItem('userRefreshToken');
+          // If we have a backup token but no session, the Supabase storage key was wiped
+          if (backupToken) {
+            console.warn('Auth: Native Supabase session missing, but backup token found. Attempting recovery...');
+
+            // Re-hydrate the Supabase session using the refresh token if available.
+            try {
+              if (backupRefreshToken) {
+                const { data: recoverySession, error: recoveryError } = await supabase.auth.setSession({
+                  access_token: backupToken,
+                  refresh_token: backupRefreshToken,
+                });
+                if (recoverySession?.session && !recoveryError) {
+                  console.log('Auth: Session successfully recovered with refresh token.');
+                  await applySession(recoverySession.session);
+                  initialResolved = true;
+                  setIsLoading(false);
+                  return;
+                }
+                if (recoveryError && isRateLimitError(recoveryError)) {
+                  console.warn('Auth: Recovery hit rate limit, delaying logout.');
+                  scheduleUnexpectedSignOutCheck();
+                  initialResolved = true;
+                  setIsLoading(false);
+                  return;
+                }
+              }
+
+              const { data: recoveryData, error: recoveryError } = await supabase.auth.getUser(backupToken);
+              if (recoveryData?.user && !recoveryError) {
+                console.log('Auth: Access token still valid, restoring local auth state.');
+                const backupUserInfo = await AsyncStorage.getItem('userInfo');
+                if (backupUserInfo) {
+                  setUserToken(backupToken);
+                  setUserInfo(JSON.parse(backupUserInfo));
+                  initialResolved = true;
+                  setIsLoading(false);
+                  return;
+                }
+              } else {
+                console.warn('Auth: Backup token invalid or expired. Recovery failed.', recoveryError?.message);
+              }
+            } catch (recoveryErr) {
+              console.error('Auth: Session recovery error:', recoveryErr);
+            }
+          }
+        } catch (recoveryErr) {
+          console.error('Auth: Session recovery error:', recoveryErr);
+        }
+
+        // If recovery failed or there was no backup token, proceed with normal unauthenticated state
+        initialResolved = true;
+        setIsLoading(false);
+        return;
+      }
 
       // Ignore PASSWORD_RECOVERY events — these fire during the password
       // reset OTP flow and must NOT set userToken, otherwise the navigator
@@ -44,86 +228,154 @@ export const AuthProvider = ({ children }) => {
         console.log('SIGNED_IN during password reset — ignoring transient session');
         return;
       }
+
+      // ── TOKEN_REFRESHED: keep stored access token in sync ──
+      if (event === 'TOKEN_REFRESHED' && session) {
+        console.log('Auth: Token refreshed successfully for user:', session.user.id);
+        setUserToken(session.access_token);
+        await AsyncStorage.setItem('userToken', session.access_token);
+        if (session.refresh_token) {
+          await AsyncStorage.setItem('userRefreshToken', session.refresh_token);
+        }
+        updateSessionCache(session);
+        return;
+      }
       
       if (event === 'SIGNED_IN' && session) {
-        // Get user profile data from database to get the full name, username, and user type
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('full_name, username, user_type')
-          .eq('id', session.user.id)
-          .single();
-
-        // Create enhanced user info object with name from profile or metadata
-        const enhancedUserInfo = {
-          ...session.user,
-          name: profileData?.full_name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
-          username: profileData?.username || null,
-          userType: profileData?.user_type || null,
-          email: session.user.email
-        };
-
-        setUserToken(session.access_token);
-        setUserInfo(enhancedUserInfo);
-        await AsyncStorage.setItem('userToken', session.access_token);
-        await AsyncStorage.setItem('userInfo', JSON.stringify(enhancedUserInfo));
-
-        // Link device to OneSignal for push notifications
-        try {
-          await notificationService.loginUser(session.user.id, session.user.email);
-          await notificationService.updateActiveUserTag();
-        } catch (e) {
-          console.warn('OneSignal login failed (non-critical):', e.message);
+        await applySession(session);
+        clearUnexpectedSignOutTimer();
+        // If INITIAL_SESSION somehow didn't fire, resolve loading here
+        if (!initialResolved) {
+          initialResolved = true;
+          setIsLoading(false);
         }
       } else if (event === 'SIGNED_OUT') {
-        // Unlink device from OneSignal
-        try {
-          await notificationService.logoutUser();
-        } catch (e) {
-          console.warn('OneSignal logout failed (non-critical):', e.message);
+        // Diagnostic: was this logout user-initiated or unexpected?
+        const isManual = isLoggingOutRef.current;
+        console.warn(`Auth: SIGNED_OUT event received. Manual logout: ${isManual}`);
+
+        if (isManual) {
+          // Unlink device from OneSignal
+          try {
+            await notificationService.logoutUser();
+          } catch (e) {
+            console.warn('OneSignal logout failed (non-critical):', e.message);
+          }
+
+          setUserToken(null);
+          setUserInfo(null);
+          await AsyncStorage.removeItem('userToken');
+          await AsyncStorage.removeItem('userInfo');
+          await AsyncStorage.removeItem('userRefreshToken');
+          updateSessionCache(null);
+          // Clear any cached data
+          await AsyncStorage.removeItem('onboardingComplete');
+          await AsyncStorage.removeItem('isFirstLogin');
+          
+          isLoggingOutRef.current = false;
+        } else {
+          const rateInfo = getRateLimitInfo();
+          if (rateInfo.isRateLimited) {
+            console.warn('Auth: SIGNED_OUT during rate limit. Ignoring and retrying.');
+            scheduleUnexpectedSignOutCheck();
+            return;
+          }
+
+          console.warn('Auth: Unexpected SIGNED_OUT event. Keeping backup tokens for recovery attempt.');
+          scheduleUnexpectedSignOutCheck();
         }
 
-        setUserToken(null);
-        setUserInfo(null);
-        await AsyncStorage.removeItem('userToken');
-        await AsyncStorage.removeItem('userInfo');
-        // Clear any cached data
-        await AsyncStorage.removeItem('onboardingComplete');
-        await AsyncStorage.removeItem('isFirstLogin');
+        if (!initialResolved) {
+          initialResolved = true;
+          setIsLoading(false);
+        }
+      }
+    });
+
+    // Safety timeout: if INITIAL_SESSION never fires (edge case), fall back
+    const timeout = setTimeout(() => {
+      if (!initialResolved) {
+        console.warn('Auth: INITIAL_SESSION never fired after 5s — falling back to getSession()');
+        (async () => {
+          try {
+            const result = await getSessionSafe({ force: true, retry: 1, retryDelayMs: 1000 });
+            if (result.rateLimited) {
+              scheduleUnexpectedSignOutCheck();
+            } else if (result.session) {
+              await applySession(result.session);
+            }
+          } catch (e) {
+            console.error('Fallback getSession error:', e);
+            setError(formatSupabaseError(e));
+          } finally {
+            initialResolved = true;
+            setIsLoading(false);
+          }
+        })();
+      }
+    }, 5000);
+
+    return () => {
+      clearTimeout(timeout);
+      if (subscription) subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = onAuthHelperEvent((event, payload) => {
+      if (event !== 'rate_limit') return;
+      const now = Date.now();
+      if (now - lastRateLimitNoticeRef.current < RATE_LIMIT_NOTICE_COOLDOWN_MS) return;
+      lastRateLimitNoticeRef.current = now;
+      Alert.alert(
+        'Network Busy',
+        'Authentication requests are being rate limited. We will retry automatically.'
+      );
+      if (payload?.retryInMs) {
+        scheduleUnexpectedSignOutCheck();
       }
     });
 
     return () => {
-      if (subscription) subscription.unsubscribe();
+      unsubscribe();
+      clearUnexpectedSignOutTimer();
     };
   }, []);
 
   const checkLoginStatus = async () => {
     try {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      
-      if (error) throw error;
-      
-      if (session) {
+      const result = await getSessionSafe({ force: true, retry: 1, retryDelayMs: 1000 });
+      if (result.rateLimited) {
+        setError('Network busy. Retrying authentication...');
+        return;
+      }
+      if (result.error) throw result.error;
+
+      if (result.session) {
         // Get user profile data from database to get the full name, username, and user type
         const { data: profileData } = await supabase
           .from('profiles')
           .select('full_name, username, user_type')
-          .eq('id', session.user.id)
+          .eq('id', result.session.user.id)
           .single();
 
         // Create enhanced user info object with name from profile or metadata
         const enhancedUserInfo = {
-          ...session.user,
-          name: profileData?.full_name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+          ...result.session.user,
+          name: profileData?.full_name || result.session.user.user_metadata?.full_name || result.session.user.email?.split('@')[0] || 'User',
           username: profileData?.username || null,
           userType: profileData?.user_type || null,
-          email: session.user.email
+          email: result.session.user.email
         };
 
-        setUserToken(session.access_token);
+        setUserToken(result.session.access_token);
         setUserInfo(enhancedUserInfo);
-        await AsyncStorage.setItem('userToken', session.access_token);
+        updateSessionCache(result.session);
+        await AsyncStorage.setItem('userToken', result.session.access_token);
         await AsyncStorage.setItem('userInfo', JSON.stringify(enhancedUserInfo));
+        if (result.session.refresh_token) {
+          await AsyncStorage.setItem('userRefreshToken', result.session.refresh_token);
+        }
       }
     } catch (error) {
       console.error('Error checking auth state:', error);
@@ -284,6 +536,9 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
+      isLoggingOutRef.current = true;
+      clearUnexpectedSignOutTimer();
+      clearSessionCache();
       // ── IMMEDIATE: nuke React state so the navigator swaps to Auth instantly ──
       setUserToken(null);
       setUserInfo(null);
@@ -301,6 +556,7 @@ export const AuthProvider = ({ children }) => {
           const keysToRemove = allKeys.filter(k =>
             k.startsWith('userToken') ||
             k.startsWith('userInfo') ||
+            k.startsWith('userRefreshToken') ||
             k.startsWith('onboardingComplete') ||
             k.startsWith('isFirstLogin') ||
             k.startsWith('hasOnboarded_') ||

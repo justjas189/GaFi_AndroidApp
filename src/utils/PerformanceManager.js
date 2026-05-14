@@ -12,6 +12,7 @@ class PerformanceManager {
     this.performanceMetrics = new Map();
     this.memoryWarningThreshold = 100; // MB
     this.isMonitoring = false;
+    this.isFetchWrapped = false; // Guard against re-wrapping global.fetch
     this.cleanupTasks = new Set();
     this.intervals = new Set();
     this.timeouts = new Set();
@@ -166,9 +167,15 @@ class PerformanceManager {
   }
 
   /**
-   * Monitor network request performance
+   * Monitor network request performance.
+   * IMPORTANT: Only wraps global.fetch once. Re-wrapping creates an
+   * ever-growing chain of closures that leak memory and can interfere
+   * with critical network calls (e.g. Supabase token refresh).
    */
   monitorNetworkPerformance() {
+    if (this.isFetchWrapped) return; // Already wrapped — skip
+    this.isFetchWrapped = true;
+
     const originalFetch = global.fetch;
     
     global.fetch = async function(url, options) {

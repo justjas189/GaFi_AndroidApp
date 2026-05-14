@@ -12,13 +12,18 @@
  */
 
 import { supabase } from '../config/supabase';
+import { getUserIdSafe } from './AuthSessionHelper';
 
 class GameDatabaseService {
   // ─── helpers ──────────────────────────────────────────────
 
   async _getUserId() {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.user?.id || null;
+    const { userId, rateLimited } = await getUserIdSafe({ force: true, retry: 1, retryDelayMs: 500 });
+    if (rateLimited) {
+      console.warn('GameDatabaseService: rate limited while getting user ID');
+      return null;
+    }
+    return userId || null;
   }
 
   // ─── 1. story_mode_sessions ───────────────────────────────

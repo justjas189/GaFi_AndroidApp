@@ -1,8 +1,10 @@
 // context/DataContext.js
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ThemeContext } from './ThemeContext';
+import { useAuth } from './AuthContext';
 import { supabase } from '../config/supabase';
+import { getSessionSafe, getUserIdSafe } from '../services/AuthSessionHelper';
 import { analyzeExpenses, getRecommendations } from '../config/nvidia';
 import { BudgetDatabaseService } from '../services/BudgetDatabaseService_NEW';
 import { normalizeCategory } from '../utils/categoryUtils';
@@ -12,6 +14,7 @@ export const DataContext = createContext();
 
 export const DataProvider = ({ children }) => {
   const { theme } = useContext(ThemeContext);
+  const { userInfo, isLoading: isAuthLoading } = useAuth();
   const [isInitialized, setIsInitialized] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -32,143 +35,99 @@ export const DataProvider = ({ children }) => {
   const [expenses, setExpenses] = useState([]);
   const [notes, setNotes] = useState([]);
 
-  // Helper function to get current user ID
+  // Helper function to get current user ID (with retry for token refresh)
   const getCurrentUserId = async () => {
-    const { data: { session }, error } = await supabase.auth.getSession();
-    if (error) throw error;
-    if (!session) throw new Error('No authenticated user');
-    return session.user.id;
+    const result = await getUserIdSafe({ force: true, retry: 1, retryDelayMs: 500 });
+    if (result.rateLimited) throw new Error('Network busy');
+    if (result.error) throw result.error;
+    if (!result.userId) throw new Error('No authenticated user');
+    return result.userId;
   };
 
-  // Helper function to ensure user is authenticated
+  // Helper function to ensure user is authenticated (with retry for token refresh)
   const ensureAuthenticated = async () => {
-    const { data: { session }, error } = await supabase.auth.getSession();
-    if (error) throw error;
-    if (!session) throw new Error('User not authenticated');
-    return session;
+    const result = await getSessionSafe({ force: true, retry: 1, retryDelayMs: 500 });
+    if (result.rateLimited) throw new Error('Network busy');
+    if (result.error) throw result.error;
+    if (!result.session) throw new Error('User not authenticated');
+    return result.session;
   };
 
-  // Initialize data context
+  // ── Initialize / tear-down data when auth state changes ──
+  // We watch AuthContext's resolved state (isAuthLoading + userInfo)
+  // instead of independently calling getSession(), which races the
+  // GoTrueClient session restoration from AsyncStorage.
+  const prevUserIdRef = useRef(null);
+
   useEffect(() => {
+    // Auth is still loading from storage — don't do anything yet
+    if (isAuthLoading) return;
+
     let expenseSubscription = null;
     let budgetSubscription = null;
+    let cancelled = false;
 
-    const initializeData = async () => {
-      try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw sessionError;
+    const userId = userInfo?.id || null;
 
-        if (!session) {
-          console.log('No authenticated user found');
+    if (userId && userId !== prevUserIdRef.current) {
+      // ── User is authenticated → load data + subscribe ──
+      prevUserIdRef.current = userId;
+
+      const setup = async () => {
+        try {
+          console.log('Auth ready, loading data for user:', userId);
+          await loadData({ deferInsights: true });
+          if (cancelled) return;
           setIsInitialized(true);
-          setIsLoading(false);
-          return;
+
+          // Set up real-time subscriptions
+          expenseSubscription = supabase
+            .channel('expenses_changes_' + userId)
+            .on('postgres_changes', {
+              event: '*',
+              schema: 'public',
+              table: 'expenses',
+              filter: `user_id=eq.${userId}`
+            }, async () => { await loadData(); })
+            .subscribe();
+
+          budgetSubscription = supabase
+            .channel('budget_changes_' + userId)
+            .on('postgres_changes', {
+              event: '*',
+              schema: 'public',
+              table: 'budgets',
+              filter: `user_id=eq.${userId}`
+            }, async () => { await loadData(); })
+            .subscribe();
+
+        } catch (err) {
+          console.error('Error initializing data context:', err);
+          if (!cancelled) setError(err.message);
+        } finally {
+          if (!cancelled) setIsLoading(false);
         }
+      };
 
-        console.log('Loading data for user:', session.user.id);
-        await loadData();
-        setIsInitialized(true);
-
-        // Set up real-time subscriptions for expenses
-        expenseSubscription = supabase
-          .channel('expenses_changes')
-          .on('postgres_changes', {
-            event: '*', // Listen to all changes (INSERT, UPDATE, DELETE)
-            schema: 'public',
-            table: 'expenses',
-            filter: `user_id=eq.${session.user.id}`
-          }, async (payload) => {
-            console.log('Real-time expense change detected:', payload);
-            // Reload data and regenerate insights when expenses change
-            await loadData();
-          })
-          .subscribe();
-
-        // Set up real-time subscriptions for budget changes
-        budgetSubscription = supabase
-          .channel('budget_changes')
-          .on('postgres_changes', {
-            event: '*',
-            schema: 'public',
-            table: 'budgets',
-            filter: `user_id=eq.${session.user.id}`
-          }, async (payload) => {
-            console.log('Real-time budget change detected:', payload);
-            await loadData();
-          })
-          .subscribe();
-
-      } catch (error) {
-        console.error('Error initializing data context:', error);
-        setError(error.message);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    initializeData();
-
-    // Set up auth state listener to reload data when user changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        console.log('User signed in, loading core data for:', session.user.id);
-        // Load budget/expenses/notes fast — defer slow AI insights so UI renders first
-        await loadData({ deferInsights: true });
-
-        // Re-subscribe realtime channels for the NEW user
-        if (expenseSubscription) { expenseSubscription.unsubscribe(); expenseSubscription = null; }
-        if (budgetSubscription) { budgetSubscription.unsubscribe(); budgetSubscription = null; }
-
-        expenseSubscription = supabase
-          .channel('expenses_changes_' + session.user.id)
-          .on('postgres_changes', {
-            event: '*',
-            schema: 'public',
-            table: 'expenses',
-            filter: `user_id=eq.${session.user.id}`
-          }, async () => { await loadData(); })
-          .subscribe();
-
-        budgetSubscription = supabase
-          .channel('budget_changes_' + session.user.id)
-          .on('postgres_changes', {
-            event: '*',
-            schema: 'public',
-            table: 'budgets',
-            filter: `user_id=eq.${session.user.id}`
-          }, async () => { await loadData(); })
-          .subscribe();
-      } else if (event === 'SIGNED_OUT') {
-        console.log('User signed out, clearing all data');
-        setBudget(defaultBudget);
-        setExpenses([]);
-        setNotes([]);
-        setInsights([]);
-        setError(null);
-        setIsLoading(false);
-        
-        // Clean up real-time subscriptions
-        if (expenseSubscription) {
-          expenseSubscription.unsubscribe();
-          expenseSubscription = null;
-        }
-        if (budgetSubscription) {
-          budgetSubscription.unsubscribe();
-          budgetSubscription = null;
-        }
-      }
-    });
+      setup();
+    } else if (!userId) {
+      // ── No user (logged out or first load without session) → clear ──
+      prevUserIdRef.current = null;
+      setBudget(defaultBudget);
+      setExpenses([]);
+      setNotes([]);
+      setInsights([]);
+      setError(null);
+      setIsInitialized(true);
+      setIsLoading(false);
+    }
 
     return () => {
-      subscription.unsubscribe();
-      if (expenseSubscription) {
-        expenseSubscription.unsubscribe();
-      }
-      if (budgetSubscription) {
-        budgetSubscription.unsubscribe();
-      }
+      cancelled = true;
+      if (expenseSubscription) expenseSubscription.unsubscribe();
+      if (budgetSubscription) budgetSubscription.unsubscribe();
     };
-  }, []);
+  }, [isAuthLoading, userInfo?.id]);
 
   // Load data from Supabase
   // Options:
@@ -177,12 +136,12 @@ export const DataProvider = ({ children }) => {
   //                           Used during login so the UI renders fast.
   const loadData = async ({ deferInsights = false } = {}) => {
     try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session) {
+      const result = await getSessionSafe({ force: true, retry: 1, retryDelayMs: 500 });
+      if (result.rateLimited || result.error || !result.session) {
         console.log('loadData skipped: User not authenticated');
         return;
       }
-      const userId = session.user.id;
+      const userId = result.session.user.id;
 
       console.log('Loading data for user ID:', userId, deferInsights ? '(insights deferred)' : '');
 
@@ -309,7 +268,7 @@ export const DataProvider = ({ children }) => {
             });
 
             const aiInsights = await analyzeExpenses(currentMonthExpenses, transformedBudget);
-            const recommendations = await getRecommendations(session.user, currentMonthExpenses, transformedBudget);
+            const recommendations = await getRecommendations(result.session.user, currentMonthExpenses, transformedBudget);
             setInsights([...aiInsights, ...recommendations]);
             console.log('AI insights generated:', aiInsights.length + recommendations.length);
           } catch (insightError) {
@@ -583,8 +542,24 @@ export const DataProvider = ({ children }) => {
   // Update budget settings
   const updateBudget = async (newBudget) => {
     try {
-      const session = await ensureAuthenticated();
-      const userId = session.user.id;
+      // Use the userId passed from the caller (e.g. onboarding) if available,
+      // otherwise fall back to the current session.
+      let userId = newBudget.userId || null;
+
+      if (!userId) {
+        const session = await ensureAuthenticated();
+        userId = session.user.id;
+      }
+
+      // Extra safety: verify Supabase session is live before any DB write
+      const sessionResult = await getSessionSafe({ force: true, retry: 1, retryDelayMs: 500 });
+      if (sessionResult.rateLimited || sessionResult.error || !sessionResult.session?.user?.id) {
+        console.warn('updateBudget: Supabase session not ready, falling back to local state');
+        setBudget(newBudget);
+        return true;
+      }
+      // Always prefer the session user id to avoid RLS mismatch
+      userId = sessionResult.session.user.id;
 
       console.log('Updating budget for user:', userId, newBudget);
 
@@ -624,49 +599,55 @@ export const DataProvider = ({ children }) => {
         }
 
         // Update budget categories with user's allocation
-        for (const [category, values] of Object.entries(newBudget.categories)) {
-          const normalizedCategory = normalizeCategory(category);
-          
-          // First try to update existing category
-          const { data: existingCategory, error: checkError } = await supabase
-            .from('budget_categories')
-            .select('id')
-            .eq('budget_id', data.id)
-            .eq('category_name', normalizedCategory)
-            .maybeSingle();
-
-          if (existingCategory) {
-            // Update existing category
-            const { error: updateError } = await supabase
+        if (newBudget.categories) {
+          for (const [category, values] of Object.entries(newBudget.categories)) {
+            const normalizedCategory = normalizeCategory(category);
+            
+            // First try to update existing category
+            const { data: existingCategory, error: checkError } = await supabase
               .from('budget_categories')
-              .update({
-                allocated_amount: values.limit,
-                spent_amount: budget.categories[normalizedCategory]?.spent || 0
-              })
-              .eq('id', existingCategory.id);
+              .select('id')
+              .eq('budget_id', data.id)
+              .eq('category_name', normalizedCategory)
+              .maybeSingle();
 
-            if (updateError) {
-              console.error('Error updating budget category:', updateError);
-            }
-          } else {
-            // Insert new category
-            const { error: insertError } = await supabase
-              .from('budget_categories')
-              .insert({
-                budget_id: data.id,
-                category_name: normalizedCategory,
-                allocated_amount: values.limit,
-                spent_amount: budget.categories[normalizedCategory]?.spent || 0
-              });
+            if (existingCategory) {
+              // Update existing category
+              const { error: catUpdateError } = await supabase
+                .from('budget_categories')
+                .update({
+                  allocated_amount: values.limit,
+                  spent_amount: budget.categories[normalizedCategory]?.spent || 0
+                })
+                .eq('id', existingCategory.id);
 
-            if (insertError) {
-              console.error('Error inserting budget category:', insertError);
+              if (catUpdateError) {
+                console.error('Error updating budget category:', catUpdateError);
+              }
+            } else {
+              // Insert new category
+              const { error: insertError } = await supabase
+                .from('budget_categories')
+                .insert({
+                  budget_id: data.id,
+                  category_name: normalizedCategory,
+                  allocated_amount: values.limit,
+                  spent_amount: budget.categories[normalizedCategory]?.spent || 0
+                });
+
+              if (insertError) {
+                console.error('Error inserting budget category:', insertError);
+              }
             }
           }
         }
       } else {
         // Create new budget using the enhanced service
-        await budgetService.createDefaultBudget(userId, newBudget.monthly);
+        const result = await budgetService.createDefaultBudget(userId, newBudget.monthly);
+        if (!result.success) {
+          console.warn('createDefaultBudget returned failure, falling back to local state:', result.error);
+          // Don't throw — fall through to local state update
+        }
       }
 
       // Update local state
@@ -674,7 +655,7 @@ export const DataProvider = ({ children }) => {
       return true;
     } catch (error) {
       console.error('Error updating budget:', error);
-      // Always update local state as fallback
+      // Always update local state as fallback — never trigger logout
       setBudget(newBudget);
       return true;
     }

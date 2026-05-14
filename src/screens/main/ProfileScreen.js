@@ -19,6 +19,7 @@ import { ThemeContext } from '../../context/ThemeContext';
 import { supabase } from '../../config/supabase';
 import LeaderboardService from '../../services/LeaderboardService';
 import MascotImage from '../../components/MascotImage';
+import { getSessionSafe } from '../../services/AuthSessionHelper';
 
 const ProfileScreen = ({ navigation }) => {
   const { userInfo, updateProfile } = useContext(AuthContext);
@@ -59,13 +60,13 @@ const ProfileScreen = ({ navigation }) => {
   const loadStats = useCallback(async () => {
     try {
       // Get member-since date from profile
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      const sessionResult = await getSessionSafe({ force: true, retry: 1, retryDelayMs: 500 });
+      if (sessionResult.rateLimited || sessionResult.error || !sessionResult.session) return;
 
       const { data: profile } = await supabase
         .from('profiles')
         .select('created_at')
-        .eq('id', session.user.id)
+        .eq('id', sessionResult.session.user.id)
         .single();
 
       // Get highest completed level from story_mode_sessions
@@ -74,7 +75,7 @@ const ProfileScreen = ({ navigation }) => {
         const { data: levelData, error: levelError } = await supabase
           .from('story_mode_sessions')
           .select('level')
-          .eq('user_id', session.user.id)
+          .eq('user_id', sessionResult.session.user.id)
           .order('level', { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -107,7 +108,7 @@ const ProfileScreen = ({ navigation }) => {
       );
 
       setStats({
-        memberSince: profile?.created_at || session.user.created_at,
+        memberSince: profile?.created_at || sessionResult.session.user.created_at,
         currentLevel: maxLevel,
         totalXp,
         totalExpenses: totalThisMonth,

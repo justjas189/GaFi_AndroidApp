@@ -4,6 +4,7 @@
  */
 
 import { supabase } from '../config/supabase';
+import { getUserIdSafe } from './AuthSessionHelper';
 
 class ProfileService {
   /**
@@ -12,20 +13,24 @@ class ProfileService {
    */
   static async checkUsernameSetupNeeded() {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user?.id) {
+      const { userId, rateLimited, error } = await getUserIdSafe();
+      if (rateLimited) {
+        console.warn('ProfileService: rate limited while checking username setup');
+        return false;
+      }
+      if (error || !userId) {
         return false; // Not authenticated, no setup needed
       }
 
       // Check if user has a profile with both name and username
-      const { data: profile, error } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('full_name, username')
-        .eq('id', session.user.id)
+        .eq('id', userId)
         .single();
 
-      if (error) {
-        console.error('Error checking profile:', error);
+      if (profileError) {
+        console.error('Error checking profile:', profileError);
         return false;
       }
 
@@ -44,20 +49,23 @@ class ProfileService {
    */
   static async setupUsername(username) {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user?.id) {
+      const { userId, rateLimited, error } = await getUserIdSafe();
+      if (rateLimited) {
+        return { success: false, error: 'Network busy. Please try again.' };
+      }
+      if (error || !userId) {
         throw new Error('User not authenticated');
       }
 
-      const { error } = await supabase
+      const { error: updateError } = await supabase
         .from('profiles')
         .update({
           username: username,
           updated_at: new Date().toISOString()
         })
-        .eq('id', session.user.id);
+        .eq('id', userId);
 
-      if (error) throw error;
+      if (updateError) throw updateError;
 
       return { success: true };
     } catch (error) {
@@ -75,18 +83,22 @@ class ProfileService {
    */
   static async getCurrentProfile() {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user?.id) {
+      const { userId, rateLimited, error } = await getUserIdSafe();
+      if (rateLimited) {
+        console.warn('ProfileService: rate limited while getting profile');
+        return null;
+      }
+      if (error || !userId) {
         return null;
       }
 
-      const { data: profile, error } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', session.user.id)
+        .eq('id', userId)
         .single();
 
-      if (error) throw error;
+      if (profileError) throw profileError;
       return profile;
     } catch (error) {
       console.error('Error getting current profile:', error);

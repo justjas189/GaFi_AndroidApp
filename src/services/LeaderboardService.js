@@ -1,4 +1,5 @@
 import { supabase } from '../config/supabase';
+import { getUserIdSafe } from './AuthSessionHelper';
 
 /**
  * LeaderboardService - Unified service for gamified savings and leaderboard functionality
@@ -11,8 +12,17 @@ const LeaderboardService = {
    */
   async getCurrentUserId() {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      return session?.user?.id || null;
+      const { userId, rateLimited, error } = await getUserIdSafe({
+        force: true,
+        retry: 1,
+        retryDelayMs: 500,
+      });
+      if (rateLimited) {
+        console.warn('LeaderboardService: rate limited while getting user ID');
+        return null;
+      }
+      if (error) return null;
+      return userId || null;
     } catch (error) {
       console.error('Error getting current user ID:', error);
       return null;
@@ -57,7 +67,16 @@ const LeaderboardService = {
     try {
       const userId = await this.getCurrentUserId();
       if (!userId) {
-        throw new Error('User not authenticated');
+        return {
+          user_id: null,
+          current_level: 1,
+          total_xp: 0,
+          total_saved: 0,
+          goals_completed: 0,
+          streak_days: 0,
+          last_save_date: null,
+          rank: null
+        };
       }
 
       // Get user level data directly
@@ -85,6 +104,18 @@ const LeaderboardService = {
       return userLevel;
 
     } catch (error) {
+      if (error?.message && error.message.includes('authenticated')) {
+        return {
+          user_id: null,
+          current_level: 1,
+          total_xp: 0,
+          total_saved: 0,
+          goals_completed: 0,
+          streak_days: 0,
+          last_save_date: null,
+          rank: null
+        };
+      }
       console.error('Error getting user level info:', error);
       return {
         current_level: 1,

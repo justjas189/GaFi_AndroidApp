@@ -1,5 +1,5 @@
-import React, { useState, useRef, useContext, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ImageBackground, Dimensions, TouchableWithoutFeedback, Animated, Modal, Text, TextInput, TouchableOpacity, Alert, ScrollView, Easing, Image, useWindowDimensions, FlatList } from 'react-native';
+import React, { useState, useRef, useContext, useEffect, useCallback, useMemo } from 'react';
+import { View, StyleSheet, ImageBackground, Dimensions, TouchableWithoutFeedback, Animated, Modal, Text, TextInput, TouchableOpacity, Alert, ScrollView, Easing, Image, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
@@ -10,7 +10,6 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { collisionSystem } from '../../utils/CollisionSystem';
 import { AchievementService } from '../../services/AchievementService';
 import gameDatabaseService from '../../services/GameDatabaseService';
-import LeaderboardService from '../../services/LeaderboardService';
 import { normalizeCategory } from '../../utils/categoryUtils';
 import {
   STORY_DAILY_TASKS,
@@ -25,7 +24,6 @@ import { evaluateDailyTaskRule } from '../../utils/storyDailyTaskEvaluator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTutorial, TUTORIAL_PHASE } from '../../context/TutorialContext';
 import DailyTaskPopup from '../../components/DailyTaskPopup';
-import EndOfDayReportModal from '../../components/EndOfDayReportModal';
 
 const { width: INITIAL_WIDTH, height: INITIAL_HEIGHT } = Dimensions.get('window');
 const CHARACTER_SIZE = 48;
@@ -35,6 +33,7 @@ const QUICK_AMOUNTS = [20, 50, 100, 150];
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const DAILY_TASK_STORAGE_KEY_PREFIX = 'story_daily_task_state_';
+const DEBUG_MOVEMENT = false;
 
 // Sub-categories per expense category
 const SUBCATEGORIES = {
@@ -381,11 +380,17 @@ export default function BuildScreen() {
   // Character position — resolve spawn point from percentages using initial screen size
   const initialSpawn = { x: INITIAL_WIDTH * (currentMap.spawnPoint.xPct ?? 0.5), y: INITIAL_HEIGHT * (currentMap.spawnPoint.yPct ?? 0.5) };
   const [characterPosition, setCharacterPosition] = useState(initialSpawn);
+  const characterPositionRef = useRef(initialSpawn);
   const animatedX = useRef(new Animated.Value(initialSpawn.x - CHARACTER_SIZE / 2)).current;
   const animatedY = useRef(new Animated.Value(initialSpawn.y - CHARACTER_SIZE / 2)).current;
+  const animatedPositionRef = useRef({
+    x: initialSpawn.x - CHARACTER_SIZE / 2,
+    y: initialSpawn.y - CHARACTER_SIZE / 2,
+  });
   const [isWalking, setIsWalking] = useState(false);
   const [todaySpending, setTodaySpending] = useState(0);
   const walkingPulse = useRef(new Animated.Value(1)).current;
+  const walkingPulseAnimationRef = useRef(null);
   
   // Expense modal state
   const [showExpenseModal, setShowExpenseModal] = useState(false);
@@ -396,7 +401,40 @@ export default function BuildScreen() {
   const [showSubCategoryDropdown, setShowSubCategoryDropdown] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentLocation, setCurrentLocation] = useState('Hallway 🚶');
+  const currentLocationRef = useRef('Hallway 🚶');
   const [showInstructions, setShowInstructions] = useState(true);
+
+  const commitCurrentLocation = useCallback((nextLocation) => {
+    if (currentLocationRef.current !== nextLocation) {
+      currentLocationRef.current = nextLocation;
+      setCurrentLocation(nextLocation);
+    }
+  }, []);
+
+  const commitCharacterPosition = useCallback((nextPosition) => {
+    characterPositionRef.current = nextPosition;
+    setCharacterPosition(nextPosition);
+  }, []);
+
+  const setAnimatedPosition = useCallback((x, y) => {
+    animatedX.setValue(x);
+    animatedY.setValue(y);
+    animatedPositionRef.current = { x, y };
+  }, [animatedX, animatedY]);
+
+  useEffect(() => {
+    const xId = animatedX.addListener(({ value }) => {
+      animatedPositionRef.current = { x: value, y: animatedPositionRef.current.y };
+    });
+    const yId = animatedY.addListener(({ value }) => {
+      animatedPositionRef.current = { x: animatedPositionRef.current.x, y: value };
+    });
+
+    return () => {
+      animatedX.removeListener(xId);
+      animatedY.removeListener(yId);
+    };
+  }, [animatedX, animatedY]);
   
   // Travel modal state
   const [showTravelModal, setShowTravelModal] = useState(false);
@@ -634,7 +672,7 @@ export default function BuildScreen() {
     // Persist tutorial completion to Supabase
     gameDatabaseService.saveTutorialProgress({ currentStep: 0, stepsCompleted: [], tutorialCompleted: true });
     gameDatabaseService.logActivity({ activityType: 'tutorial_step', details: { step: 'done', action: 'completed' } });
-  }, [user?.id, getNextLevelXp]);
+  }, [user?.id]);
 
   // Auto-detect when TutorialContext finishes the GAME_TUTORIAL phase
   // and clean up GameScreen local state (exit to main menu, unlock Story Mode)
@@ -664,14 +702,6 @@ export default function BuildScreen() {
   const [activeStoryDay, setActiveStoryDay] = useState(1);
   const dailyTaskAnnouncedDayRef = useRef(null);
   const isHydratingDailyTaskStateRef = useRef(false);
-  const [showEndOfDayReport, setShowEndOfDayReport] = useState(false);
-  const endOfDayReportKeyRef = useRef(null);
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [dayReportHistory, setDayReportHistory] = useState([]);
-  const [selectedHistoryReport, setSelectedHistoryReport] = useState(null);
-  const [currentXP, setCurrentXP] = useState(0);
-  const [xpForNextLevel, setXpForNextLevel] = useState(300);
-  const [koinInsight, setKoinInsight] = useState(null);
   
   // Level 1 (Budgeting) - 50/30/20 Rule tracking
   const [budgetCategories, setBudgetCategories] = useState({
@@ -785,14 +815,15 @@ export default function BuildScreen() {
   // Character Animation State
   const [selectedCharacter, setSelectedCharacter] = useState('girl'); // 'girl', 'jasper', 'businessman', 'businesswoman'
   const [characterDirection, setCharacterDirection] = useState('down'); // 'up', 'down', 'left', 'right'
-  const [currentFrame, setCurrentFrame] = useState(0);
+  const lastDirectionRef = useRef('down');
+  const spriteFrameAnim = useRef(new Animated.Value(0)).current;
+  const spriteAnimationRef = useRef(null);
   const [showClosetModal, setShowClosetModal] = useState(false);
   const [showNotebookModal, setShowNotebookModal] = useState(false);
   const [notebookCategory, setNotebookCategory] = useState('Food & Dining');
   const [notebookSubCategory, setNotebookSubCategory] = useState(null);
   const [showNotebookSubCategoryDropdown, setShowNotebookSubCategoryDropdown] = useState(false);
   const [unlockedSkins, setUnlockedSkins] = useState(['girl', 'jasper']); // Default skins
-  const frameIntervalRef = useRef(null);
   
   // Expense categories for Notebook Quick Add
   const EXPENSE_CATEGORIES = [
@@ -1024,24 +1055,6 @@ export default function BuildScreen() {
     goalAllocationActions: 0,
   });
 
-  const getNextLevelXp = useCallback((xp) => {
-    const thresholds = [300, 600, 1000, 1400, 1900, 2500, 3200, 4000, 5000];
-    const next = thresholds.find((threshold) => xp < threshold);
-    return next || thresholds[thresholds.length - 1];
-  }, []);
-
-  const refreshUserLevelInfo = useCallback(async () => {
-    if (!user?.id) return;
-    try {
-      const levelInfo = await LeaderboardService.getUserLevelInfo();
-      const totalXp = levelInfo?.total_xp || 0;
-      setCurrentXP(totalXp);
-      setXpForNextLevel(getNextLevelXp(totalXp));
-    } catch (error) {
-      console.warn('Failed to refresh XP info:', error?.message || error);
-    }
-  }, [user?.id, getNextLevelXp]);
-
   const getStoryDurationDays = useCallback((level = storyLevel) => {
     return STORY_DAY_COUNTS[level] || 7;
   }, [storyLevel]);
@@ -1190,9 +1203,7 @@ export default function BuildScreen() {
     if (newlyCompleted.length > 0 && !isHydratingDailyTaskStateRef.current) {
       const earnedXp = newlyCompleted.reduce((sum, task) => sum + (task.reward?.xp || 0), 0);
       if (earnedXp > 0) {
-        gameDatabaseService.incrementUserLevelStats({ xpToAdd: earnedXp })
-          .then(refreshUserLevelInfo)
-          .catch(() => {});
+        gameDatabaseService.incrementUserLevelStats({ xpToAdd: earnedXp });
       }
 
       newlyCompleted.forEach((task) => {
@@ -1223,7 +1234,6 @@ export default function BuildScreen() {
     weeklyBudget,
     weeklySpending,
     activeSessionId,
-    refreshUserLevelInfo,
   ]);
 
   useEffect(() => {
@@ -1274,115 +1284,6 @@ export default function BuildScreen() {
       setShowDailyTaskPopup(false);
     }
   }, [gameMode, showLevelComplete, showDailyTaskPopup]);
-
-  // ── All daily tasks completed: show congratulatory alert (does NOT end the day) ──
-  // The user can still explore, log expenses, etc. The day ends at midnight.
-  const allTasksCompletedAlertKeyRef = useRef(null);
-  useEffect(() => {
-    if (gameMode !== 'story' || showLevelComplete) return;
-
-    const activeDay = getActiveStoryDay();
-    const dayConfig = getStoryDayTasks(storyLevel, activeDay);
-    if (!dayConfig) return;
-
-    const dayComplete = dayConfig.tasks.every((task) => !!dailyTaskCompletion[task.conditionKey]);
-    if (!dayComplete) return;
-
-    const alertKey = `${activeSessionId || 'local'}_${storyLevel}_${activeDay}`;
-    if (allTasksCompletedAlertKeyRef.current === alertKey) return;
-    allTasksCompletedAlertKeyRef.current = alertKey;
-
-    // Close any open task UI
-    setShowDailyTasksModal(false);
-    setShowDailyTaskPopup(false);
-
-    // Inform the user — but do NOT trigger the End of Day modal
-    Alert.alert(
-      '🎉 All Tasks Complete!',
-      'Great job finishing today\'s objectives! You can still explore and log expenses. Your day summary will appear when the day ends at midnight.',
-      [{ text: 'OK' }]
-    );
-  }, [
-    gameMode,
-    showLevelComplete,
-    getActiveStoryDay,
-    storyLevel,
-    dailyTaskCompletion,
-    activeSessionId,
-  ]);
-
-  // ── Midnight date-change monitor ──
-  // The EndOfDayReportModal triggers ONLY when the real calendar day rolls over.
-  // This interval checks every 30 seconds whether the date has changed.
-  const lastCheckedDateRef = useRef(new Date().toDateString());
-  useEffect(() => {
-    if (gameMode !== 'story' || showLevelComplete) return;
-
-    // Initialize with today's date string
-    lastCheckedDateRef.current = new Date().toDateString();
-
-    const midnightCheckInterval = setInterval(() => {
-      const nowDateStr = new Date().toDateString();
-      if (nowDateStr !== lastCheckedDateRef.current) {
-        // The calendar day has changed — trigger the End of Day report
-        console.log('🌙 Midnight detected: day changed from', lastCheckedDateRef.current, 'to', nowDateStr);
-        lastCheckedDateRef.current = nowDateStr;
-
-        const activeDay = getActiveStoryDay();
-        const reportKey = `${activeSessionId || 'local'}_${storyLevel}_${activeDay}`;
-        if (endOfDayReportKeyRef.current === reportKey) return;
-
-        endOfDayReportKeyRef.current = reportKey;
-        setShowDailyTasksModal(false);
-        setShowDailyTaskPopup(false);
-        setShowEndOfDayReport(true);
-      }
-    }, 30_000); // Check every 30 seconds
-
-    return () => clearInterval(midnightCheckInterval);
-  }, [
-    gameMode,
-    showLevelComplete,
-    getActiveStoryDay,
-    storyLevel,
-    activeSessionId,
-  ]);
-
-  // ── Focus-based midnight check ──
-  // When the user returns to this screen (e.g. from background), immediately
-  // check if the calendar day has changed since we last looked.
-  useFocusEffect(
-    useCallback(() => {
-      if (gameMode !== 'story' || showLevelComplete) return;
-
-      const nowDateStr = new Date().toDateString();
-      if (nowDateStr !== lastCheckedDateRef.current) {
-        console.log('🌙 Focus: day changed from', lastCheckedDateRef.current, 'to', nowDateStr);
-        lastCheckedDateRef.current = nowDateStr;
-
-        const activeDay = getActiveStoryDay();
-        const reportKey = `${activeSessionId || 'local'}_${storyLevel}_${activeDay}`;
-        if (endOfDayReportKeyRef.current !== reportKey) {
-          endOfDayReportKeyRef.current = reportKey;
-          setShowDailyTasksModal(false);
-          setShowDailyTaskPopup(false);
-          setShowEndOfDayReport(true);
-        }
-      }
-    }, [gameMode, showLevelComplete, getActiveStoryDay, storyLevel, activeSessionId])
-  );
-
-  useEffect(() => {
-    if ((gameMode !== 'story' || showLevelComplete) && showEndOfDayReport) {
-      setShowEndOfDayReport(false);
-    }
-  }, [gameMode, showLevelComplete, showEndOfDayReport]);
-
-  useEffect(() => {
-    if (gameMode === 'story' && !showLevelComplete) return;
-    if (showHistoryModal) setShowHistoryModal(false);
-    if (selectedHistoryReport) setSelectedHistoryReport(null);
-  }, [gameMode, showLevelComplete, showHistoryModal, selectedHistoryReport]);
     
   
   // Handle layout to get actual content dimensions
@@ -1410,23 +1311,22 @@ export default function BuildScreen() {
       const spawnX = spawn.x - halfChar;
       const spawnY = spawn.y - halfChar;
       console.log('📍 Resetting character to spawn point:', spawnX, spawnY);
-      animatedX.setValue(spawnX);
-      animatedY.setValue(spawnY);
-      setCharacterPosition(spawn);
-      setCurrentLocation('Hallway 🚶');
+      setAnimatedPosition(spawnX, spawnY);
+      commitCharacterPosition(spawn);
+      commitCurrentLocation('Hallway 🚶');
     }
   }, [currentMapId]);
 
   // Get the on-screen character size that matches the displayed tile size.
   // Uses the same "contain" scale math as the ImageBackground.
-  const getCharSize = () => {
+  const getCharSize = useCallback(() => {
     if (!collisionSystem.initialized) return CHARACTER_SIZE;
     const mapPixelW = collisionSystem.mapWidth * collisionSystem.tileSize;
     const mapPixelH = collisionSystem.mapHeight * collisionSystem.tileSize;
     const scale = Math.min(contentSize.width / mapPixelW, contentSize.height / mapPixelH);
     const size = collisionSystem.tileSize * scale;
     return size > 0 ? size : CHARACTER_SIZE;
-  };
+  }, [contentSize.width, contentSize.height]);
 
   // Story Mode map restrictions by user profile (Student vs Employee)
   useEffect(() => {
@@ -1440,11 +1340,11 @@ export default function BuildScreen() {
       const spawn = resolveSpawn(fallbackMap.spawnPoint, contentSize.width, contentSize.height);
 
       setCurrentMapId('dorm');
-      setCharacterPosition(spawn);
-      animatedX.setValue(spawn.x - halfChar);
-      animatedY.setValue(spawn.y - halfChar);
+      commitCharacterPosition(spawn);
+      setAnimatedPosition(spawn.x - halfChar, spawn.y - halfChar);
+      lastDirectionRef.current = 'down';
       setCharacterDirection('down');
-      setCurrentLocation(`${fallbackMap.name} ${fallbackMap.icon}`);
+      commitCurrentLocation(`${fallbackMap.name} ${fallbackMap.icon}`);
       setShowTravelModal(false);
       setShowTransportModal(false);
       setTravelDestinations([]);
@@ -1503,12 +1403,6 @@ export default function BuildScreen() {
         if (!progress) return;
 
         const { userLevels, character, tutorial, activeStory, activeCustom, unlockedLevels: unlocked, introSeen } = progress;
-
-        if (userLevels?.total_xp !== undefined) {
-          const totalXp = userLevels.total_xp || 0;
-          setCurrentXP(totalXp);
-          setXpForNextLevel(getNextLevelXp(totalXp));
-        }
 
         // 1. Unlocked story levels
         if (unlocked && unlocked.length > 0) {
@@ -1580,10 +1474,6 @@ export default function BuildScreen() {
     hydrate();
   }, [user?.id]);
 
-  useEffect(() => {
-    refreshUserLevelInfo();
-  }, [refreshUserLevelInfo]);
-
   // Load unlocked skins from store purchases - runs when screen is focused
   // Merges Supabase (source of truth) + AsyncStorage (local cache)
   const loadUnlockedSkins = useCallback(async () => {
@@ -1632,44 +1522,87 @@ export default function BuildScreen() {
   // Walking pulse animation
   useEffect(() => {
     if (isWalking) {
-      Animated.loop(
+      if (walkingPulseAnimationRef.current) {
+        walkingPulseAnimationRef.current.stop();
+      }
+
+      walkingPulseAnimationRef.current = Animated.loop(
         Animated.sequence([
           Animated.timing(walkingPulse, {
             toValue: 1.15,
             duration: 200,
-            useNativeDriver: false,
+            useNativeDriver: true,
           }),
           Animated.timing(walkingPulse, {
             toValue: 1,
             duration: 200,
-            useNativeDriver: false,
+            useNativeDriver: true,
           }),
         ])
-      ).start();
-      
-      // Start sprite animation when walking
-      if (frameIntervalRef.current) clearInterval(frameIntervalRef.current);
-      frameIntervalRef.current = setInterval(() => {
-        setCurrentFrame(prev => (prev + 1) % SPRITE_CONFIG.framesPerDirection);
-      }, 100); // 100ms per frame
+      );
+      walkingPulseAnimationRef.current.start();
+
+      // Start sprite animation when walking (native driver)
+      if (spriteAnimationRef.current) {
+        spriteAnimationRef.current.stop();
+      }
+
+      const frameDurationMs = 100;
+      spriteFrameAnim.setValue(0);
+
+      const frameSteps = [];
+      for (let idx = 1; idx < SPRITE_CONFIG.framesPerDirection; idx += 1) {
+        frameSteps.push(
+          Animated.delay(frameDurationMs),
+          Animated.timing(spriteFrameAnim, {
+            toValue: idx,
+            duration: 0,
+            useNativeDriver: true,
+          })
+        );
+      }
+
+      frameSteps.push(
+        Animated.delay(frameDurationMs),
+        Animated.timing(spriteFrameAnim, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        })
+      );
+
+      spriteAnimationRef.current = Animated.loop(
+        Animated.sequence(frameSteps)
+      );
+      spriteAnimationRef.current.start();
     } else {
       walkingPulse.stopAnimation();
       walkingPulse.setValue(1);
-      
-      // Stop sprite animation when not walking
-      if (frameIntervalRef.current) {
-        clearInterval(frameIntervalRef.current);
-        frameIntervalRef.current = null;
+
+      if (walkingPulseAnimationRef.current) {
+        walkingPulseAnimationRef.current.stop();
+        walkingPulseAnimationRef.current = null;
       }
-      setCurrentFrame(0); // Reset to idle frame
+
+      // Stop sprite animation when not walking
+      if (spriteAnimationRef.current) {
+        spriteAnimationRef.current.stop();
+        spriteAnimationRef.current = null;
+      }
+      spriteFrameAnim.setValue(0); // Reset to idle frame
     }
-    
+
     return () => {
-      if (frameIntervalRef.current) {
-        clearInterval(frameIntervalRef.current);
+      if (walkingPulseAnimationRef.current) {
+        walkingPulseAnimationRef.current.stop();
+        walkingPulseAnimationRef.current = null;
+      }
+      if (spriteAnimationRef.current) {
+        spriteAnimationRef.current.stop();
+        spriteAnimationRef.current = null;
       }
     };
-  }, [isWalking]);
+  }, [isWalking, spriteFrameAnim, walkingPulse]);
 
   const fetchTodaySpending = async () => {
     try {
@@ -1925,8 +1858,7 @@ export default function BuildScreen() {
     }
     // Increment XP and goals achieved on user_levels
     if (passed) {
-      await gameDatabaseService.incrementUserLevelStats({ xpToAdd: xpEarned, goalsAchieved: 1 });
-      refreshUserLevelInfo();
+      gameDatabaseService.incrementUserLevelStats({ xpToAdd: xpEarned, goalsAchieved: 1 });
       // Directly mark story level completed on user_levels (safety net for DB trigger)
       if (gameMode === 'story') {
         gameDatabaseService.markStoryLevelCompleted(storyLevel, starsEarned);
@@ -2085,97 +2017,6 @@ export default function BuildScreen() {
         }
       ]
     );
-  };
-
-  const buildDayReportSnapshot = useCallback(() => {
-    if (gameMode !== 'story') return null;
-
-    const activeDay = getActiveStoryDay();
-    const dayConfig = getStoryDayTasks(storyLevel, activeDay);
-    if (!dayConfig) return null;
-
-    const displayDay = getStoryDayDisplayNumber(storyLevel, activeDay);
-    const tasks = dayConfig.tasks.map((task) => ({
-      id: task.id,
-      label: task.requiredAppAction,
-      completed: !!dailyTaskCompletion[task.conditionKey],
-    }));
-    const xpEarned = dayConfig.tasks.reduce(
-      (sum, task) => sum + (dailyTaskCompletion[task.conditionKey] ? (task.reward?.xp || 0) : 0),
-      0,
-    );
-
-    return {
-      id: `${activeSessionId || 'local'}_${storyLevel}_${activeDay}`,
-      title: `Day ${displayDay}`,
-      dayNumber: displayDay,
-      weeklyBudgetRemaining: Math.max(0, weeklyBudget - weeklySpending),
-      spentToday: todaySpending,
-      dailyTasks: tasks,
-      xpEarned,
-      currentXP,
-      xpForNextLevel,
-      unlockedAchievement: newAchievement?.title || null,
-      koinInsight,
-    };
-  }, [
-    activeSessionId,
-    currentXP,
-    dailyTaskCompletion,
-    gameMode,
-    getActiveStoryDay,
-    getStoryDayDisplayNumber,
-    getStoryDayTasks,
-    koinInsight,
-    newAchievement,
-    storyLevel,
-    todaySpending,
-    weeklyBudget,
-    weeklySpending,
-    xpForNextLevel,
-  ]);
-
-  const handleStartNextDay = () => {
-    const snapshot = buildDayReportSnapshot();
-    if (snapshot) {
-      setDayReportHistory((prev) => {
-        if (prev.some((report) => report.id === snapshot.id)) return prev;
-        return [...prev, snapshot];
-      });
-    }
-
-    setShowEndOfDayReport(false);
-    setShowHistoryModal(false);
-    setSelectedHistoryReport(null);
-
-    if (gameMode !== 'story') return;
-    const levelConfig = STORY_DAILY_TASKS[storyLevel];
-    if (!levelConfig) return;
-
-    const currentDay = getActiveStoryDay();
-    const nextDay = Math.min(currentDay + 1, levelConfig.totalDays || currentDay);
-
-    setShowDailyTasksModal(false);
-    setShowDailyTaskPopup(false);
-    setDailyTaskPopupPayload(null);
-
-    if (nextDay !== currentDay) {
-      setActiveStoryDay(nextDay);
-      setDailyTaskRuntimeByDay((prev) => ({
-        ...prev,
-        [nextDay]: prev[nextDay] || buildEmptyDailyRuntime(),
-      }));
-    }
-  };
-
-  const handleSelectHistoryReport = (report) => {
-    setShowHistoryModal(false);
-    setShowEndOfDayReport(false);
-    setSelectedHistoryReport(report);
-  };
-
-  const handleCloseHistoryReport = () => {
-    setSelectedHistoryReport(null);
   };
 
   // ==================== ACHIEVEMENT FUNCTIONS ====================
@@ -2497,26 +2338,6 @@ export default function BuildScreen() {
       setWeeklySpending(prev => prev + amount);
     }
 
-    // ── Optimistic update: update daily task runtime IMMEDIATELY (before DB save) ──
-    if (gameMode === 'story') {
-      const normalizedCategory = normalizeCategory(category);
-      updateDailyTaskRuntimeForActiveDay((dayState) => {
-        dayState.expenseCount = (dayState.expenseCount || 0) + 1;
-        dayState.expenseTotal = (dayState.expenseTotal || 0) + amount;
-        dayState.categoryCounts[normalizedCategory] = (dayState.categoryCounts[normalizedCategory] || 0) + 1;
-        dayState.categoryTotals[normalizedCategory] = (dayState.categoryTotals[normalizedCategory] || 0) + amount;
-        dayState.expenseEntries.push({
-          category: normalizedCategory,
-          amount,
-          note: description,
-          source: 'transport',
-        });
-        if ((dayState.travelCount || 0) > 0 && CATEGORY_BUDGET_MAP[normalizedCategory] === 'needs') {
-          dayState.needsAfterTravelCount = (dayState.needsAfterTravelCount || 0) + 1;
-        }
-      });
-    }
-
     // Background save — non-blocking
     try {
       const expenseData = {
@@ -2535,6 +2356,25 @@ export default function BuildScreen() {
         Alert.alert('Sync Error', 'Transport expense may not have been saved.');
       } else {
         console.log(`✅ Transport: Recorded ${description}: ₱${amount}`);
+
+        if (gameMode === 'story') {
+          const normalizedCategory = normalizeCategory(category);
+          updateDailyTaskRuntimeForActiveDay((dayState) => {
+            dayState.expenseCount = (dayState.expenseCount || 0) + 1;
+            dayState.expenseTotal = (dayState.expenseTotal || 0) + amount;
+            dayState.categoryCounts[normalizedCategory] = (dayState.categoryCounts[normalizedCategory] || 0) + 1;
+            dayState.categoryTotals[normalizedCategory] = (dayState.categoryTotals[normalizedCategory] || 0) + amount;
+            dayState.expenseEntries.push({
+              category: normalizedCategory,
+              amount,
+              note: description,
+              source: 'transport',
+            });
+            if ((dayState.travelCount || 0) > 0 && CATEGORY_BUDGET_MAP[normalizedCategory] === 'needs') {
+              dayState.needsAfterTravelCount = (dayState.needsAfterTravelCount || 0) + 1;
+            }
+          });
+        }
 
         // Persist session spending to Supabase (fire-and-forget)
         if (activeSessionId && (gameMode === 'story' || gameMode === 'custom')) {
@@ -2601,12 +2441,12 @@ export default function BuildScreen() {
     }
     
     const spawn = { x: spawnX, y: spawnY };
-    setCharacterPosition(spawn);
+    commitCharacterPosition(spawn);
     const halfChar = getCharSize() / 2;
-    animatedX.setValue(spawn.x - halfChar);
-    animatedY.setValue(spawn.y - halfChar);
+    setAnimatedPosition(spawn.x - halfChar, spawn.y - halfChar);
+    lastDirectionRef.current = 'down';
     setCharacterDirection('down'); // Face down when arriving
-    setCurrentLocation(`${newMap.name} ${newMap.icon}`);
+    commitCurrentLocation(`${newMap.name} ${newMap.icon}`);
 
     if (gameMode === 'story' && mapId.startsWith('mall')) {
       updateDailyTaskRuntimeForActiveDay((dayState) => {
@@ -2672,12 +2512,12 @@ export default function BuildScreen() {
     }
 
     const spawn = { x: spawnX, y: spawnY };
-    setCharacterPosition(spawn);
+    commitCharacterPosition(spawn);
     const halfChar = getCharSize() / 2;
-    animatedX.setValue(spawn.x - halfChar);
-    animatedY.setValue(spawn.y - halfChar);
+    setAnimatedPosition(spawn.x - halfChar, spawn.y - halfChar);
+    lastDirectionRef.current = 'down';
     setCharacterDirection('down');
-    setCurrentLocation(`${newMap.name} ${newMap.icon}`);
+    commitCurrentLocation(`${newMap.name} ${newMap.icon}`);
 
     if (gameMode === 'story' && floorId.startsWith('mall')) {
       updateDailyTaskRuntimeForActiveDay((dayState) => {
@@ -2711,6 +2551,12 @@ export default function BuildScreen() {
   const targetDestinationRef = useRef(null); // Store the original tap destination
   const currentAnimationRef = useRef(null); // Track current animation for cancellation
 
+  const logMovement = (...args) => {
+    if (DEBUG_MOVEMENT) {
+      console.log(...args);
+    }
+  };
+
   // Calculate a simple path from current position to target (tile by tile)
   const calculatePath = (fromX, fromY, toX, toY) => {
     if (!collisionSystem.initialized) {
@@ -2721,7 +2567,7 @@ export default function BuildScreen() {
     const fromTile = collisionSystem.pixelsToTiles(fromX, fromY, contentSize.width, contentSize.height);
     const toTile = collisionSystem.pixelsToTiles(toX, toY, contentSize.width, contentSize.height);
     
-    console.log(`📍 Calculating path from tile (${fromTile.x}, ${fromTile.y}) to (${toTile.x}, ${toTile.y})`);
+    logMovement(`📍 Calculating path from tile (${fromTile.x}, ${fromTile.y}) to (${toTile.x}, ${toTile.y})`);
     
     const path = [];
     let currentX = fromTile.x;
@@ -2779,12 +2625,12 @@ export default function BuildScreen() {
       
       // If we couldn't move in any direction, stop pathfinding
       if (!moved) {
-        console.log(`🚫 Path blocked at tile (${currentX}, ${currentY})`);
+        logMovement(`🚫 Path blocked at tile (${currentX}, ${currentY})`);
         break;
       }
     }
     
-    console.log(`📍 Path calculated: ${path.length} steps`);
+    logMovement(`📍 Path calculated: ${path.length} steps`);
     return path;
   };
 
@@ -2795,19 +2641,24 @@ export default function BuildScreen() {
     const targetY = targetPixelY - halfChar;
     
     // Get current position from the animated value's current value
-    // Using __getValue() to get current value without stopping animation
-    const currentX = animatedX.__getValue() + halfChar;
-    const currentY = animatedY.__getValue() + halfChar;
+    const currentX = animatedPositionRef.current.x + halfChar;
+    const currentY = animatedPositionRef.current.y + halfChar;
     
     // Calculate direction based on movement
     const deltaX = targetPixelX - currentX;
     const deltaY = targetPixelY - currentY;
     
     // Set character direction based on movement
+    let nextDirection = null;
     if (Math.abs(deltaX) > Math.abs(deltaY)) {
-      setCharacterDirection(deltaX > 0 ? 'right' : 'left');
+      nextDirection = deltaX > 0 ? 'right' : 'left';
     } else if (deltaY !== 0) {
-      setCharacterDirection(deltaY > 0 ? 'down' : 'up');
+      nextDirection = deltaY > 0 ? 'down' : 'up';
+    }
+
+    if (nextDirection && nextDirection !== lastDirectionRef.current) {
+      lastDirectionRef.current = nextDirection;
+      setCharacterDirection(nextDirection);
     }
     
     // Duration per tile (consistent speed)
@@ -2818,13 +2669,13 @@ export default function BuildScreen() {
       Animated.timing(animatedX, {
         toValue: targetX,
         duration: TILE_MOVE_DURATION,
-        useNativeDriver: false,
+        useNativeDriver: true,
         easing: Easing.linear,
       }),
       Animated.timing(animatedY, {
         toValue: targetY,
         duration: TILE_MOVE_DURATION,
-        useNativeDriver: false,
+        useNativeDriver: true,
         easing: Easing.linear,
       }),
     ]);
@@ -2834,8 +2685,7 @@ export default function BuildScreen() {
     
     animation.start(({ finished }) => {
       if (finished) {
-        // Update character position state
-        setCharacterPosition({ x: targetPixelX, y: targetPixelY });
+        characterPositionRef.current = { x: targetPixelX, y: targetPixelY };
         onComplete();
       }
     });
@@ -2852,16 +2702,18 @@ export default function BuildScreen() {
     // Clear the movement path
     movementPathRef.current = [];
     
-    // Get current animated position values
-    let currentX, currentY;
     const halfChar = getCharSize() / 2;
-    animatedX.stopAnimation(value => { currentX = value + halfChar; });
-    animatedY.stopAnimation(value => { currentY = value + halfChar; });
+    animatedX.stopAnimation();
+    animatedY.stopAnimation();
+
+    const nextPosition = {
+      x: animatedPositionRef.current.x + halfChar,
+      y: animatedPositionRef.current.y + halfChar,
+    };
+    characterPositionRef.current = nextPosition;
+    setCharacterPosition(nextPosition);
     
-    // Update character position to current location
-    setCharacterPosition({ x: currentX, y: currentY });
-    
-    return { x: currentX, y: currentY };
+    return nextPosition;
   };
 
   // Process the movement path step by step
@@ -2870,6 +2722,11 @@ export default function BuildScreen() {
       // Path complete
       isMovingRef.current = false;
       setIsWalking(false);
+
+      const finalPosition = characterPositionRef.current;
+      if (finalPosition && (finalPosition.x !== characterPosition.x || finalPosition.y !== characterPosition.y)) {
+        setCharacterPosition(finalPosition);
+      }
       
       // Only check for location action at the FINAL destination (where user tapped)
       if (targetDestinationRef.current) {
@@ -2878,7 +2735,7 @@ export default function BuildScreen() {
           targetDestinationRef.current.y
         );
         if (location) {
-          console.log(`✅ Character reached tapped destination: ${location.name}!`);
+          logMovement(`✅ Character reached tapped destination: ${location.name}!`);
           handleLocationAction(location);
         }
         targetDestinationRef.current = null; // Clear the target
@@ -2890,9 +2747,10 @@ export default function BuildScreen() {
     const nextStep = movementPathRef.current.shift();
     
     // Update location display
-    setCurrentLocation(getLocationName(nextStep.x, nextStep.y));
+    const nextLocation = getLocationName(nextStep.x, nextStep.y);
+    commitCurrentLocation(nextLocation);
     
-    console.log(`🚶 Moving to tile (${nextStep.tileX}, ${nextStep.tileY})`);
+    logMovement(`🚶 Moving to tile (${nextStep.tileX}, ${nextStep.tileY})`);
     
     // Move to next tile
     moveOneStep(nextStep.x, nextStep.y, () => {
@@ -2909,21 +2767,21 @@ export default function BuildScreen() {
       markTutorialCondition('walked');
     }
     
-    console.log('===== TAP DEBUG =====');
-    console.log('Current map:', currentMapId);
-    console.log('Content dimensions:', contentSize.width, 'x', contentSize.height);
-    console.log('Tap at:', locationX.toFixed(0), locationY.toFixed(0));
-    console.log('Tap % of content:', (locationX/contentSize.width*100).toFixed(1) + '%', 'x', (locationY/contentSize.height*100).toFixed(1) + '%');
+    logMovement('===== TAP DEBUG =====');
+    logMovement('Current map:', currentMapId);
+    logMovement('Content dimensions:', contentSize.width, 'x', contentSize.height);
+    logMovement('Tap at:', locationX.toFixed(0), locationY.toFixed(0));
+    logMovement('Tap % of content:', (locationX/contentSize.width*100).toFixed(1) + '%', 'x', (locationY/contentSize.height*100).toFixed(1) + '%');
     
     // Check what location this tap is in
     const tapLocation = getLocationAtPosition(locationX, locationY);
-    console.log('Tap location:', tapLocation ? tapLocation.name : 'None');
-    console.log('====================');
+    logMovement('Tap location:', tapLocation ? tapLocation.name : 'None');
+    logMovement('====================');
     
     // If already moving, stop current movement and redirect to new destination
-    let startPosition = characterPosition;
+    let startPosition = characterPositionRef.current || characterPosition;
     if (isWalking || isMovingRef.current) {
-      console.log('🔄 Redirecting to new destination');
+      logMovement('🔄 Redirecting to new destination');
       startPosition = stopCurrentMovement();
     }
 
@@ -2937,11 +2795,11 @@ export default function BuildScreen() {
         contentSize.height
       );
       const tileInfo = collisionSystem.getTileInfo(tileCoords.x, tileCoords.y);
-      console.log('🧱 Target tile info:', JSON.stringify(tileInfo));
+      logMovement('🧱 Target tile info:', JSON.stringify(tileInfo));
       
       // Check if destination tile is passable (also treat NPC tiles as blocked)
       if (!tileInfo.passable || isNPCTile(tileCoords.x, tileCoords.y)) {
-        console.log('🚫 Destination tile is not passable (or occupied by NPC)!');
+        logMovement('🚫 Destination tile is not passable (or occupied by NPC)!');
         // Find nearest passable position (excluding NPC tiles)
         const nearestPassable = findNearestPassableExcludingNPCs(
           locationX, 
@@ -2960,7 +2818,7 @@ export default function BuildScreen() {
         );
         
         if (path.length === 0) {
-          console.log('🚫 No valid path found!');
+          logMovement('🚫 No valid path found!');
           targetDestinationRef.current = null;
           return;
         }
@@ -2985,7 +2843,7 @@ export default function BuildScreen() {
       );
       
       if (path.length === 0) {
-        console.log('🚫 No valid path found or already at destination!');
+        logMovement('🚫 No valid path found or already at destination!');
         targetDestinationRef.current = null;
         return;
       }
@@ -2999,7 +2857,7 @@ export default function BuildScreen() {
     } else {
       // For maps without collision (school), use direct movement
       setIsWalking(true);
-      setCurrentLocation(getLocationName(locationX, locationY));
+      commitCurrentLocation(getLocationName(locationX, locationY));
       
       const halfChar = getCharSize() / 2;
       const targetX = locationX - halfChar;
@@ -3013,18 +2871,16 @@ export default function BuildScreen() {
       
       const duration = Math.max(500, distance * 3);
       
-      setCharacterPosition({ x: locationX, y: locationY });
-      
       const animation = Animated.parallel([
         Animated.timing(animatedX, {
           toValue: targetX,
           duration: duration,
-          useNativeDriver: false,
+          useNativeDriver: true,
         }),
         Animated.timing(animatedY, {
           toValue: targetY,
           duration: duration,
-          useNativeDriver: false,
+          useNativeDriver: true,
         }),
       ]);
       
@@ -3033,10 +2889,14 @@ export default function BuildScreen() {
       animation.start(({ finished }) => {
         if (finished) {
           setIsWalking(false);
+          characterPositionRef.current = { x: locationX, y: locationY };
+          if (characterPosition.x !== locationX || characterPosition.y !== locationY) {
+            setCharacterPosition({ x: locationX, y: locationY });
+          }
           
           const location = getLocationAtPosition(locationX, locationY);
           if (location) {
-            console.log(`✅ Character reached ${location.name}!`);
+            logMovement(`✅ Character reached ${location.name}!`);
             handleLocationAction(location);
           }
         }
@@ -3186,35 +3046,11 @@ export default function BuildScreen() {
       [{ text: 'OK' }]
     );
 
-    const expenseAmountNum = parseFloat(savedAmount);
-    const normalizedCategory = normalizeCategory(savedCategory);
-
-    // ── Optimistic update: update daily task runtime IMMEDIATELY (before DB save) ──
-    // This ensures task completion is detected the instant the user logs an expense,
-    // rather than waiting for the Supabase round-trip to complete.
-    if (gameMode === 'story') {
-      updateDailyTaskRuntimeForActiveDay((dayState) => {
-        dayState.expenseCount = (dayState.expenseCount || 0) + 1;
-        dayState.expenseTotal = (dayState.expenseTotal || 0) + expenseAmountNum;
-        dayState.categoryCounts[normalizedCategory] = (dayState.categoryCounts[normalizedCategory] || 0) + 1;
-        dayState.categoryTotals[normalizedCategory] = (dayState.categoryTotals[normalizedCategory] || 0) + expenseAmountNum;
-        dayState.expenseEntries.push({
-          category: normalizedCategory,
-          amount: expenseAmountNum,
-          note: savedNote || savedSubCategory || savedCategory,
-          source: 'map',
-        });
-        if ((dayState.travelCount || 0) > 0 && CATEGORY_BUDGET_MAP[normalizedCategory] === 'needs') {
-          dayState.needsAfterTravelCount = (dayState.needsAfterTravelCount || 0) + 1;
-        }
-      });
-    }
-
     // Save in background
     try {
       // Use DataContext's addExpense for proper syncing across the app
       const expenseData = {
-        amount: expenseAmountNum,
+        amount: parseFloat(savedAmount),
         category: savedCategory,
         sub_category: savedSubCategory || null,
         note: `${savedNote || savedSubCategory || savedCategory} (at ${currentMap.name})`, // Include location in note
@@ -3231,6 +3067,27 @@ export default function BuildScreen() {
         Alert.alert('Sync Error', 'Your expense may not have been saved. Please check your expenses list.');
       } else {
         console.log('✅ Expense saved successfully via DataContext');
+        
+        const expenseAmountNum = parseFloat(savedAmount);
+        const normalizedCategory = normalizeCategory(savedCategory);
+
+        if (gameMode === 'story') {
+          updateDailyTaskRuntimeForActiveDay((dayState) => {
+            dayState.expenseCount = (dayState.expenseCount || 0) + 1;
+            dayState.expenseTotal = (dayState.expenseTotal || 0) + expenseAmountNum;
+            dayState.categoryCounts[normalizedCategory] = (dayState.categoryCounts[normalizedCategory] || 0) + 1;
+            dayState.categoryTotals[normalizedCategory] = (dayState.categoryTotals[normalizedCategory] || 0) + expenseAmountNum;
+            dayState.expenseEntries.push({
+              category: normalizedCategory,
+              amount: expenseAmountNum,
+              note: savedNote || savedSubCategory || savedCategory,
+              source: 'map',
+            });
+            if ((dayState.travelCount || 0) > 0 && CATEGORY_BUDGET_MAP[normalizedCategory] === 'needs') {
+              dayState.needsAfterTravelCount = (dayState.needsAfterTravelCount || 0) + 1;
+            }
+          });
+        }
         
         // Update category spending tracking (for all levels)
         setCategorySpending(prev => ({
@@ -3376,21 +3233,8 @@ export default function BuildScreen() {
       paddingHorizontal: Math.round(screenWidth * 0.018),
       paddingVertical: screenHeight * 0.007,
       borderRadius: Math.round(screenWidth * 0.035),
-      minWidth: Math.round(screenWidth * 0.1),
+      minWidth: Math.round(screenWidth * 0.23),
       gap: 4,
-    },
-    historyButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: Math.round(screenWidth * 0.018),
-      paddingVertical: screenHeight * 0.007,
-      borderRadius: Math.round(screenWidth * 0.035),
-      minWidth: Math.round(screenWidth * 0.1),
-      gap: 4,
-      backgroundColor: '#3A3A4A',
-      borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.15)',
     },
     dailyTasksButtonText: {
       fontSize: Math.round(screenWidth * 0.026),
@@ -3698,78 +3542,6 @@ export default function BuildScreen() {
       color: '#B0B0B0',
       fontSize: Math.round(screenWidth * 0.032),
       marginTop: 4,
-    },
-    historySheetOverlay: {
-      flex: 1,
-      justifyContent: 'flex-end',
-      backgroundColor: 'rgba(0,0,0,0.45)',
-    },
-    historySheetBackdrop: {
-      ...StyleSheet.absoluteFillObject,
-    },
-    historySheet: {
-      backgroundColor: '#1F1F33',
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
-      paddingHorizontal: Math.round(screenWidth * 0.05),
-      paddingTop: 10,
-      paddingBottom: screenHeight * 0.035,
-      borderTopWidth: 1,
-      borderColor: 'rgba(255,255,255,0.15)',
-      maxHeight: screenHeight * 0.55,
-    },
-    historySheetHandle: {
-      width: Math.round(screenWidth * 0.14),
-      height: 5,
-      borderRadius: 3,
-      backgroundColor: 'rgba(255,255,255,0.28)',
-      alignSelf: 'center',
-      marginBottom: 12,
-    },
-    historySheetHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 10,
-    },
-    historySheetTitle: {
-      color: '#F5DEB3',
-      fontSize: Math.round(screenWidth * 0.045),
-      fontWeight: '700',
-    },
-    historyDayItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      backgroundColor: 'rgba(255,255,255,0.06)',
-      borderRadius: 12,
-      paddingHorizontal: Math.round(screenWidth * 0.04),
-      paddingVertical: screenHeight * 0.018,
-      marginBottom: 8,
-      borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.1)',
-    },
-    historyDayItemLeft: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-    },
-    historyDayItemTitle: {
-      color: '#E5E2E1',
-      fontSize: Math.round(screenWidth * 0.04),
-      fontWeight: '600',
-    },
-    historyDayItemSubtitle: {
-      color: '#BFC3D6',
-      fontSize: Math.round(screenWidth * 0.03),
-      marginTop: 2,
-    },
-    historySheetEmpty: {
-      color: '#B0B0B0',
-      fontSize: Math.round(screenWidth * 0.034),
-      textAlign: 'center',
-      marginTop: 20,
-      fontStyle: 'italic',
     },
     dailyTaskPanel: {
       marginTop: 10,
@@ -4473,9 +4245,7 @@ export default function BuildScreen() {
   };
 
   // Render location collision overlays (invisible — events trigger on bounds only)
-  const renderLocationOverlays = () => {
-    return null;
-  };
+  const renderLocationOverlays = useMemo(() => null, []);
 
   // Calculate map display dimensions to match resizeMode="contain" layout
   const getMapDisplayDimensions = useCallback(() => {
@@ -4500,15 +4270,18 @@ export default function BuildScreen() {
   }, [contentSize.width, contentSize.height]);
 
   // Render wall tile overlays above the character to prevent sprite overlapping walls
-  const renderWallOverlays = () => {
+  const renderWallOverlays = useMemo(() => {
     if (!collisionSystem.initialized || !currentMap.image) return null;
 
     const dims = getMapDisplayDimensions();
     if (!dims || dims.tileDisplaySize <= 0) return null;
 
+    const charPosition = characterPositionRef.current;
+    if (!charPosition) return null;
+
     // Get character's current tile position
     const charTile = collisionSystem.pixelsToTiles(
-      characterPosition.x, characterPosition.y,
+      charPosition.x, charPosition.y,
       contentSize.width, contentSize.height
     );
 
@@ -4574,10 +4347,10 @@ export default function BuildScreen() {
     }
 
     return overlays;
-  };
+  }, [currentMapId, currentMap.image, contentSize.width, contentSize.height, getMapDisplayDimensions]);
 
   // ─── Render NPCs (static workers) on the current map ──────────────
-  const renderNPCs = () => {
+  const renderNPCs = useMemo(() => {
     const npcs = NPC_POSITIONS[currentMapId];
     if (!npcs || npcs.length === 0 || !collisionSystem.initialized) return null;
 
@@ -4594,11 +4367,11 @@ export default function BuildScreen() {
     const scaledFrameH = FRAME_H * spriteScale;
     const halfChar = charSize / 2;
 
-    // Get character tile for depth sorting
-    const charTile = collisionSystem.pixelsToTiles(
-      characterPosition.x, characterPosition.y,
+    const charPosition = characterPositionRef.current;
+    const charTile = charPosition ? collisionSystem.pixelsToTiles(
+      charPosition.x, charPosition.y,
       contentSize.width, contentSize.height
-    );
+    ) : { x: 0, y: 0 };
 
     return npcs.map((npc) => {
       const spriteSource = NPC_SPRITES[npc.sprite];
@@ -4651,60 +4424,60 @@ export default function BuildScreen() {
         </View>
       );
     });
-  };
+  }, [currentMapId, contentSize.width, contentSize.height, getCharSize, getMapDisplayDimensions]);
+
+  const renderCharacter = useMemo(() => {
+    const directionOffset = SPRITE_CONFIG.directions[characterDirection] ?? SPRITE_CONFIG.directions.down;
+    const characterSprite = CHARACTER_SPRITES[selectedCharacter];
+    const charSize = getCharSize();
+    const CHAR_VISUAL_SCALE = 0.9; // Visual scale: <1 = smaller, 1 = full tile size
+    const FRAME_W = 48;  // Sprite frame width in source image
+    const FRAME_H = 90;  // Sprite frame height in source image
+    const TOTAL_FRAMES = 24;
+    const spriteScale = (charSize * CHAR_VISUAL_SCALE) / FRAME_W;
+    const scaledFrameW = FRAME_W * spriteScale;
+    const scaledFrameH = FRAME_H * spriteScale;
+    const spriteTranslateX = Animated.multiply(
+      Animated.add(spriteFrameAnim, directionOffset),
+      -FRAME_W * spriteScale
+    );
+
+    return (
+      <Animated.View
+        style={[
+          styles.characterContainer,
+          {
+            width: charSize,
+            height: charSize,
+            transform: [
+              { translateX: animatedX },
+              { translateY: animatedY },
+              { scale: walkingPulse },
+            ],
+          },
+        ]}
+      >
+        <View style={{
+          width: scaledFrameW,
+          height: scaledFrameH,
+          overflow: 'hidden',
+        }}>
+          <Animated.Image
+            source={characterSprite.sprite}
+            style={{
+              width: FRAME_W * TOTAL_FRAMES * spriteScale,
+              height: FRAME_H * spriteScale,
+              transform: [{ translateX: spriteTranslateX }],
+            }}
+            resizeMode="cover"
+          />
+        </View>
+      </Animated.View>
+    );
+  }, [animatedX, animatedY, walkingPulse, spriteFrameAnim, characterDirection, selectedCharacter, getCharSize]);
 
   // Render map content based on current map
   const renderMapContent = () => {
-    // Calculate sprite frame offset
-    // Use ?? instead of || because 'right' direction has offset 0, and 0 || fallback would incorrectly use fallback
-    const directionOffset = SPRITE_CONFIG.directions[characterDirection] ?? SPRITE_CONFIG.directions.down;
-    const frameOffset = directionOffset + currentFrame;
-    const spriteX = -(frameOffset * SPRITE_CONFIG.frameWidth);
-    
-    const characterSprite = CHARACTER_SPRITES[selectedCharacter];
-    
-    const renderCharacter = () => {
-      const charSize = getCharSize();
-      const CHAR_VISUAL_SCALE = 0.9; // Visual scale: <1 = smaller, 1 = full tile size
-      const FRAME_W = 48;  // Sprite frame width in source image
-      const FRAME_H = 90;  // Sprite frame height in source image
-      const TOTAL_FRAMES = 24;
-      const spriteScale = (charSize * CHAR_VISUAL_SCALE) / FRAME_W;
-      const scaledFrameW = FRAME_W * spriteScale;
-      const scaledFrameH = FRAME_H * spriteScale;
-
-      return (
-        <Animated.View
-          style={[
-            styles.characterContainer,
-            {
-              width: charSize,
-              height: charSize,
-              left: animatedX,
-              top: animatedY,
-              transform: [{ scale: walkingPulse }],
-            },
-          ]}
-        >
-          <View style={{
-            width: scaledFrameW,
-            height: scaledFrameH,
-            overflow: 'hidden',
-          }}>
-            <Image
-              source={characterSprite.sprite}
-              style={{
-                width: FRAME_W * TOTAL_FRAMES * spriteScale,
-                height: FRAME_H * spriteScale,
-                transform: [{ translateX: spriteX * spriteScale }],
-              }}
-              resizeMode="cover"
-            />
-          </View>
-        </Animated.View>
-      );
-    };
-    
     if (currentMap.image) {
       return (
         <ImageBackground
@@ -4715,16 +4488,16 @@ export default function BuildScreen() {
           <TouchableWithoutFeedback onPress={handleScreenPress}>
             <View style={styles.contentContainer} onLayout={handleContentLayout}>
               {/* Location Collision Overlays - Debug visualization */}
-              {renderLocationOverlays()}
+              {renderLocationOverlays}
 
               {/* NPC Workers */}
-              {renderNPCs()}
+              {renderNPCs}
 
               {/* Character with Sprite Animation */}
-              {renderCharacter()}
+              {renderCharacter}
 
               {/* Wall tile overlays - rendered above character to prevent wall overlap */}
-              {renderWallOverlays()}
+              {renderWallOverlays}
             </View>
           </TouchableWithoutFeedback>
         </ImageBackground>
@@ -4736,7 +4509,7 @@ export default function BuildScreen() {
           <TouchableWithoutFeedback onPress={handleScreenPress}>
             <View style={styles.contentContainer} onLayout={handleContentLayout}>
               {/* Location Collision Overlays - Debug visualization */}
-              {renderLocationOverlays()}
+              {renderLocationOverlays}
 
               {/* Map placeholder info */}
               <View style={{ position: 'absolute', top: contentSize.height * 0.15, alignSelf: 'center', alignItems: 'center' }}>
@@ -4745,11 +4518,8 @@ export default function BuildScreen() {
                 <Text style={styles.placeholderMapHint}>Tap to move around</Text>
               </View>
 
-              {/* NPC Workers */}
-              {renderNPCs()}
-
               {/* Character with Sprite Animation */}
-              {renderCharacter()}
+              {renderCharacter}
             </View>
           </TouchableWithoutFeedback>
         </View>
@@ -8238,19 +8008,6 @@ export default function BuildScreen() {
   const storyUserType = profileUserType;
   const activeStoryDayDialogue = activeStoryDayConfigForUi?.koinDialogue?.[storyUserType] || '';
   const visibleTravelDestinations = filterStoryModeDestinations(travelDestinations);
-  const remainingWeeklyBudget = getRemainingWeeklyBudget();
-  const dailyObjectives = activeStoryDayConfigForUi?.tasks?.map((task) => ({
-    id: task.id,
-    label: task.requiredAppAction,
-    completed: !!dailyTaskCompletion[task.conditionKey],
-  })) || [];
-  const dailyXpEarned = activeStoryDayConfigForUi
-    ? activeStoryDayConfigForUi.tasks.reduce(
-      (sum, task) => sum + (dailyTaskCompletion[task.conditionKey] ? (task.reward?.xp || 0) : 0),
-      0,
-    )
-    : 0;
-  const unlockedAchievementTitle = newAchievement?.title || null;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -8312,19 +8069,11 @@ export default function BuildScreen() {
                 <Text style={styles.giveUpButtonText}>Give Up</Text>
               </TouchableOpacity>*/}
               <TouchableOpacity
-                style={styles.historyButton}
-                onPress={() => setShowHistoryModal(true)}
-                accessibilityRole="button"
-                accessibilityLabel="History"
-              >
-                <Ionicons name="calendar-outline" size={22} color="#F5DEB3" />
-              </TouchableOpacity>
-              <TouchableOpacity
                 style={[styles.dailyTasksButton, { backgroundColor: dailyTaskButtonColor }]}
                 onPress={() => setShowDailyTasksModal(true)}
               >
-                <Ionicons name="list" size={24} color={dailyTaskButtonTextColor} />
-                {/* <Text style={[styles.dailyTasksButtonText, { color: dailyTaskButtonTextColor }]}>Daily Tasks</Text> */}
+                <Ionicons name="list" size={16} color={dailyTaskButtonTextColor} />
+                <Text style={[styles.dailyTasksButtonText, { color: dailyTaskButtonTextColor }]}>Daily Tasks</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -8979,28 +8728,6 @@ export default function BuildScreen() {
                       setWeeklySpending(prev => prev + savedAmount);
                     }
 
-                    // ── Optimistic update: update daily task runtime IMMEDIATELY (before DB save) ──
-                    // This ensures task completion is detected the instant the user logs an expense,
-                    // rather than waiting for the Supabase round-trip to complete.
-                    if (gameMode === 'story') {
-                      const normalizedCategory = normalizeCategory(savedCategory);
-                      updateDailyTaskRuntimeForActiveDay((dayState) => {
-                        dayState.expenseCount = (dayState.expenseCount || 0) + 1;
-                        dayState.expenseTotal = (dayState.expenseTotal || 0) + savedAmount;
-                        dayState.categoryCounts[normalizedCategory] = (dayState.categoryCounts[normalizedCategory] || 0) + 1;
-                        dayState.categoryTotals[normalizedCategory] = (dayState.categoryTotals[normalizedCategory] || 0) + savedAmount;
-                        dayState.expenseEntries.push({
-                          category: normalizedCategory,
-                          amount: savedAmount,
-                          note: savedNote || savedSubCategory || savedCategory,
-                          source: 'notebook',
-                        });
-                        if ((dayState.travelCount || 0) > 0 && CATEGORY_BUDGET_MAP[normalizedCategory] === 'needs') {
-                          dayState.needsAfterTravelCount = (dayState.needsAfterTravelCount || 0) + 1;
-                        }
-                      });
-                    }
-
                     // Save in background — non-blocking
                     try {
                       const expenseData = {
@@ -9019,6 +8746,25 @@ export default function BuildScreen() {
                         Alert.alert('Sync Error', 'Your expense may not have been saved. Please check your expenses list.');
                       } else {
                         console.log('✅ Notebook: Expense saved successfully');
+
+                        if (gameMode === 'story') {
+                          const normalizedCategory = normalizeCategory(savedCategory);
+                          updateDailyTaskRuntimeForActiveDay((dayState) => {
+                            dayState.expenseCount = (dayState.expenseCount || 0) + 1;
+                            dayState.expenseTotal = (dayState.expenseTotal || 0) + savedAmount;
+                            dayState.categoryCounts[normalizedCategory] = (dayState.categoryCounts[normalizedCategory] || 0) + 1;
+                            dayState.categoryTotals[normalizedCategory] = (dayState.categoryTotals[normalizedCategory] || 0) + savedAmount;
+                            dayState.expenseEntries.push({
+                              category: normalizedCategory,
+                              amount: savedAmount,
+                              note: savedNote || savedSubCategory || savedCategory,
+                              source: 'notebook',
+                            });
+                            if ((dayState.travelCount || 0) > 0 && CATEGORY_BUDGET_MAP[normalizedCategory] === 'needs') {
+                              dayState.needsAfterTravelCount = (dayState.needsAfterTravelCount || 0) + 1;
+                            }
+                          });
+                        }
 
                         // Persist session spending to Supabase (fire-and-forget)
                         if (activeSessionId && (gameMode === 'story' || gameMode === 'custom')) {
@@ -9226,98 +8972,6 @@ export default function BuildScreen() {
           </View>
         </View>
       </Modal>
-
-      <EndOfDayReportModal
-        isVisible={showEndOfDayReport}
-        weeklyBudgetRemaining={remainingWeeklyBudget}
-        spentToday={todaySpending}
-        dailyTasks={dailyObjectives}
-        xpEarned={dailyXpEarned}
-        currentXP={currentXP}
-        xpForNextLevel={xpForNextLevel}
-        unlockedAchievement={unlockedAchievementTitle}
-        koinInsight={koinInsight}
-        onStartNextDay={handleStartNextDay}
-      />
-
-      {/* Day Report History Modal */}
-      <Modal
-        visible={showHistoryModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowHistoryModal(false)}
-      >
-        <View style={styles.historySheetOverlay}>
-          <TouchableOpacity
-            style={styles.historySheetBackdrop}
-            activeOpacity={1}
-            onPress={() => setShowHistoryModal(false)}
-          />
-          <View style={styles.historySheet}>
-            <View style={styles.historySheetHandle} />
-            <View style={styles.historySheetHeader}>
-              <Text style={styles.historySheetTitle}>Day Report History</Text>
-              <TouchableOpacity onPress={() => setShowHistoryModal(false)}>
-                <Ionicons name="close" size={24} color="#F5DEB3" />
-              </TouchableOpacity>
-            </View>
-
-            {dayReportHistory.length === 0 ? (
-              <Text style={styles.historySheetEmpty}>
-                No completed days yet. Finish a day to see your report here.
-              </Text>
-            ) : (
-              <FlatList
-                data={dayReportHistory}
-                keyExtractor={(item) => item.id}
-                showsVerticalScrollIndicator={false}
-                renderItem={({ item }) => {
-                  const tasksCompleted = (item.dailyTasks || []).filter((t) => t.completed).length;
-                  const totalTasks = (item.dailyTasks || []).length;
-                  return (
-                    <TouchableOpacity
-                      style={styles.historyDayItem}
-                      onPress={() => handleSelectHistoryReport(item)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={styles.historyDayItemLeft}>
-                        <Ionicons name="document-text-outline" size={22} color="#ffb68b" />
-                        <View>
-                          <Text style={styles.historyDayItemTitle}>{item.title}</Text>
-                          <Text style={styles.historyDayItemSubtitle}>
-                            Tasks: {tasksCompleted}/{totalTasks} · +{item.xpEarned || 0} XP
-                          </Text>
-                        </View>
-                      </View>
-                      <Ionicons name="chevron-forward" size={18} color="#BFC3D6" />
-                    </TouchableOpacity>
-                  );
-                }}
-              />
-            )}
-          </View>
-        </View>
-      </Modal>
-
-      {/* History View-Only EndOfDayReportModal */}
-      {selectedHistoryReport && (
-        <EndOfDayReportModal
-          isVisible={!!selectedHistoryReport}
-          weeklyBudgetRemaining={selectedHistoryReport.weeklyBudgetRemaining}
-          spentToday={selectedHistoryReport.spentToday}
-          dailyTasks={selectedHistoryReport.dailyTasks}
-          xpEarned={selectedHistoryReport.xpEarned}
-          currentXP={selectedHistoryReport.currentXP}
-          xpForNextLevel={selectedHistoryReport.xpForNextLevel}
-          unlockedAchievement={selectedHistoryReport.unlockedAchievement}
-          koinInsight={selectedHistoryReport.koinInsight}
-          onStartNextDay={handleCloseHistoryReport}
-          viewOnly={true}
-          onClose={handleCloseHistoryReport}
-          title={selectedHistoryReport.title}
-          actionLabel="Close"
-        />
-      )}
 
       {/* Custom Mode Settings Modal */}
       {gameMode === 'custom' && renderCustomSettingsModal()}

@@ -6,6 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { supabase } from '../../config/supabase';
+import { getSessionSafe } from '../../services/AuthSessionHelper';
 
 const { width } = Dimensions.get('window');
 
@@ -92,20 +94,27 @@ const BudgetGoalsScreen = ({ navigation }) => {
     if (!validateInput()) return;
 
     try {
-      const userInfo = await AsyncStorage.getItem('userInfo');
-      if (!userInfo) {
-        Alert.alert('Error', 'User information not found. Please log in again.');
-        navigation.replace('Auth');
+      // ── Wait for a verified Supabase session to prevent RLS errors ──
+      const sessionResult = await getSessionSafe({ force: true, retry: 2, retryDelayMs: 1000 });
+      if (sessionResult.rateLimited) {
+        Alert.alert(
+          'Network Busy',
+          'Authentication is being rate limited. Please wait a moment and try again.',
+          [{ text: 'OK' }]
+        );
         return;
       }
 
-      const parsedUserInfo = JSON.parse(userInfo);
-      if (!parsedUserInfo.id) {
-        Alert.alert('Error', 'User ID not found. Please log in again.');
-        navigation.replace('Auth');
+      if (sessionResult.error || !sessionResult.session?.user?.id) {
+        Alert.alert(
+          'Session Not Ready',
+          'Your login session is still being established. Please wait a moment and try again.',
+          [{ text: 'OK' }]
+        );
         return;
       }
 
+      const userId = sessionResult.session.user.id;
       const monthly = parseFloat(monthlyBudget);
       const categories = isEmployee
         ? buildEmployeeCategories(monthly)
@@ -113,28 +122,46 @@ const BudgetGoalsScreen = ({ navigation }) => {
 
       const budgetData = {
         monthly,
-        userId: parsedUserInfo.id,
+        userId,
         categories
       };
 
       await updateBudget(budgetData);
 
-      const { data: { session } } = await import('../../config/supabase').then(m => m.supabase.auth.getSession());
-      if (session && session.user) {
-        await import('../../config/supabase').then(m => m.supabase
+      // Mark onboarding complete in profile
+      try {
+        await supabase
           .from('profiles')
           .update({ onboarding_completed: true })
-          .eq('id', session.user.id)
-        );
+          .eq('id', userId);
+      } catch (profileErr) {
+        console.warn('Could not update onboarding flag in profile (non-critical):', profileErr);
       }
 
       await AsyncStorage.setItem('onboardingComplete', 'true');
+      await AsyncStorage.setItem(`hasOnboarded_${userId}`, 'true');
       if (global.setHasOnboarded) global.setHasOnboarded(true);
 
       navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } catch (error) {
-      Alert.alert('Error', 'Failed to save budget. Please try again.');
       console.error('Error in BudgetGoalsScreen:', error);
+      Alert.alert(
+        'Budget Setup Failed',
+        'We couldn\'t save your budget right now. This does NOT affect your account.\n\nWould you like to retry?',
+        [
+          { text: 'Retry', onPress: () => handleComplete() },
+          {
+            text: 'Skip for Now',
+            style: 'cancel',
+            onPress: async () => {
+              // Let the user into the app with defaults — they can set budget later
+              await AsyncStorage.setItem('onboardingComplete', 'true');
+              if (global.setHasOnboarded) global.setHasOnboarded(true);
+              navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+            }
+          },
+        ]
+      );
     }
   };
 

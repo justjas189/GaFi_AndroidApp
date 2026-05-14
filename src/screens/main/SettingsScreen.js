@@ -20,6 +20,7 @@ import { AuthContext } from '../../context/AuthContext';
 import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
 import { supabase } from '../../config/supabase';
+import { getSessionSafe } from '../../services/AuthSessionHelper';
 
 const SettingsScreen = ({ navigation }) => {
   const { logout, userInfo } = useContext(AuthContext);
@@ -135,8 +136,12 @@ const SettingsScreen = ({ navigation }) => {
           style: 'destructive',
           onPress: async () => {
             try {
-              const { data: { session } } = await supabase.auth.getSession();
-              const userId = session?.user?.id;
+              const sessionResult = await getSessionSafe({ force: true, retry: 1, retryDelayMs: 500 });
+              if (sessionResult.rateLimited) {
+                Alert.alert('Network Busy', 'Please wait a moment and try again.');
+                return;
+              }
+              const userId = sessionResult.session?.user?.id;
               // Clear locally-cached keys (keep auth tokens so user stays signed in)
               const allKeys = await AsyncStorage.getAllKeys();
               const keysToRemove = allKeys.filter(
@@ -144,7 +149,8 @@ const SettingsScreen = ({ navigation }) => {
                   !k.startsWith('userToken') &&
                   !k.startsWith('userInfo') &&
                   !k.startsWith('hasOnboarded_') &&
-                  !k.startsWith('theme')
+                  !k.startsWith('theme') &&
+                  !k.startsWith('sb-') // Preserve Supabase session token
               );
               if (keysToRemove.length > 0) {
                 await AsyncStorage.multiRemove(keysToRemove);
@@ -195,13 +201,17 @@ const SettingsScreen = ({ navigation }) => {
     try {
       setDeletingAccount(true);
 
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      const sessionResult = await getSessionSafe({ force: true, retry: 1, retryDelayMs: 500 });
+      if (sessionResult.rateLimited) {
+        Alert.alert('Network Busy', 'Please wait a moment and try again.');
+        return;
+      }
+      if (!sessionResult.session) {
         Alert.alert('Error', 'You are not signed in.');
         return;
       }
 
-      const userId = session.user.id;
+      const userId = sessionResult.session.user.id;
 
       // Delete user data from related tables (order matters for foreign keys)
       const tablesToClear = [
