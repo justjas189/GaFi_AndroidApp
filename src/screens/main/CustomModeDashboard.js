@@ -248,7 +248,7 @@ export default function CustomModeDashboard({ navigation }) {
   const [transactions, setTransactions] = useState([]);
   const [showAddWallet, setShowAddWallet] = useState(false);
   const [newWalletName, setNewWalletName] = useState('');
-  const [newWalletAmount, setNewWalletAmount] = useState('');
+  const [newWalletLocationType, setNewWalletLocationType] = useState('');
   const [showTxnModal, setShowTxnModal] = useState(false);
   const [txnType, setTxnType] = useState('deposit');
   const [selectedWallet, setSelectedWallet] = useState(null);
@@ -394,19 +394,50 @@ export default function CustomModeDashboard({ navigation }) {
   const fetchSavingsData = useCallback(async () => {
     if (!user?.id) return;
     try {
-      const { data, error } = await supabase
+      // Fetch accounts
+      const { data: accounts, error: accErr } = await supabase
+        .from('savings_accounts_custom_mode')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      if (accErr) throw accErr;
+
+      // Fetch logs
+      const { data: logs, error: logErr } = await supabase
         .from('savings_logs_custom_mode')
         .select('*')
         .eq('user_id', user.id)
         .order('logged_at', { ascending: false });
-      if (error) throw error;
+      if (logErr) throw logErr;
 
-      const logs = data || [];
+      // Compute balances per account
+      const balanceMap = {};
+      (logs || []).forEach((log) => {
+        const aid = log.account_id;
+        if (aid) {
+          balanceMap[aid] = (balanceMap[aid] || 0) + (parseFloat(log.amount) || 0);
+        }
+      });
 
-      // Map logs into transaction-like objects so renderTransactionRow still works
+      // Build wallet objects from accounts
+      const accountMap = {};
+      const walletsData = (accounts || []).map((acc) => {
+        accountMap[acc.id] = acc;
+        return {
+          id: acc.id,
+          name: acc.name,
+          location_type: acc.location_type,
+          current_amount: balanceMap[acc.id] || 0,
+          created_at: acc.created_at,
+        };
+      });
+      setWallets(walletsData);
+
+      // Map logs to transaction-like objects
       setTransactions(
-        logs.map((log) => {
+        (logs || []).filter((l) => l.account_id).map((log) => {
           const raw = parseFloat(log.amount) || 0;
+          const acc = accountMap[log.account_id];
           return {
             id: log.id,
             amount: Math.abs(raw),
@@ -414,19 +445,11 @@ export default function CustomModeDashboard({ navigation }) {
             transaction_type: raw >= 0 ? 'deposit' : 'withdrawal',
             note: null,
             created_at: log.logged_at,
-            savings_goals: { title: log.location },
+            savings_goals: { title: acc?.name || 'Unknown' },
+            location_type: acc?.location_type,
           };
         }),
       );
-
-      // Derive wallet-like aggregates per location
-      const locMap = {};
-      logs.forEach((log) => {
-        const loc = log.location;
-        if (!locMap[loc]) locMap[loc] = { id: loc, title: loc, current_amount: 0 };
-        locMap[loc].current_amount += parseFloat(log.amount) || 0;
-      });
-      setWallets(Object.values(locMap));
     } catch (err) {
       console.warn('fetchSavingsData:', err.message);
     }
@@ -657,24 +680,23 @@ export default function CustomModeDashboard({ navigation }) {
 
   const handleAddWallet = async () => {
     if (!newWalletName.trim()) {
-      Alert.alert('Invalid', 'Please select a savings location.');
+      Alert.alert('Invalid', 'Please enter a name for the savings account.');
       return;
     }
-    const amt = parseFloat(newWalletAmount);
-    if (isNaN(amt) || amt <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid amount to log.');
+    if (!newWalletLocationType) {
+      Alert.alert('Invalid', 'Please select a savings location type.');
       return;
     }
     try {
-      const { error } = await supabase.from('savings_logs_custom_mode').insert({
+      const { error } = await supabase.from('savings_accounts_custom_mode').insert({
         user_id: user.id,
-        amount: amt,
-        location: newWalletName.trim(),
+        name: newWalletName.trim(),
+        location_type: newWalletLocationType,
       });
       if (error) throw error;
-      Alert.alert('Saved!', `${formatCurrency(amt)} logged to ${newWalletName.trim()}`);
+      Alert.alert('Account Added', `${newWalletName.trim()} added successfully`);
       setNewWalletName('');
-      setNewWalletAmount('');
+      setNewWalletLocationType('');
       setShowAddWallet(false);
       await fetchSavingsData();
     } catch (err) {
@@ -692,7 +714,7 @@ export default function CustomModeDashboard({ navigation }) {
     if (txnType === 'withdrawal' && amt > currentBalance) {
       Alert.alert(
         'Insufficient Balance',
-        `${selectedWallet.title} only has ${formatCurrency(currentBalance)}.`,
+        `${selectedWallet.name} only has ${formatCurrency(currentBalance)}.`,
       );
       return;
     }
@@ -702,11 +724,12 @@ export default function CustomModeDashboard({ navigation }) {
       const { error } = await supabase.from('savings_logs_custom_mode').insert({
         user_id: user.id,
         amount: ledgerAmount,
-        location: selectedWallet.title,
+        location: selectedWallet.name,
+        account_id: selectedWallet.id,
       });
       if (error) throw error;
       const label = txnType === 'deposit' ? 'deposited to' : 'withdrawn from';
-      Alert.alert('Success', `${formatCurrency(amt)} ${label} ${selectedWallet.title}`);
+      Alert.alert('Success', `${formatCurrency(amt)} ${label} ${selectedWallet.name}`);
       setTxnAmount('');
       setTxnNote('');
       setShowTxnModal(false);
@@ -720,9 +743,9 @@ export default function CustomModeDashboard({ navigation }) {
   const handleDeleteWallet = (wallet) => {
     const bal = parseFloat(wallet.current_amount) || 0;
     const msg = bal > 0
-      ? `"${wallet.title}" has ${formatCurrency(bal)} in logged savings. Delete all entries?`
-      : `Delete all "${wallet.title}" entries?`;
-    Alert.alert('Delete Location Logs', msg, [
+      ? `"${wallet.name}" has ${formatCurrency(bal)} in savings. Delete this account and all its transactions?`
+      : `Delete "${wallet.name}" and all its transactions?`;
+    Alert.alert('Delete Account', msg, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -730,10 +753,9 @@ export default function CustomModeDashboard({ navigation }) {
         onPress: async () => {
           try {
             const { error } = await supabase
-              .from('savings_logs_custom_mode')
+              .from('savings_accounts_custom_mode')
               .delete()
-              .eq('user_id', user.id)
-              .eq('location', wallet.title);
+              .eq('id', wallet.id);
             if (error) throw error;
             await fetchSavingsData();
           } catch (err) {
@@ -757,7 +779,7 @@ export default function CustomModeDashboard({ navigation }) {
     });
   };
 
-  const fabLabel = { budgeting: 'Log Expense', goals: 'New Goal', saving: 'Log Savings' };
+  const fabLabel = { budgeting: 'Log Expense', goals: 'New Goal', saving: 'Add Account' };
 
   // ── Styles ──────────────────────────────────────────────────────────
 
@@ -970,8 +992,9 @@ export default function CustomModeDashboard({ navigation }) {
   };
 
   const renderWalletCard = (wallet) => {
-    const meta = WALLET_META[wallet.title] || DEFAULT_WALLET;
+    const meta = WALLET_META[wallet.location_type] || DEFAULT_WALLET;
     const balance = parseFloat(wallet.current_amount) || 0;
+    const hasBalance = balance > 0;
     return (
       <View key={wallet.id} style={s.walletCard}>
         <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
@@ -979,8 +1002,9 @@ export default function CustomModeDashboard({ navigation }) {
             <Ionicons name={meta.icon} size={22} color={meta.color} />
           </View>
           <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>{wallet.title}</Text>
-            <Text style={{ fontSize: 16, fontWeight: '800', color: balance > 0 ? colors.success : colors.textSecondary, marginTop: 2 }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>{wallet.name}</Text>
+            <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 1 }}>{wallet.location_type}</Text>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: hasBalance ? colors.success : colors.textSecondary, marginTop: 2 }}>
               {formatCurrency(balance)}
             </Text>
           </View>
@@ -1000,7 +1024,7 @@ export default function CustomModeDashboard({ navigation }) {
             <Text style={{ fontSize: 12, fontWeight: '600', color: colors.success, marginLeft: 4 }}>Deposit</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[s.walletActionBtn, { backgroundColor: colors.error + '15' }]}
+            style={[s.walletActionBtn, { backgroundColor: colors.error + '15' }, !hasBalance && { opacity: 0.35 }]}
             onPress={() => {
               setSelectedWallet(wallet);
               setTxnType('withdrawal');
@@ -1008,6 +1032,7 @@ export default function CustomModeDashboard({ navigation }) {
               setTxnNote('');
               setShowTxnModal(true);
             }}
+            disabled={!hasBalance}
           >
             <Ionicons name="remove" size={16} color={colors.error} />
             <Text style={{ fontSize: 12, fontWeight: '600', color: colors.error, marginLeft: 4 }}>Withdraw</Text>
@@ -1026,7 +1051,7 @@ export default function CustomModeDashboard({ navigation }) {
   const renderTransactionRow = (txn) => {
     const isDeposit = txn.transaction_type === 'deposit';
     const walletName = txn.savings_goals?.title || 'Unknown';
-    const meta = WALLET_META[walletName] || DEFAULT_WALLET;
+    const meta = WALLET_META[txn.location_type] || DEFAULT_WALLET;
     return (
       <View key={txn.id} style={s.txnRow}>
         <View style={[s.txnIconWrap, { backgroundColor: (isDeposit ? colors.success : colors.error) + '15' }]}>
@@ -1395,12 +1420,12 @@ export default function CustomModeDashboard({ navigation }) {
       <View style={s.section}>
         <View style={s.sectionHeader}>
           <Ionicons name="wallet" size={20} color={colors.primary} />
-          <Text style={s.sectionTitle}>Savings Locations</Text>
+          <Text style={s.sectionTitle}>Savings Accounts</Text>
         </View>
         {wallets.length === 0 ? (
           <View style={s.emptyState}>
             <Ionicons name="wallet-outline" size={40} color={colors.textSecondary} />
-            <Text style={s.emptyText}>No wallets yet — tap + to add one</Text>
+            <Text style={s.emptyText}>No accounts yet — tap + to add one</Text>
           </View>
         ) : (
           <View style={{ gap: 12 }}>{wallets.map(renderWalletCard)}</View>
@@ -1770,21 +1795,30 @@ export default function CustomModeDashboard({ navigation }) {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── Add Wallet Modal ───────────────────────────────────────── */}
+      {/* ── Add Account Modal ──────────────────────────────────────── */}
       <Modal visible={showAddWallet} transparent animationType="slide" onRequestClose={() => setShowAddWallet(false)}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={s.modalOverlay}>
             <View style={s.modalCard}>
-              <Text style={s.modalTitle}>Log Savings</Text>
+              <Text style={s.modalTitle}>Add Savings Account</Text>
               <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 16 }}>
-                Pick where you saved and enter the amount.
+                Name your account and pick where it's kept.
               </Text>
 
-              <Text style={s.inputLabel}>Savings Location</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+              <Text style={s.inputLabel}>Account Name</Text>
+              <TextInput
+                style={s.input}
+                placeholder="e.g., BDO Savings, GCash, Piggy Bank"
+                placeholderTextColor={colors.placeholder}
+                value={newWalletName}
+                onChangeText={setNewWalletName}
+              />
+
+              <Text style={[s.inputLabel, { marginTop: 14 }]}>Location Type</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
                 {WALLET_PRESETS.map((name) => {
                   const meta = WALLET_META[name] || DEFAULT_WALLET;
-                  const selected = newWalletName === name;
+                  const selected = newWalletLocationType === name;
                   return (
                     <TouchableOpacity
                       key={name}
@@ -1798,7 +1832,7 @@ export default function CustomModeDashboard({ navigation }) {
                         borderWidth: 1.5,
                         borderColor: selected ? meta.color : colors.border,
                       }}
-                      onPress={() => setNewWalletName(name)}
+                      onPress={() => setNewWalletLocationType(name)}
                     >
                       <Ionicons name={meta.icon} size={16} color={selected ? '#FFF' : meta.color} style={{ marginRight: 6 }} />
                       <Text style={{ fontSize: 13, fontWeight: selected ? '700' : '500', color: selected ? '#FFF' : colors.text }}>
@@ -1809,22 +1843,12 @@ export default function CustomModeDashboard({ navigation }) {
                 })}
               </View>
 
-              <Text style={s.inputLabel}>Amount (₱)</Text>
-              <TextInput
-                style={s.input}
-                placeholder="0.00"
-                placeholderTextColor={colors.placeholder}
-                keyboardType="numeric"
-                value={newWalletAmount}
-                onChangeText={setNewWalletAmount}
-              />
-
               <View style={s.modalActions}>
-                <TouchableOpacity style={s.modalCancelBtn} onPress={() => { setShowAddWallet(false); setNewWalletName(''); setNewWalletAmount(''); }}>
+                <TouchableOpacity style={s.modalCancelBtn} onPress={() => { setShowAddWallet(false); setNewWalletName(''); setNewWalletLocationType(''); }}>
                   <Text style={s.modalCancelText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={s.modalConfirmBtn} onPress={handleAddWallet}>
-                  <Text style={s.modalConfirmText}>Log Savings</Text>
+                  <Text style={s.modalConfirmText}>Add Account</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1838,7 +1862,7 @@ export default function CustomModeDashboard({ navigation }) {
           <View style={s.modalOverlay}>
             <View style={s.modalCard}>
               <Text style={s.modalTitle}>
-                {txnType === 'deposit' ? 'Deposit to' : 'Withdraw from'} "{selectedWallet?.title}"
+                {txnType === 'deposit' ? 'Deposit to' : 'Withdraw from'} "{selectedWallet?.name}"
               </Text>
               {selectedWallet && (
                 <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 12 }}>
