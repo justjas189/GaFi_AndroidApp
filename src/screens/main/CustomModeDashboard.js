@@ -85,7 +85,7 @@ const WALLET_META = {
 const DEFAULT_WALLET = { icon: 'wallet', color: '#795548' };
 const WALLET_PRESETS = ['TRADITIONAL BANK', 'EWALLET', 'PHYSICAL SAVING'];
 
-const GOAL_FILTERS = ['All', 'Active', 'Achieved'];
+const GOAL_FILTERS = ['All', 'Active', 'Achieved', 'Deleted'];
 const GOAL_SORTS = [
   { key: 'deadline', label: 'Deadline' },
   { key: 'progress', label: 'Progress' },
@@ -237,8 +237,7 @@ export default function CustomModeDashboard({ navigation }) {
   const [newGoalDeadlineDate, setNewGoalDeadlineDate] = useState(null);
   const [showGoalDatePicker, setShowGoalDatePicker] = useState(false);
   const [goalSubmitting, setGoalSubmitting] = useState(false);
-  const [showEditGoal, setShowEditGoal] = useState(false);
-  const [editGoalData, setEditGoalData] = useState(null);
+
   const [showAllocate, setShowAllocate] = useState(false);
   const [allocateGoal, setAllocateGoal] = useState(null);
   const [allocateAmount, setAllocateAmount] = useState('');
@@ -279,7 +278,7 @@ export default function CustomModeDashboard({ navigation }) {
   // Spendable budget = income - expenses - goal allocations - net savings
   const totalGoalAllocations = useMemo(
     () => savingsGoals
-      .filter((g) => !g.is_achieved)
+      .filter((g) => !g.is_achieved && !g.is_deleted)
       .reduce((s, g) => s + (parseFloat(g.current_amount) || 0), 0),
     [savingsGoals],
   );
@@ -316,16 +315,22 @@ export default function CustomModeDashboard({ navigation }) {
   // ── Derived: Goals ──────────────────────────────────────────────────
 
   const goalStats = useMemo(() => {
-    const active = savingsGoals.filter((g) => !g.is_achieved).length;
-    const achieved = savingsGoals.filter((g) => g.is_achieved).length;
-    const totalAllocated = savingsGoals.reduce((s, g) => s + (parseFloat(g.current_amount) || 0), 0);
-    return { active, achieved, total: savingsGoals.length, totalAllocated };
+    const nonDeleted = savingsGoals.filter((g) => !g.is_deleted);
+    const active = nonDeleted.filter((g) => !g.is_achieved).length;
+    const achieved = nonDeleted.filter((g) => g.is_achieved).length;
+    const totalAllocated = nonDeleted.reduce((s, g) => s + (parseFloat(g.current_amount) || 0), 0);
+    return { active, achieved, total: nonDeleted.length, totalAllocated };
   }, [savingsGoals]);
 
   const filteredGoals = useMemo(() => {
     let list = [...savingsGoals];
-    if (goalFilter === 'Active') list = list.filter((g) => !g.is_achieved);
-    if (goalFilter === 'Achieved') list = list.filter((g) => g.is_achieved);
+    if (goalFilter === 'Deleted') {
+      list = list.filter((g) => g.is_deleted);
+    } else {
+      list = list.filter((g) => !g.is_deleted);
+      if (goalFilter === 'Active') list = list.filter((g) => !g.is_achieved);
+      if (goalFilter === 'Achieved') list = list.filter((g) => g.is_achieved);
+    }
     if (goalSort === 'deadline')
       list.sort((a, b) => new Date(a.deadline || '9999-12-31') - new Date(b.deadline || '9999-12-31'));
     else if (goalSort === 'progress')
@@ -588,30 +593,7 @@ export default function CustomModeDashboard({ navigation }) {
     }
   };
 
-  const handleEditGoal = async () => {
-    if (!editGoalData) return;
-    const target = parseFloat(editGoalData.target_amount);
-    if (!editGoalData.title?.trim() || isNaN(target) || target <= 0) {
-      Alert.alert('Invalid Input', 'Please enter a valid goal name and target amount.');
-      return;
-    }
-    try {
-      const { error } = await supabase
-        .from('goals_custom_mode')
-        .update({
-          title: editGoalData.title.trim(),
-          target_amount: target,
-          target_date: editGoalData.deadline || null,
-        })
-        .eq('id', editGoalData.id);
-      if (error) throw error;
-      setShowEditGoal(false);
-      setEditGoalData(null);
-      await fetchGoals();
-    } catch (err) {
-      Alert.alert('Error', err.message);
-    }
-  };
+
 
   const handleDeleteGoal = (goal) => {
     Alert.alert('Delete Goal', `Are you sure you want to delete "${goal.title}"?`, [
@@ -621,7 +603,10 @@ export default function CustomModeDashboard({ navigation }) {
         style: 'destructive',
         onPress: async () => {
           try {
-            const { error } = await supabase.from('goals_custom_mode').delete().eq('id', goal.id);
+            const { error } = await supabase
+              .from('goals_custom_mode')
+              .update({ is_deleted: true })
+              .eq('id', goal.id);
             if (error) throw error;
             await fetchGoals();
           } catch (err) {
@@ -861,25 +846,26 @@ export default function CustomModeDashboard({ navigation }) {
     }
 
     return (
-      <View key={item.id} style={[s.goalCard, isComplete && { borderColor: colors.success, borderWidth: 1.5 }]}>
+      <View key={item.id} style={[s.goalCard, isComplete && { borderColor: colors.success, borderWidth: 1.5 }, item.is_deleted && { opacity: 0.65 }]}>
         <View style={s.goalHeader}>
           <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text, flex: 1, marginRight: 8 }} numberOfLines={1}>
             {item.title}
           </Text>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
+          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
             {isComplete && <Ionicons name="checkmark-circle" size={20} color={colors.success} />}
-            <TouchableOpacity
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              onPress={() => { setEditGoalData({ ...item }); setShowEditGoal(true); }}
-            >
-              <Ionicons name="create-outline" size={18} color={colors.textSecondary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              onPress={() => handleDeleteGoal(item)}
-            >
-              <Ionicons name="trash-outline" size={18} color={colors.error} />
-            </TouchableOpacity>
+            {item.is_deleted && (
+              <View style={{ backgroundColor: colors.error + '18', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                <Text style={{ fontSize: 11, fontWeight: '600', color: colors.error }}>Deleted</Text>
+              </View>
+            )}
+            {!item.is_deleted && (
+              <TouchableOpacity
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                onPress={() => handleDeleteGoal(item)}
+              >
+                <Ionicons name="trash-outline" size={18} color={colors.error} />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -926,7 +912,7 @@ export default function CustomModeDashboard({ navigation }) {
         </View>
 
         {/* Suggested savings tip — dynamic time unit */}
-        {savingsTip != null && (
+        {savingsTip != null && !item.is_deleted && (
           <View
             style={{
               flexDirection: 'row',
@@ -944,7 +930,7 @@ export default function CustomModeDashboard({ navigation }) {
           </View>
         )}
 
-        {!isComplete && (
+        {!isComplete && !item.is_deleted && (
           <TouchableOpacity
             style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', marginTop: 8, paddingVertical: 4 }}
             onPress={() => { setAllocateGoal(item); setShowAllocate(true); }}
@@ -1240,7 +1226,7 @@ export default function CustomModeDashboard({ navigation }) {
           <View style={s.emptyState}>
             <Ionicons name="flag-outline" size={40} color={colors.textSecondary} />
             <Text style={s.emptyText}>
-              {goalFilter === 'All' ? 'No goals yet — tap + to create one' : `No ${goalFilter.toLowerCase()} goals`}
+              {goalFilter === 'All' ? 'No goals yet — tap + to create one' : goalFilter === 'Deleted' ? 'No deleted goals' : `No ${goalFilter.toLowerCase()} goals`}
             </Text>
           </View>
         ) : (
@@ -1666,50 +1652,6 @@ export default function CustomModeDashboard({ navigation }) {
                   disabled={goalSubmitting}
                 >
                   <Text style={s.modalConfirmText}>{goalSubmitting ? 'Saving…' : 'Create Goal'}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* ── Edit Goal Modal ────────────────────────────────────────── */}
-      <Modal visible={showEditGoal} transparent animationType="slide" onRequestClose={() => setShowEditGoal(false)}>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={s.modalOverlay}>
-            <View style={s.modalCard}>
-              <Text style={s.modalTitle}>Edit Goal</Text>
-
-              <Text style={s.inputLabel}>Goal Name</Text>
-              <TextInput
-                style={s.input}
-                value={editGoalData?.title || ''}
-                onChangeText={(t) => setEditGoalData((prev) => (prev ? { ...prev, title: t } : prev))}
-              />
-
-              <Text style={s.inputLabel}>Target Amount (₱)</Text>
-              <TextInput
-                style={s.input}
-                keyboardType="numeric"
-                value={editGoalData?.target_amount != null ? String(editGoalData.target_amount) : ''}
-                onChangeText={(t) => setEditGoalData((prev) => (prev ? { ...prev, target_amount: t } : prev))}
-              />
-
-              <Text style={s.inputLabel}>Deadline (optional, YYYY-MM-DD)</Text>
-              <TextInput
-                style={s.input}
-                placeholder="2026-12-31"
-                placeholderTextColor={colors.placeholder}
-                value={editGoalData?.deadline || ''}
-                onChangeText={(t) => setEditGoalData((prev) => (prev ? { ...prev, deadline: t } : prev))}
-              />
-
-              <View style={s.modalActions}>
-                <TouchableOpacity style={s.modalCancelBtn} onPress={() => { setShowEditGoal(false); setEditGoalData(null); }}>
-                  <Text style={s.modalCancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={s.modalConfirmBtn} onPress={handleEditGoal}>
-                  <Text style={s.modalConfirmText}>Save Changes</Text>
                 </TouchableOpacity>
               </View>
             </View>
