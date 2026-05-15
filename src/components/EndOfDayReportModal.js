@@ -29,62 +29,89 @@ const EndOfDayReportModal = ({
   onClose,
   title = 'Day Complete!',
   actionLabel,
+  historicalData,
 }) => {
-  const safeTasks = Array.isArray(dailyTasks) ? dailyTasks : [];
+  const isHistoryMode = !!historicalData;
+  const resolvedWeeklyBudgetRemaining = historicalData?.weeklyBudgetRemaining ?? weeklyBudgetRemaining;
+  const resolvedSpentToday = historicalData?.spentToday ?? spentToday;
+  const resolvedDailyTasks = Array.isArray(historicalData?.dailyTasks) ? historicalData.dailyTasks : dailyTasks;
+  const resolvedXpEarned = historicalData?.xpEarned ?? xpEarned;
+  const resolvedCurrentXP = historicalData?.currentXP ?? currentXP;
+  const resolvedXpForNextLevel = historicalData?.xpForNextLevel ?? xpForNextLevel;
+  const resolvedUnlockedAchievement = historicalData?.unlockedAchievement ?? unlockedAchievement;
+  const resolvedKoinInsight = historicalData?.koinInsight ?? koinInsight;
+  const resolvedExpensesToday = Array.isArray(historicalData?.expensesToday) ? historicalData.expensesToday : expensesToday;
+  const resolvedTitle = historicalData?.title ?? title;
+  const resolvedActionLabel = actionLabel ?? historicalData?.actionLabel;
+  const safeTasks = Array.isArray(resolvedDailyTasks) ? resolvedDailyTasks : [];
+  const isViewOnly = viewOnly || isHistoryMode;
   
   const [isKoinThinking, setIsKoinThinking] = useState(false);
   const [liveInsight, setLiveInsight] = useState('');
 
   useEffect(() => {
-    if (isVisible) {
-      const fetchInsight = async () => {
-        setIsKoinThinking(true);
-        try {
-          const completedTasksCount = safeTasks.filter(t => t.completed).length;
-          const messages = [
-            {
-              role: 'system',
-              content: 'You are Koin, a financial AI assistant for the GaFi app. Keep responses to 1 short sentence. Be encouraging. Tone: friendly Filipino student.'
-            },
-            {
-              role: 'user',
-              content: `Day summary: Spent ₱${spentToday}, Remaining weekly budget: ₱${weeklyBudgetRemaining}. Tasks completed: ${completedTasksCount}/${safeTasks.length}. Give me a quick insight or tip.`
-            }
-          ];
-          const response = await getChatCompletion(messages, { max_tokens: 150, temperature: 0.7 });
-          setLiveInsight(response.replace(/^"|"$/g, '').trim());
-        } catch (error) {
-          setLiveInsight(koinInsight || "I'm having trouble calculating your insight, but keep up the great work!");
-        } finally {
-          setIsKoinThinking(false);
-        }
-      };
-      fetchInsight();
-    } else {
+    if (!isVisible) {
       setLiveInsight('');
+      setIsKoinThinking(false);
+      return;
     }
-  }, [isVisible, spentToday, weeklyBudgetRemaining, safeTasks.length]);
 
-  const insightText = isKoinThinking 
-    ? 'Koin is analyzing your day...' 
-    : (liveInsight || koinInsight || 'Koin is calculating your daily insight...');
+    if (isHistoryMode) {
+      setLiveInsight('');
+      setIsKoinThinking(false);
+      return;
+    }
 
-  const primaryLabel = actionLabel || (viewOnly ? 'Close' : 'Start Next Day');
-  const handlePrimaryPress = viewOnly ? (onClose || onStartNextDay) : onStartNextDay;
+    const fetchInsight = async () => {
+      setIsKoinThinking(true);
+      try {
+        const completedTasksCount = safeTasks.filter(t => t.completed).length;
+        const messages = [
+          {
+            role: 'system',
+            content: 'You are Koin, a financial AI assistant for the GaFi app. Keep responses to 1 short sentence. Be encouraging. Tone: friendly Filipino student.'
+          },
+          {
+            role: 'user',
+            content: `Day summary: Spent ₱${resolvedSpentToday}, Remaining weekly budget: ₱${resolvedWeeklyBudgetRemaining}. Tasks completed: ${completedTasksCount}/${safeTasks.length}. Give me a quick insight or tip.`
+          }
+        ];
+        const response = await getChatCompletion(messages, { max_tokens: 150, temperature: 0.7 });
+        setLiveInsight(response.replace(/^"|"$/g, '').trim());
+      } catch (error) {
+        setLiveInsight(resolvedKoinInsight || "I'm having trouble calculating your insight, but keep up the great work!");
+      } finally {
+        setIsKoinThinking(false);
+      }
+    };
+    fetchInsight();
+  }, [isVisible, isHistoryMode, resolvedSpentToday, resolvedWeeklyBudgetRemaining, resolvedKoinInsight, safeTasks.length]);
+
+  const insightText = isHistoryMode
+    ? (resolvedKoinInsight || 'Koin saved this insight for you.')
+    : (isKoinThinking
+      ? 'Koin is analyzing your day...'
+      : (liveInsight || resolvedKoinInsight || 'Koin is calculating your daily insight...'));
+
+  const primaryLabel = resolvedActionLabel || (isViewOnly ? 'Close' : 'Start Next Day');
+  const handlePrimaryPress = isViewOnly ? onClose : onStartNextDay;
 
   const progressPercent = useMemo(() => {
-    const current = Number(currentXP) || 0;
-    const next = Number(xpForNextLevel) || 0;
-    if (next <= 0) return 0;
+    const current = Number(resolvedCurrentXP) || 0;
+    const next = Number(resolvedXpForNextLevel) || 0;
+    if (next <= 0) {
+      const earned = Number(resolvedXpEarned) || 0;
+      return clampPercent(earned);
+    }
     return clampPercent((current / next) * 100);
-  }, [currentXP, xpForNextLevel]);
+  }, [resolvedCurrentXP, resolvedXpForNextLevel, resolvedXpEarned]);
 
   return (
     <Modal
       visible={isVisible}
       animationType="slide"
       transparent
-      onRequestClose={viewOnly ? (onClose || (() => { })) : () => { }}
+      onRequestClose={isViewOnly ? (onClose || (() => { })) : () => { }}
     >
       <View style={styles.overlay}>
         <View style={styles.overlayInner}>
@@ -104,7 +131,7 @@ const EndOfDayReportModal = ({
                 <View style={styles.headerIcon}>
                   <Ionicons name="checkmark-circle" size={48} color="#ffb68b" />
                 </View>
-                <Text style={styles.headerTitle}>{title}</Text>
+                <Text style={styles.headerTitle}>{resolvedTitle}</Text>
               </View>
 
               {/* Budget Card */}
@@ -114,7 +141,7 @@ const EndOfDayReportModal = ({
                     WEEKLY BUDGET{"\n"}REMAINING
                   </Text>
                   <Text style={styles.budgetValue}>
-                    {formatCurrency(weeklyBudgetRemaining)}
+                    {formatCurrency(resolvedWeeklyBudgetRemaining)}
                   </Text>
                 </View>
                 <View style={[styles.cardRow, { marginTop: 12 }]}>
@@ -122,21 +149,21 @@ const EndOfDayReportModal = ({
                     SPENT TODAY
                   </Text>
                   <Text style={styles.spentValue}>
-                    {formatCurrency(spentToday)}
+                    {formatCurrency(resolvedSpentToday)}
                   </Text>
                 </View>
 
-                <View className="mt-5 pt-4 border-t border-white/10">
-                  <Text style={styles.cardLabel} className="mb-3">EXPENSE BREAKDOWN</Text>
-                  {expensesToday?.length > 0 ? (
-                    <View className="max-h-40">
+                <View className="mt-5 pt-4 border-t border-white/10" style={styles.expenseSection}>
+                  <Text style={[styles.cardLabel, styles.expenseHeader]} className="mb-3">EXPENSE BREAKDOWN</Text>
+                  {resolvedExpensesToday?.length > 0 ? (
+                    <View className="max-h-40" style={styles.expenseListContainer}>
                       <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={true}>
-                        {expensesToday.map((exp, index) => (
-                          <View key={exp.id || index} className="flex-row justify-between items-center mb-3 pr-2">
-                            <Text className="text-[#e5e2e1] text-sm flex-1 mr-4" numberOfLines={1}>
+                        {resolvedExpensesToday.map((exp, index) => (
+                          <View key={exp.id || index} className="flex-row justify-between items-center mb-3 pr-2" style={styles.expenseRow}>
+                            <Text className="text-[#e5e2e1] text-sm flex-1 mr-4" style={styles.expenseName} numberOfLines={1}>
                               {exp.name || exp.category || 'Unnamed Expense'}
                             </Text>
-                            <Text className="text-[#ffb68b] text-sm font-medium">
+                            <Text className="text-[#ffb68b] text-sm font-medium" style={styles.expenseAmount}>
                               {formatCurrency(exp.amount)}
                             </Text>
                           </View>
@@ -144,7 +171,7 @@ const EndOfDayReportModal = ({
                       </ScrollView>
                     </View>
                   ) : (
-                    <Text className="text-[#a78b7c] text-sm italic">
+                    <Text className="text-[#a78b7c] text-sm italic" style={styles.expenseEmpty}>
                       No expenses logged today
                     </Text>
                   )}
@@ -197,7 +224,7 @@ const EndOfDayReportModal = ({
                     DAILY XP
                   </Text>
                   <Text style={styles.xpValue}>
-                    +{Number(xpEarned) || 0} XP
+                    +{Number(resolvedXpEarned) || 0} XP
                   </Text>
                 </View>
                 <View style={styles.progressTrack}>
@@ -206,13 +233,13 @@ const EndOfDayReportModal = ({
                   />
                 </View>
 
-                {unlockedAchievement ? (
+                {resolvedUnlockedAchievement ? (
                   <View style={styles.achievementBadge}>
                     <Ionicons name="trophy" size={18} color="#ffb68b" />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.achievementLabel}>Achievement Unlocked:</Text>
                       <Text style={styles.achievementTitle}>
-                        {unlockedAchievement}
+                        {resolvedUnlockedAchievement}
                       </Text>
                     </View>
                   </View>
@@ -327,6 +354,41 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.6,
+  },
+  expenseSection: {
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  expenseHeader: {
+    marginBottom: 12,
+  },
+  expenseListContainer: {
+    maxHeight: 160,
+  },
+  expenseRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingRight: 8,
+  },
+  expenseName: {
+    color: '#e5e2e1',
+    fontSize: 14,
+    flex: 1,
+    marginRight: 16,
+  },
+  expenseAmount: {
+    color: '#ffb68b',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  expenseEmpty: {
+    color: '#a78b7c',
+    fontSize: 14,
+    fontStyle: 'italic',
   },
 
   // ─── Budget Card ───────────────────────────────────────────────────

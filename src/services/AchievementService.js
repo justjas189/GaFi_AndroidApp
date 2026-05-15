@@ -29,6 +29,16 @@ export class AchievementService {
    */
   static getAchievementDefinitions() {
     return {
+      // === DEBUG / TEST ACHIEVEMENTS ===
+      'test_hello_world': {
+        id: 'test_hello_world',
+        title: 'Hello World',
+        description: 'Logged a 1-peso Notebook expense',
+        points: 5,
+        icon: '👋',
+        category: 'debug',
+        target_value: 1
+      },
       // === EXPENSE TRACKING ACHIEVEMENTS ===
       'first_expense': {
         id: 'first_expense',

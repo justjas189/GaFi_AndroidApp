@@ -24,6 +24,7 @@ import { evaluateDailyTaskRule } from '../../utils/storyDailyTaskEvaluator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTutorial, TUTORIAL_PHASE } from '../../context/TutorialContext';
 import DailyTaskPopup from '../../components/DailyTaskPopup';
+import EndOfDayReportModal from '../../components/EndOfDayReportModal';
 
 const { width: INITIAL_WIDTH, height: INITIAL_HEIGHT } = Dimensions.get('window');
 const CHARACTER_SIZE = 48;
@@ -732,6 +733,9 @@ export default function BuildScreen() {
   const [showDailyTasksModal, setShowDailyTasksModal] = useState(false);
   const [showDailyTaskPopup, setShowDailyTaskPopup] = useState(false);
   const [dailyTaskPopupPayload, setDailyTaskPopupPayload] = useState(null);
+  const [isHistoryModalVisible, setIsHistoryModalVisible] = useState(false);
+  const [showHistoryReportModal, setShowHistoryReportModal] = useState(false);
+  const [historyReportData, setHistoryReportData] = useState(null);
   const [allocationAmount, setAllocationAmount] = useState('');
   const [selectedGoal, setSelectedGoal] = useState(null);
 
@@ -1145,6 +1149,100 @@ export default function BuildScreen() {
       };
     });
   }, [gameMode, getActiveStoryDay]);
+
+  const completedDaysHistory = useMemo(() => {
+    if (gameMode !== 'story') return [];
+
+    const totalDays = STORY_DAILY_TASKS[storyLevel]?.totalDays || STORY_DAY_COUNTS?.[storyLevel] || 0;
+    const history = [];
+
+    for (let day = 1; day <= totalDays; day += 1) {
+      const dayConfig = getStoryDayTasks(storyLevel, day);
+      if (!dayConfig?.tasks) continue;
+
+      const tasks = dayConfig.tasks.map((task) => ({
+        id: task.id,
+        label: task.requiredAppAction,
+        completed: !!dailyTaskCompletion[task.conditionKey],
+        rewardXp: task.reward?.xp || 0,
+      }));
+      const completedCount = tasks.filter((task) => task.completed).length;
+      const totalCount = tasks.length;
+
+      if (totalCount > 0 && completedCount === totalCount) {
+        const xpEarned = tasks.reduce((sum, task) => sum + (task.completed ? task.rewardXp : 0), 0);
+        history.push({
+          dayNumber: day,
+          displayDay: getStoryDayDisplayNumber(storyLevel, day),
+          completedCount,
+          totalCount,
+          xpEarned,
+          tasks,
+        });
+      }
+    }
+
+    return history;
+  }, [gameMode, storyLevel, dailyTaskCompletion]);
+
+  const buildHistoryReportData = useCallback((dayItem) => {
+    const dayNumber = dayItem.dayNumber;
+    const dayState = getDayRuntimeState(dayNumber);
+    const spentToday = Number(dayState?.expenseTotal) || 0;
+    const totalDays = STORY_DAILY_TASKS[storyLevel]?.totalDays || STORY_DAY_COUNTS?.[storyLevel] || 1;
+    const dailyBudget = (Number(weeklyBudget) || 0) / Math.max(1, totalDays);
+    const categoryTotals = dayState?.categoryTotals || {};
+    const topCategory = Object.entries(categoryTotals)
+      .sort((a, b) => (Number(b[1]) || 0) - (Number(a[1]) || 0))[0]?.[0];
+    const budgetStatus = spentToday === 0
+      ? 'No-spend day - great discipline'
+      : spentToday <= dailyBudget
+        ? 'You stayed within your daily budget'
+        : 'You went over your daily budget';
+    const topCategoryLine = topCategory ? `; top spend was ${topCategory}` : '';
+    const taskLine = dayItem.totalCount
+      ? `. Tasks completed: ${dayItem.completedCount}/${dayItem.totalCount}.`
+      : '.';
+    const historyInsight = `${budgetStatus}${topCategoryLine}${taskLine}`;
+    const cumulativeSpend = Object.entries(dailyTaskRuntimeByDay).reduce((sum, [key, value]) => {
+      const dayKey = Number(key);
+      if (!Number.isFinite(dayKey) || dayKey > dayNumber) return sum;
+      return sum + (Number(value?.expenseTotal) || 0);
+    }, 0);
+    const weeklyBudgetRemaining = Math.max(0, (Number(weeklyBudget) || 0) - cumulativeSpend);
+    const expensesToday = (dayState?.expenseEntries || []).map((entry, index) => ({
+      id: `${dayNumber}-${index}`,
+      name: entry.note || entry.category || 'Expense',
+      category: entry.category,
+      amount: Number(entry.amount) || 0,
+    }));
+
+    return {
+      title: `Day ${dayItem.displayDay} Report`,
+      weeklyBudgetRemaining,
+      spentToday,
+      dailyTasks: dayItem.tasks,
+      xpEarned: dayItem.xpEarned,
+      currentXP: Math.min(dayItem.xpEarned, 100),
+      xpForNextLevel: 100,
+      unlockedAchievement: null,
+      koinInsight: historyInsight,
+      expensesToday,
+      actionLabel: 'Close',
+    };
+  }, [dailyTaskRuntimeByDay, getDayRuntimeState, weeklyBudget, storyLevel]);
+
+  const openHistoryReport = useCallback((dayItem) => {
+    const reportData = buildHistoryReportData(dayItem);
+    setHistoryReportData(reportData);
+    setIsHistoryModalVisible(false);
+    setShowHistoryReportModal(true);
+  }, [buildHistoryReportData]);
+
+  const closeHistoryReport = useCallback(() => {
+    setShowHistoryReportModal(false);
+    setHistoryReportData(null);
+  }, []);
 
   const evaluateActiveStoryDayTasks = useCallback(() => {
     if (gameMode !== 'story') return;
@@ -3156,7 +3254,22 @@ export default function BuildScreen() {
       backgroundColor: '#E67E22',
       justifyContent: 'center',
       alignItems: 'center',
+      marginRight: screenWidth * 0.05,
+    },
+    headerLeftControls: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Math.round(screenWidth * 0.02),
       marginRight: screenWidth * 0.02,
+    },
+    historyButton: {
+      flexDirection: 'row',
+      width: Math.round(screenWidth * 0.09),
+      height: Math.round(screenWidth * 0.09),
+      borderRadius: Math.round(screenWidth * 0.025),
+      backgroundColor: 'rgba(90, 90, 122, 0.9)',
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     giveUpButton: {
       flexDirection: 'row',
@@ -3183,11 +3296,10 @@ export default function BuildScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingHorizontal: Math.round(screenWidth * 0.018),
-      paddingVertical: screenHeight * 0.007,
-      borderRadius: Math.round(screenWidth * 0.035),
-      minWidth: Math.round(screenWidth * 0.23),
-      gap: 4,
+      width: Math.round(screenWidth * 0.09),
+      height: Math.round(screenWidth * 0.09),
+      borderRadius: Math.round(screenWidth * 0.025),
+      backgroundColor: 'rgba(90, 90, 122, 0.9)',
     },
     dailyTasksButtonText: {
       fontSize: Math.round(screenWidth * 0.026),
@@ -3441,6 +3553,79 @@ export default function BuildScreen() {
     savingsCompactFill: {
       height: '100%',
       borderRadius: 4,
+    },
+    historyOverlay: {
+      flex: 1,
+      justifyContent: 'flex-end',
+      backgroundColor: 'rgba(0,0,0,0.6)',
+    },
+    historyBackdrop: {
+      flex: 1,
+    },
+    historySheet: {
+      backgroundColor: '#0f172a',
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      padding: 24,
+    },
+    historyHeaderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    historyTitle: {
+      color: '#ffb68b',
+      fontSize: 18,
+      fontWeight: '600',
+    },
+    historyCloseButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'rgba(255,255,255,0.1)',
+    },
+    historyItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: '#1e293b',
+      padding: 16,
+      marginBottom: 12,
+      borderRadius: 16,
+    },
+    historyItemLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+    },
+    historyItemIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: '#2a1c12',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 12,
+    },
+    historyItemTitle: {
+      color: '#e5e2e1',
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    historyItemSubtitle: {
+      color: '#a78b7c',
+      fontSize: 12,
+    },
+    historyEmptyState: {
+      alignItems: 'center',
+      paddingVertical: 32,
+    },
+    historyEmptyText: {
+      color: '#a78b7c',
+      fontSize: 12,
     },
     dailyTaskSheetOverlay: {
       flex: 1,
@@ -4048,9 +4233,9 @@ export default function BuildScreen() {
     },
     achievementGlow: {
       position: 'absolute',
-      top: -screenHeight * 0.06,
-      width: Math.round(screenWidth * 0.5),
-      height: Math.round(screenWidth * 0.5),
+      top: -screenHeight * 0.002,
+      width: Math.round(screenWidth * 0.2),
+      height: Math.round(screenWidth * 0.2),
       backgroundColor: '#FFD700',
       borderRadius: Math.round(screenWidth * 0.25),
       opacity: 0.1,
@@ -6170,20 +6355,28 @@ export default function BuildScreen() {
         </View>
       ) : (
         <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backToMenuButton}
-            onPress={() => {
-              if (tutorialActive) {
-                setTutorialActive(false);
-                cancelTutorial();
-                setTutorialStep(0);
-              }
-              setGameMode(null);
-              setShowMainMenu(true);
-            }}
-          >
-            <Ionicons name="home" size={20} color="#FFF" />
-          </TouchableOpacity>
+          <View style={styles.headerLeftControls}>
+            <TouchableOpacity
+              style={styles.backToMenuButton}
+              onPress={() => {
+                if (tutorialActive) {
+                  setTutorialActive(false);
+                  cancelTutorial();
+                  setTutorialStep(0);
+                }
+                setGameMode(null);
+                setShowMainMenu(true);
+              }}
+            >
+              <Ionicons name="home" size={20} color="#FFF" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.historyButton}
+              onPress={() => setIsHistoryModalVisible(true)}
+            >
+              <Ionicons name="calendar" size={18} color="#FFF" />
+            </TouchableOpacity>
+          </View>
           {(gameMode === 'story') && (
             <View style={styles.headerActionRow}>
               {/*<TouchableOpacity
@@ -6197,8 +6390,8 @@ export default function BuildScreen() {
                 style={[styles.dailyTasksButton, { backgroundColor: dailyTaskButtonColor }]}
                 onPress={() => setShowDailyTasksModal(true)}
               >
-                <Ionicons name="list" size={16} color={dailyTaskButtonTextColor} />
-                <Text style={[styles.dailyTasksButtonText, { color: dailyTaskButtonTextColor }]}>Daily Tasks</Text>
+                <Ionicons name="list" size={19} color={dailyTaskButtonTextColor} />
+                {/* <Text style={[styles.dailyTasksButtonText, { color: dailyTaskButtonTextColor }]}>Daily Tasks</Text> */}
               </TouchableOpacity>
             </View>
           )}
@@ -6861,6 +7054,13 @@ export default function BuildScreen() {
                       } else {
                         console.log('✅ Notebook: Expense saved successfully');
 
+                        if (Math.abs(savedAmount - 1) < 0.0001) {
+                          const testAchievement = AchievementService.getAchievementDefinitions().test_hello_world;
+                          if (testAchievement) {
+                            showAchievementPopup(testAchievement);
+                          }
+                        }
+
                         if (gameMode === 'story') {
                           const normalizedCategory = normalizeCategory(savedCategory);
                           updateDailyTaskRuntimeForActiveDay((dayState) => {
@@ -7018,6 +7218,76 @@ export default function BuildScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Day Report History Modal */}
+      <Modal
+        visible={isHistoryModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIsHistoryModalVisible(false)}
+      >
+        <View className="flex-1 bg-black/60 justify-end" style={styles.historyOverlay}>
+          <TouchableOpacity
+            className="flex-1"
+            activeOpacity={1}
+            onPress={() => setIsHistoryModalVisible(false)}
+            style={styles.historyBackdrop}
+          />
+          <View className="bg-slate-900 rounded-t-3xl p-6" style={styles.historySheet}>
+            <View className="flex-row justify-between items-center mb-4" style={styles.historyHeaderRow}>
+              <Text className="text-[#ffb68b] text-lg font-semibold" style={styles.historyTitle}>
+                Day Report History
+              </Text>
+              <TouchableOpacity
+                onPress={() => setIsHistoryModalVisible(false)}
+                className="h-9 w-9 items-center justify-center rounded-full bg-white/10"
+                style={styles.historyCloseButton}
+              >
+                <Ionicons name="close" size={20} color="#F5DEB3" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {completedDaysHistory.length > 0 ? (
+                completedDaysHistory.map((dayItem) => (
+                  <TouchableOpacity
+                    key={`history-day-${dayItem.dayNumber}`}
+                    onPress={() => openHistoryReport(dayItem)}
+                    className="flex-row items-center justify-between bg-slate-800 p-4 mb-3 rounded-2xl"
+                    style={styles.historyItem}
+                  >
+                    <View className="flex-row items-center flex-1" style={styles.historyItemLeft}>
+                      <View className="h-10 w-10 rounded-full bg-[#2a1c12] items-center justify-center mr-3" style={styles.historyItemIcon}>
+                        <Ionicons name="document-text-outline" size={20} color="#ff7a00" />
+                      </View>
+                      <View className="flex-1">
+                        <Text className="text-[#e5e2e1] text-base font-semibold" style={styles.historyItemTitle}>
+                          Day {dayItem.displayDay}
+                        </Text>
+                        <Text className="text-[#a78b7c] text-xs" style={styles.historyItemSubtitle}>
+                          Tasks: {dayItem.completedCount}/{dayItem.totalCount} • +{dayItem.xpEarned} XP
+                        </Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="#a78b7c" />
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <View className="items-center py-8" style={styles.historyEmptyState}>
+                  <Text className="text-[#a78b7c] text-sm" style={styles.historyEmptyText}>No completed days yet.</Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <EndOfDayReportModal
+        isVisible={showHistoryReportModal}
+        historicalData={historyReportData}
+        viewOnly
+        onClose={closeHistoryReport}
+      />
 
       <DailyTaskPopup
         visible={showDailyTaskPopup}
@@ -7836,7 +8106,7 @@ export default function BuildScreen() {
             {newAchievement && (
               <>
                 <Text style={styles.achievementIcon}>{newAchievement.icon}</Text>
-                <Text style={styles.achievementTitle}>{newAchievement.name}</Text>
+                <Text style={styles.achievementTitle}>{newAchievement.title || newAchievement.name}</Text>
                 <Text style={styles.achievementDescription}>{newAchievement.description}</Text>
                 <View style={styles.achievementPoints}>
                   <Ionicons name="star" size={20} color="#FFD700" />

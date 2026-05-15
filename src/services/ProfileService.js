@@ -19,7 +19,8 @@ class ProfileService {
         return false;
       }
       if (error || !userId) {
-        return false; // Not authenticated, no setup needed
+        return false; // Not authenticated
+        // , no setup needed
       }
 
       // Check if user has a profile with both name and username
