@@ -85,7 +85,7 @@ const WALLET_META = {
 const DEFAULT_WALLET = { icon: 'wallet', color: '#795548' };
 const WALLET_PRESETS = ['TRADITIONAL BANK', 'EWALLET', 'PHYSICAL SAVING'];
 
-const GOAL_FILTERS = ['All', 'Active', 'Achieved', 'Deleted'];
+const GOAL_FILTERS = ['Active', 'Achieved', 'Deleted'];
 const GOAL_SORTS = [
   { key: 'deadline', label: 'Deadline' },
   { key: 'progress', label: 'Progress' },
@@ -228,8 +228,9 @@ export default function CustomModeDashboard({ navigation }) {
 
   // ── Goals state ─────────────────────────────────────────────────────
   const [savingsGoals, setSavingsGoals] = useState([]);
-  const [goalFilter, setGoalFilter] = useState('All');
+  const [goalFilter, setGoalFilter] = useState('Active');
   const [goalSort, setGoalSort] = useState('deadline');
+  const [showGoalFilterDropdown, setShowGoalFilterDropdown] = useState(false);
   const [showAddGoal, setShowAddGoal] = useState(false);
   const [newGoalTitle, setNewGoalTitle] = useState('');
   const [newGoalTarget, setNewGoalTarget] = useState('');
@@ -326,10 +327,11 @@ export default function CustomModeDashboard({ navigation }) {
     let list = [...savingsGoals];
     if (goalFilter === 'Deleted') {
       list = list.filter((g) => g.is_deleted);
+    } else if (goalFilter === 'Achieved') {
+      list = list.filter((g) => !g.is_deleted && g.is_achieved);
     } else {
-      list = list.filter((g) => !g.is_deleted);
-      if (goalFilter === 'Active') list = list.filter((g) => !g.is_achieved);
-      if (goalFilter === 'Achieved') list = list.filter((g) => g.is_achieved);
+      // Active
+      list = list.filter((g) => !g.is_deleted && !g.is_achieved);
     }
     if (goalSort === 'deadline')
       list.sort((a, b) => new Date(a.deadline || '9999-12-31') - new Date(b.deadline || '9999-12-31'));
@@ -580,12 +582,14 @@ export default function CustomModeDashboard({ navigation }) {
         target_date: formatIsoDate(newGoalDeadlineDate),
       });
       if (error) throw error;
+      const savedTitle = newGoalTitle.trim();
       setNewGoalTitle('');
       setNewGoalTarget('');
       setNewGoalDeadline('');
       setNewGoalDeadlineDate(null);
       setShowAddGoal(false);
       await fetchGoals();
+      Alert.alert('Goal Added', `Goal added successfully: ${savedTitle}`);
     } catch (err) {
       Alert.alert('Error', err.message);
     } finally {
@@ -605,7 +609,7 @@ export default function CustomModeDashboard({ navigation }) {
           try {
             const { error } = await supabase
               .from('goals_custom_mode')
-              .update({ is_deleted: true })
+              .update({ is_deleted: true, deleted_at: new Date().toISOString() })
               .eq('id', goal.id);
             if (error) throw error;
             await fetchGoals();
@@ -631,6 +635,7 @@ export default function CustomModeDashboard({ navigation }) {
         .update({
           current_amount: newAmount,
           is_completed: isAchieved,
+          ...(isAchieved ? { achieved_at: new Date().toISOString() } : {}),
         })
         .eq('id', allocateGoal.id);
       if (error) throw error;
@@ -640,6 +645,8 @@ export default function CustomModeDashboard({ navigation }) {
       await fetchGoals();
       if (isAchieved) {
         Alert.alert('Goal Achieved!', `You've reached your target for "${allocateGoal.title}"!`);
+      } else {
+        Alert.alert('Funds Allocated', `${formatCurrency(amt)} allocated to ${allocateGoal.title}`);
       }
     } catch (err) {
       Alert.alert('Error', err.message);
@@ -902,13 +909,30 @@ export default function CustomModeDashboard({ navigation }) {
 
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 }}>
           <Text style={{ fontSize: 11, color: colors.textSecondary }}>{pct.toFixed(0)}% reached</Text>
-          {item.deadline && (
-            <Text
-              style={{ fontSize: 11, color: days != null && days <= 7 ? colors.warning : colors.textSecondary }}
-            >
-              {days != null ? (days === 0 ? 'Due today' : `${days}d left`) : ''} · {formatDate(item.deadline)}
-            </Text>
-          )}
+          <View style={{ flexDirection: 'column', alignItems: 'flex-end' }}>
+            {item.is_deleted && item.deleted_at && (
+              <Text style={{ fontSize: 11, color: colors.error }}>
+                Deleted on {formatDate(item.deleted_at)}
+              </Text>
+            )}
+            {isComplete && !item.is_deleted && item.achieved_at && (
+              <Text style={{ fontSize: 11, color: colors.success }}>
+                Achieved on {formatDate(item.achieved_at)}
+              </Text>
+            )}
+            {!isComplete && !item.is_deleted && item.deadline && (
+              <Text
+                style={{ fontSize: 11, color: days != null && days <= 7 ? colors.warning : colors.textSecondary }}
+              >
+                {days != null ? (days === 0 ? 'Due today' : `${days}d left`) : ''}
+              </Text>
+            )}
+            {item.deadline && (
+              <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 1 }}>
+                Deadline: {formatDate(item.deadline)}
+              </Text>
+            )}
+          </View>
         </View>
 
         {/* Suggested savings tip — dynamic time unit */}
@@ -1192,17 +1216,75 @@ export default function CustomModeDashboard({ navigation }) {
 
       {/* Filter & Sort */}
       <View style={s.filterSortRow}>
-        <View style={{ flexDirection: 'row', gap: 6, flex: 1, flexWrap: 'wrap' }}>
-          {GOAL_FILTERS.map((f) => (
-            <TouchableOpacity
-              key={f}
-              style={[s.filterChip, goalFilter === f && { backgroundColor: colors.primary }]}
-              onPress={() => setGoalFilter(f)}
-            >
-              <Text style={[s.filterChipText, goalFilter === f && { color: '#FFF' }]}>{f}</Text>
-            </TouchableOpacity>
-          ))}
+        {/* Dropdown filter */}
+        <View style={{ position: 'relative' }}>
+          <TouchableOpacity
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: colors.surface,
+              paddingVertical: 8,
+              paddingHorizontal: 14,
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: colors.border,
+              gap: 6,
+            }}
+            onPress={() => setShowGoalFilterDropdown((v) => !v)}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name={goalFilter === 'Active' ? 'flame' : goalFilter === 'Achieved' ? 'trophy' : 'trash'}
+              size={15}
+              color={goalFilter === 'Active' ? colors.primary : goalFilter === 'Achieved' ? colors.success : colors.error}
+            />
+            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>{goalFilter}</Text>
+            <Ionicons name={showGoalFilterDropdown ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textSecondary} />
+          </TouchableOpacity>
+          {showGoalFilterDropdown && (
+            <View style={{
+              position: 'absolute',
+              top: 42,
+              left: 0,
+              backgroundColor: colors.card,
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: colors.border,
+              zIndex: 100,
+              minWidth: 140,
+              ...Platform.select({
+                ios: { shadowColor: colors.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8 },
+                android: { elevation: 8 },
+              }),
+            }}>
+              {GOAL_FILTERS.map((f, idx) => (
+                <TouchableOpacity
+                  key={f}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: 10,
+                    paddingHorizontal: 14,
+                    gap: 8,
+                    borderBottomWidth: idx < GOAL_FILTERS.length - 1 ? StyleSheet.hairlineWidth : 0,
+                    borderBottomColor: colors.border,
+                    backgroundColor: goalFilter === f ? colors.primary + '12' : 'transparent',
+                  }}
+                  onPress={() => { setGoalFilter(f); setShowGoalFilterDropdown(false); }}
+                >
+                  <Ionicons
+                    name={f === 'Active' ? 'flame' : f === 'Achieved' ? 'trophy' : 'trash'}
+                    size={16}
+                    color={f === 'Active' ? colors.primary : f === 'Achieved' ? colors.success : colors.error}
+                  />
+                  <Text style={{ fontSize: 13, fontWeight: goalFilter === f ? '700' : '500', color: goalFilter === f ? colors.primary : colors.text }}>{f}</Text>
+                  {goalFilter === f && <Ionicons name="checkmark" size={16} color={colors.primary} style={{ marginLeft: 'auto' }} />}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
+        {/* Sort chips */}
         <View style={{ flexDirection: 'row', gap: 6 }}>
           {GOAL_SORTS.map((so) => (
             <TouchableOpacity
@@ -1226,7 +1308,7 @@ export default function CustomModeDashboard({ navigation }) {
           <View style={s.emptyState}>
             <Ionicons name="flag-outline" size={40} color={colors.textSecondary} />
             <Text style={s.emptyText}>
-              {goalFilter === 'All' ? 'No goals yet — tap + to create one' : goalFilter === 'Deleted' ? 'No deleted goals' : `No ${goalFilter.toLowerCase()} goals`}
+              {goalFilter === 'Active' ? 'No active goals — tap + to create one' : goalFilter === 'Deleted' ? 'No deleted goals' : 'No achieved goals yet'}
             </Text>
           </View>
         ) : (
@@ -1372,6 +1454,7 @@ export default function CustomModeDashboard({ navigation }) {
         contentContainerStyle={s.scroll}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+        onScrollBeginDrag={() => setShowGoalFilterDropdown(false)}
       >
         {activeTab === 'budgeting' && renderBudgetingTab()}
         {activeTab === 'goals' && renderGoalsTab()}
@@ -2014,6 +2097,7 @@ const createStyles = (colors) =>
       alignItems: 'center',
       marginBottom: 16,
       gap: 8,
+      zIndex: 10,
     },
     filterChip: {
       paddingVertical: 6,
