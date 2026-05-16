@@ -194,11 +194,13 @@ const getHealthLabel = (score) => {
   return { label: 'Needs Work', color: '#FF3B30' };
 };
 
-const getSavingsRateLabel = (rate) => {
-  if (rate >= 30) return { label: 'Excellent', color: '#4CAF50' };
-  if (rate >= 20) return { label: 'Good', color: '#8BC34A' };
-  if (rate >= 10) return { label: 'Fair', color: '#FF9800' };
-  return { label: 'Low', color: '#FF3B30' };
+const getSavingsRateLabel = (rate, target) => {
+  if (target <= 0) return { label: 'No Target', color: '#FF9800' };
+  const ratio = rate / target;
+  if (ratio >= 1) return { label: 'On Track', color: '#4CAF50' };
+  if (ratio >= 0.75) return { label: 'Almost There', color: '#8BC34A' };
+  if (ratio >= 0.4) return { label: 'Getting There', color: '#FF9800' };
+  return { label: 'Needs Work', color: '#FF3B30' };
 };
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -365,8 +367,9 @@ export default function CustomModeDashboard({ navigation }) {
     return { monthlyDeposits: deps, monthlyWithdrawals: wds };
   }, [transactions]);
 
-  const savingsRate = monthlyBudget > 0 ? Math.min((monthlyDeposits / monthlyBudget) * 100, 100) : 0;
-  const rateInfo = getSavingsRateLabel(savingsRate);
+  const savingsTarget = budgetRules.savings;
+  const savingsRate = monthlyBudget > 0 ? Math.min((monthlyDeposits / monthlyBudget) * 100, savingsTarget) : 0;
+  const rateInfo = getSavingsRateLabel(savingsRate, savingsTarget);
 
   // ── Data fetching ───────────────────────────────────────────────────
 
@@ -1394,7 +1397,7 @@ export default function CustomModeDashboard({ navigation }) {
                 <Text style={{ fontSize: 18, fontWeight: '700', color: rateInfo.color }}>{rateInfo.label}</Text>
                 <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
                   {monthlyBudget > 0
-                    ? `You've saved ${savingsRate.toFixed(1)}% of your ${isEmployee ? 'income' : 'allowance'} this month.`
+                    ? `You've saved ${savingsRate.toFixed(1)}% of your ${isEmployee ? 'income' : 'allowance'} this month (target: ${savingsTarget}%).`
                     : 'Set a monthly budget to track your savings rate.'}
                 </Text>
               </View>
@@ -1403,13 +1406,12 @@ export default function CustomModeDashboard({ navigation }) {
             <View style={{ marginTop: 12 }}>
               <View style={s.barTrack}>
                 <View
-                  style={[s.barFill, { width: `${Math.min(savingsRate, 100)}%`, backgroundColor: rateInfo.color }]}
+                  style={[s.barFill, { width: `${savingsTarget > 0 ? Math.min((savingsRate / savingsTarget) * 100, 100) : 0}%`, backgroundColor: rateInfo.color }]}
                 />
               </View>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
                 <Text style={{ fontSize: 10, color: colors.textSecondary }}>0%</Text>
-                <Text style={{ fontSize: 10, color: colors.textSecondary }}>Target: 20%</Text>
-                <Text style={{ fontSize: 10, color: colors.textSecondary }}>100%</Text>
+                <Text style={{ fontSize: 10, color: colors.textSecondary }}>Target: {savingsTarget}%</Text>
               </View>
             </View>
           </>
