@@ -18,7 +18,6 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
 import { LineChart } from 'react-native-chart-kit';
-import { AchievementService } from '../../services/AchievementService';
 import { normalizeCategory } from '../../utils/categoryUtils';
 import { getCategoryIcon } from '../../utils/categoryIcons';
 
@@ -562,26 +561,11 @@ const ExpenseScreen = ({ navigation, route }) => {
       sub_category: subCategory || null,
       note,
       description,
-      date: selectedDate.toISOString()
+      date: selectedDate.toISOString(),
+      appMode: 'custom'
     };
 
     addExpense(newExpense);
-    
-    try {
-      const achievements = await AchievementService.checkAndAwardAchievements(null, 'expense_track');
-      if (achievements.length > 0) {
-        const achievement = achievements[0];
-        setTimeout(() => {
-          Alert.alert(
-            '🏆 Achievement Unlocked!',
-            `${achievement.icon} ${achievement.title}\n${achievement.description}\n\n+${achievement.points} points!`,
-            [{ text: 'Awesome!', style: 'default' }]
-          );
-        }, 500);
-      }
-    } catch (error) {
-      console.error('Error checking achievements:', error);
-    }
     
     setShowForm(false);
     resetForm();

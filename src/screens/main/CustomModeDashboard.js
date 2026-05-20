@@ -523,6 +523,7 @@ export default function CustomModeDashboard({ navigation }) {
         category: savedCategory,
         note: savedNote || `${savedCategory} expense`,
         date: new Date().toISOString(),
+        appMode: 'custom',
       });
       if (!success) {
         Alert.alert('Sync Error', 'Your expense may not have been saved.');

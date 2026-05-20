@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Keyboard,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Markdown from 'react-native-markdown-display';
 import BottomSheet, {
@@ -50,6 +51,9 @@ const _notifyIsTyping = (val) => _isTypingListeners.forEach(fn => fn(val));
 const _keyboardHeightListeners = new Set();
 const _notifyKeyboardHeight = (val) => _keyboardHeightListeners.forEach(fn => fn(val));
 
+// Bottom safe-area inset bridge — ChatModal publishes, footer subscribes
+const _bottomInsetRef = { current: 0 };
+
 // ──────────────────────────────────────────────
 // Standalone footer component — defined OUTSIDE ChatModal so its
 // identity (and thus the footerComponent prop) never changes,
@@ -60,6 +64,8 @@ const ChatFooterComponent = (props) => {
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // Read the safe-area bottom inset published by ChatModal
+  const safeBottomInset = _bottomInsetRef.current;
 
   // Subscribe to isTyping changes pushed from ChatModal
   useEffect(() => {
@@ -98,7 +104,15 @@ const ChatFooterComponent = (props) => {
 
   return (
     <BottomSheetFooter {...props} bottomInset={keyboardHeight}>
-      <View style={[styles.inputArea, { backgroundColor: colors.background, borderTopColor: colors.border || '#3C3C3C' }]}>
+      <View style={[
+        styles.inputArea,
+        {
+          backgroundColor: colors.background,
+          borderTopColor: colors.border || '#3C3C3C',
+          // Fill the safe-area gap so the tab bar never bleeds through
+          paddingBottom: Math.max(safeBottomInset, Platform.OS === 'ios' ? 32 : 16),
+        }
+      ]}>
         <View style={[styles.inputContainer, { backgroundColor: colors.card }]}>
           <BottomSheetTextInput
             style={[styles.textInput, { color: colors.text }]}
@@ -232,6 +246,10 @@ const ChatModal = forwardRef(({ visible, onClose }, ref) => {
   const navigation = useNavigation();
   const { expenses, budget, calculateTotalExpenses } = useContext(DataContext);
   const { userInfo } = useContext(AuthContext);
+  const insets = useSafeAreaInsets();
+
+  // Publish the bottom inset so ChatFooterComponent can read it
+  _bottomInsetRef.current = insets.bottom;
 
   // Bottom sheet ref
   const bottomSheetRef = useRef(null);
@@ -258,6 +276,12 @@ const ChatModal = forwardRef(({ visible, onClose }, ref) => {
   const [currentScreen, setCurrentScreen] = useState('Home');
   const [conversationHistory, setConversationHistory] = useState([]);
 
+  // Ref mirror of conversationHistory — prevents stale closures in async sendMessage
+  const conversationHistoryRef = useRef([]);
+  useEffect(() => {
+    conversationHistoryRef.current = conversationHistory;
+  }, [conversationHistory]);
+
   // Expose present/dismiss via ref so the parent can call them directly
   useImperativeHandle(ref, () => ({
     present: () => bottomSheetRef.current?.present(),
@@ -278,7 +302,8 @@ const ChatModal = forwardRef(({ visible, onClose }, ref) => {
       }
       setCurrentScreen(screenName);
 
-      // Set welcome message
+      // Set welcome message and SEED it into conversation history
+      // so the AI has context when the user replies to the greeting
       const welcomeMessage = getContextualWelcome(screenName);
       setMessages([{
         id: Date.now().toString(),
@@ -287,7 +312,9 @@ const ChatModal = forwardRef(({ visible, onClose }, ref) => {
         timestamp: new Date(),
         type: 'welcome'
       }]);
-      setConversationHistory([]);
+      const seedHistory = [{ role: 'assistant', content: welcomeMessage }];
+      setConversationHistory(seedHistory);
+      conversationHistoryRef.current = seedHistory;
 
       bottomSheetRef.current?.present();
     } else {
@@ -364,8 +391,8 @@ const ChatModal = forwardRef(({ visible, onClose }, ref) => {
       weeklyCategorySpending[cat] = (weeklyCategorySpending[cat] || 0) + parseFloat(expense.amount || 0);
     });
 
-    const sortedCategories = Object.entries(categorySpending).sort(([,a], [,b]) => b - a);
-    const sortedWeeklyCategories = Object.entries(weeklyCategorySpending).sort(([,a], [,b]) => b - a);
+    const sortedCategories = Object.entries(categorySpending).sort(([, a], [, b]) => b - a);
+    const sortedWeeklyCategories = Object.entries(weeklyCategorySpending).sort(([, a], [, b]) => b - a);
 
     const recentExpenses = expenses.slice(-5).map(e => ({
       amount: e.amount,
@@ -527,18 +554,36 @@ This Week's Expenses:
 ${financial.weekExpensesList.length > 0 ? financial.weekExpensesList.map(e => `  - ${e.date}: ${e.category} - ₱${e.amount} (${e.note})`).join('\n') : '  No expenses this week yet'}
 
 ═══════════════════════════════════════
+STRICT LANGUAGE MATCHING
+═══════════════════════════════════════
+You MUST automatically detect the language the user is speaking. Your final response MUST be written entirely in that exact same language.
+- If the user writes in Tagalog, reply completely in Tagalog.
+- If the user writes in English, reply completely in English.
+- If the user writes in Taglish, reply in Taglish.
+- Do NOT mix languages unless the user explicitly asks you to translate.
+
+═══════════════════════════════════════
+OUTPUT FORMATTING (CRITICAL)
+═══════════════════════════════════════
+Do NOT expose your internal thinking process. You are interacting with an end-user in a chat interface.
+- NEVER output <thinking>, <thought>, or <scratchpad> tags.
+- NEVER include meta-commentary like "Here is what I am thinking..." or "To answer this..."
+- Provide ONLY the final, conversational response that Koin would say directly to the user.
+
+═══════════════════════════════════════
 RESPONSE GUIDELINES
 ═══════════════════════════════════════
 1. Be conversational, warm, and helpful (use 1-2 emojis naturally)
 2. Keep responses concise (2-4 sentences for simple questions, more for complex analysis)
-3. When asked "What can I do here?" or similar, explain the current screen's features
-4. Reference actual user data when relevant - especially time-based queries like "this week" or "today"
-5. Use Filipino student context (jeepney fare, canteen, allowance, etc.)
-6. Always use peso (₱) for currency
-7. Be encouraging and celebrate wins
-8. If asked about navigation, mention specific screens they can visit
-9. For screen-specific questions, focus on that screen's capabilities
-10. When user asks about weekly/daily spending, use the time-based data provided above
+3. Keep your responses concise, encouraging, and focused on financial literacy or the user's current app objectives
+4. When asked "What can I do here?" or similar, explain the current screen's features
+5. Reference actual user data when relevant - especially time-based queries like "this week" or "today"
+6. Use Filipino student context (jeepney fare, canteen, allowance, etc.)
+7. Always use peso (₱) for currency
+8. Be encouraging and celebrate wins
+9. If asked about navigation, mention specific screens they can visit
+10. For screen-specific questions, focus on that screen's capabilities
+11. When user asks about weekly/daily spending, use the time-based data provided above
 
 YOUR PERSONALITY:
 - Friendly Filipino financial friend ("Koin")
@@ -574,24 +619,34 @@ YOUR PERSONALITY:
     try {
       const systemPrompt = buildSystemPrompt(currentScreen);
 
+      // Read the LATEST history from the ref to avoid stale closures
+      const currentHistory = conversationHistoryRef.current;
+
       const apiMessages = [
         { role: 'system', content: systemPrompt },
-        ...conversationHistory.slice(-6),
+        // Include up to 10 recent messages (5 full turns) for richer context
+        ...currentHistory.slice(-10),
         { role: 'user', content: userQuestion }
       ];
 
       DebugUtils.log('KOIN_CHAT', 'Sending to NVIDIA API', {
         screen: currentScreen,
         questionLength: userQuestion.length,
-        historyLength: conversationHistory.length
+        historyLength: currentHistory.length,
+        historyPreview: currentHistory.slice(-4).map(m => `${m.role}: ${m.content.substring(0, 40)}...`)
       });
 
-      const response = await getChatCompletion(apiMessages, {
+      let response = await getChatCompletion(apiMessages, {
         temperature: 0.7,
-        max_tokens: 400,
+        max_tokens: 1024,
         frequency_penalty: 0.5,
         presence_penalty: 0.3
       });
+
+      // Strip any <thinking>...</thinking> blocks that reasoning models may leak
+      response = response.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
+      response = response.replace(/<thought>[\s\S]*?<\/thought>/gi, '').trim();
+      response = response.replace(/<scratchpad>[\s\S]*?<\/scratchpad>/gi, '').trim();
 
       setConversationHistory(prev => [
         ...prev,
@@ -625,7 +680,7 @@ YOUR PERSONALITY:
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
-  }, [isTyping, currentScreen, conversationHistory]);
+  }, [isTyping, currentScreen]);
 
   // Always keep the bridge ref up-to-date so ChatFooterComponent calls the latest version
   _sendMessageRef.current = sendMessage;
@@ -1091,7 +1146,9 @@ const styles = StyleSheet.create({
   inputArea: {
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: Platform.OS === 'ios' ? 32 : 16,
+    // paddingBottom is now set dynamically in ChatFooterComponent using the
+    // safe-area bottom inset so the background fills the gap completely.
+    paddingBottom: 16,
     borderTopWidth: 1,
   },
   inputContainer: {

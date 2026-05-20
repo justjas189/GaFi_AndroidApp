@@ -115,6 +115,7 @@ class DatabaseManager {
    */
   async getUserExpenses(userId, filters = {}) {
     const cacheKey = `expenses_${userId}_${JSON.stringify(filters)}`;
+    const appMode = filters.appMode ?? 'custom';
     
     // Check cache first
     if (this.connectionPool.has(cacheKey)) {
@@ -134,6 +135,9 @@ class DatabaseManager {
           .order('date', { ascending: false });
 
         // Apply filters
+        if (appMode) {
+          query = query.eq('app_mode', appMode);
+        }
         if (filters.startDate) {
           query = query.gte('date', filters.startDate);
         }
@@ -175,13 +179,18 @@ class DatabaseManager {
       throw new Error('Missing required fields: user_id and amount');
     }
 
+    const appMode = expenseData.app_mode === 'story' || expenseData.appMode === 'story'
+      ? 'story'
+      : 'custom';
+
     // Sanitize data
     const sanitizedData = {
       user_id: expenseData.user_id,
       amount: parseFloat(expenseData.amount),
       category: expenseData.category || 'others',
       note: expenseData.note?.substring(0, 500) || '',
-      date: expenseData.date || new Date().toISOString()
+      date: expenseData.date || new Date().toISOString(),
+      app_mode: appMode
     };
 
     const result = await this.executeQuery(
@@ -315,7 +324,8 @@ class DatabaseManager {
       amount: parseFloat(expense.amount),
       category: expense.category || 'others',
       note: expense.note?.substring(0, 500) || '',
-      date: expense.date || new Date().toISOString()
+      date: expense.date || new Date().toISOString(),
+      app_mode: expense.app_mode === 'story' || expense.appMode === 'story' ? 'story' : 'custom'
     }));
 
     const result = await this.executeQuery(

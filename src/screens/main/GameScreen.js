@@ -701,6 +701,7 @@ export default function BuildScreen() {
   const [activeSessionId, setActiveSessionId] = useState(null); // Supabase session id for story
   const [dailyTaskCompletion, setDailyTaskCompletion] = useState({}); // { [conditionKey]: true }
   const [dailyTaskRuntimeByDay, setDailyTaskRuntimeByDay] = useState({}); // { [dayNumber]: {...runtime} }
+  const dailyTaskRuntimeByDayRef = useRef({}); // Ref mirror — always fresh for async callbacks
   const [activeStoryDay, setActiveStoryDay] = useState(1);
   const dailyTaskAnnouncedDayRef = useRef(null);
   const isHydratingDailyTaskStateRef = useRef(false);
@@ -1103,19 +1104,23 @@ export default function BuildScreen() {
       if (!raw) {
         setDailyTaskCompletion({});
         setDailyTaskRuntimeByDay({});
+        dailyTaskRuntimeByDayRef.current = {};
         setActiveStoryDay(1);
         return;
       }
 
       const parsed = JSON.parse(raw);
       const completion = parsed?.completion || {};
+      const runtimeByDay = parsed?.runtimeByDay || {};
       setDailyTaskCompletion(completion);
-      setDailyTaskRuntimeByDay(parsed?.runtimeByDay || {});
+      setDailyTaskRuntimeByDay(runtimeByDay);
+      dailyTaskRuntimeByDayRef.current = runtimeByDay;
       setActiveStoryDay(getFirstIncompleteStoryDay(level, completion));
     } catch (error) {
       console.warn('⚠️ Failed to hydrate daily task state:', error?.message || error);
       setDailyTaskCompletion({});
       setDailyTaskRuntimeByDay({});
+      dailyTaskRuntimeByDayRef.current = {};
       setActiveStoryDay(1);
     } finally {
       isHydratingDailyTaskStateRef.current = false;
@@ -1143,10 +1148,10 @@ export default function BuildScreen() {
 
       updater(nextDayState);
 
-      return {
-        ...prev,
-        [dayNumber]: nextDayState,
-      };
+      const nextFull = { ...prev, [dayNumber]: nextDayState };
+      // Keep the ref in sync so async callers always read fresh data
+      dailyTaskRuntimeByDayRef.current = nextFull;
+      return nextFull;
     });
   }, [gameMode, getActiveStoryDay]);
 
@@ -1251,7 +1256,10 @@ export default function BuildScreen() {
     const dayConfig = getStoryDayTasks(storyLevel, activeDay);
     if (!dayConfig) return;
 
-    const dayState = getDayRuntimeState(activeDay);
+    // Read from the ref so we always get the freshest runtime data,
+    // even when called from an async callback with stale closures.
+    const freshRuntime = dailyTaskRuntimeByDayRef.current;
+    const dayState = freshRuntime[activeDay] || buildEmptyDailyRuntime();
     const goalTotalsByName = {};
     const goalTargetsByName = {};
 
@@ -1293,24 +1301,26 @@ export default function BuildScreen() {
 
     if (newlyCompleted.length > 0 && !isHydratingDailyTaskStateRef.current) {
       const earnedXp = newlyCompleted.reduce((sum, task) => sum + (task.reward?.xp || 0), 0);
-      if (earnedXp > 0) {
+      if (gameMode === 'story' && earnedXp > 0) {
         gameDatabaseService.incrementUserLevelStats({ xpToAdd: earnedXp });
       }
 
-      newlyCompleted.forEach((task) => {
-        gameDatabaseService.logActivity({
-          activityType: 'daily_task_completed',
-          sessionId: activeSessionId,
-          details: {
-            level: storyLevel,
-            day: activeDay,
-            taskId: task.id,
-            conditionKey: task.conditionKey,
-            rewardXp: task.reward?.xp || 0,
-          },
-          xpEarned: task.reward?.xp || 0,
+      if (gameMode === 'story') {
+        newlyCompleted.forEach((task) => {
+          gameDatabaseService.logActivity({
+            activityType: 'daily_task_completed',
+            sessionId: activeSessionId,
+            details: {
+              level: storyLevel,
+              day: activeDay,
+              taskId: task.id,
+              conditionKey: task.conditionKey,
+              rewardXp: task.reward?.xp || 0,
+            },
+            xpEarned: task.reward?.xp || 0,
+          });
         });
-      });
+      }
 
       const completedLines = newlyCompleted.map((task) => `• ${task.successMessage}`).join('\n');
       Alert.alert('Daily Task Complete', `${completedLines}${earnedXp > 0 ? `\n\n+${earnedXp} XP` : ''}`);
@@ -1701,6 +1711,7 @@ export default function BuildScreen() {
         .from('expenses')
         .select('amount')
         .eq('user_id', user?.id)
+        .eq('app_mode', 'story')
         .gte('date', startOfDay)
         .lt('date', endOfDay);
 
@@ -1725,6 +1736,7 @@ export default function BuildScreen() {
         .from('expenses')
         .select('amount, date, category')
         .eq('user_id', user?.id)
+        .eq('app_mode', 'story')
         .gte('date', startDateStr)
         .lte('date', endDateStr);
 
@@ -1927,19 +1939,15 @@ export default function BuildScreen() {
         : (parseFloat(results.savingsPercent) >= results.savingsGoal * 1.5 ? 3 : parseFloat(results.savingsPercent) >= results.savingsGoal * 1.2 ? 2 : 1)
     ) : 0;
 
-    if (activeSessionId) {
-      if (gameMode === 'story') {
-        gameDatabaseService.completeStorySession(activeSessionId, { passed, starsEarned, xpEarned, resultsData: results, weeklySpending: totalSpent });
-      }
+    if (activeSessionId && gameMode === 'story') {
+      gameDatabaseService.completeStorySession(activeSessionId, { passed, starsEarned, xpEarned, resultsData: results, weeklySpending: totalSpent });
       gameDatabaseService.logActivity({ activityType: 'level_complete', sessionId: activeSessionId, details: { level: storyLevel, passed, stars: starsEarned, mode: gameMode }, xpEarned });
     }
     // Increment XP and goals achieved on user_levels
-    if (passed) {
+    if (passed && gameMode === 'story') {
       gameDatabaseService.incrementUserLevelStats({ xpToAdd: xpEarned, goalsAchieved: 1 });
       // Directly mark story level completed on user_levels (safety net for DB trigger)
-      if (gameMode === 'story') {
-        gameDatabaseService.markStoryLevelCompleted(storyLevel, starsEarned);
-      }
+      gameDatabaseService.markStoryLevelCompleted(storyLevel, starsEarned);
     }
 
     // 🏆 Check for story mode achievements when level is completed
@@ -1991,6 +1999,7 @@ export default function BuildScreen() {
       setLevelResults(null);
       setDailyTaskCompletion({});
       setDailyTaskRuntimeByDay({});
+      dailyTaskRuntimeByDayRef.current = {};
       setActiveStoryDay(1);
       dailyTaskAnnouncedDayRef.current = null;
 
@@ -2106,13 +2115,13 @@ export default function BuildScreen() {
 
   // Check and award achievements
   const checkAchievements = async (activityType, activityData = {}) => {
-    if (!user?.id) return;
+    if (!user?.id || gameMode !== 'story') return;
 
     try {
       const newAchievements = await AchievementService.checkAndAwardAchievements(
         user.id,
         activityType,
-        activityData
+        { ...activityData, appMode: 'story' }
       );
 
       // Show popup for first new achievement
@@ -2142,7 +2151,8 @@ export default function BuildScreen() {
       const { data: allExpenses, error } = await supabase
         .from('expenses')
         .select('category')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .eq('app_mode', 'story');
 
       if (error) {
         console.warn('Could not fetch expense stats:', error?.message || error);
@@ -2417,12 +2427,14 @@ export default function BuildScreen() {
 
     // Background save — non-blocking
     try {
+      const appMode = gameMode === 'story' ? 'story' : 'custom';
       const expenseData = {
         amount: amount,
         category: category,
         sub_category: subCategory || null,
         note: description,
         date: new Date().toISOString(),
+        appMode,
       };
 
       console.log('💾 Transport: Saving expense via DataContext:', JSON.stringify(expenseData));
@@ -2451,6 +2463,8 @@ export default function BuildScreen() {
               dayState.needsAfterTravelCount = (dayState.needsAfterTravelCount || 0) + 1;
             }
           });
+          // Immediately evaluate tasks against the freshest runtime (ref)
+          evaluateActiveStoryDayTasks();
         }
 
         // Persist session spending to Supabase (fire-and-forget)
@@ -2471,15 +2485,18 @@ export default function BuildScreen() {
           gameDatabaseService.updateStorySessionSpending(activeSessionId, sessionUpdate);
         }
 
-        // Log activity (fire-and-forget)
-        gameDatabaseService.logActivity({
-          activityType: 'expense_recorded',
-          mapId: currentMapId,
-          amount: amount,
-          details: { category, note: description, source: 'transport' },
-          sessionId: activeSessionId,
-        });
-        gameDatabaseService.incrementUserLevelStats({ expensesRecorded: 1 });
+        if (gameMode === 'story') {
+          // Log activity (fire-and-forget)
+          gameDatabaseService.logActivity({
+            activityType: 'expense_recorded',
+            mapId: currentMapId,
+            amount: amount,
+            details: { category, note: description, source: 'transport' },
+            sessionId: activeSessionId,
+          });
+          gameDatabaseService.incrementUserLevelStats({ expensesRecorded: 1 });
+          fetchTodaySpending();
+        }
       }
     } catch (error) {
       console.error('❌ Transport: Error saving expense:', error);
@@ -2542,14 +2559,16 @@ export default function BuildScreen() {
       }),
     ]).catch(() => { });
 
-    // ── Log map travel to Supabase ──
-    gameDatabaseService.logActivity({
-      activityType: 'map_travel',
-      mapId,
-      details: { from: currentMapId, to: mapId, transport: transportMode || 'walk' },
-      sessionId: activeSessionId,
-    });
-    gameDatabaseService.incrementUserLevelStats({ mapsTraveled: 1 });
+    if (gameMode === 'story') {
+      // ── Log map travel to Supabase ──
+      gameDatabaseService.logActivity({
+        activityType: 'map_travel',
+        mapId,
+        details: { from: currentMapId, to: mapId, transport: transportMode || 'walk' },
+        sessionId: activeSessionId,
+      });
+      gameDatabaseService.incrementUserLevelStats({ mapsTraveled: 1 });
+    }
 
     // Arrival message removed - no alert needed
 
@@ -3116,6 +3135,7 @@ export default function BuildScreen() {
         sub_category: savedSubCategory || null,
         note: `${savedNote || savedSubCategory || savedCategory} (at ${currentMap.name})`, // Include location in note
         date: currentDate.toISOString(), // Pass full ISO timestamp with date AND time
+        appMode: 'story',
       };
 
       console.log('💾 Saving expense via DataContext:', JSON.stringify(expenseData));
@@ -3148,6 +3168,8 @@ export default function BuildScreen() {
               dayState.needsAfterTravelCount = (dayState.needsAfterTravelCount || 0) + 1;
             }
           });
+          // Immediately evaluate tasks against the freshest runtime (ref)
+          evaluateActiveStoryDayTasks();
         }
 
         // Update category spending tracking (for all levels)
@@ -3191,16 +3213,18 @@ export default function BuildScreen() {
           categoryCount: categoryCount,
         });
 
-        // ── Log expense to Supabase game_activity_log + update user_levels ──
-        gameDatabaseService.logActivity({
-          activityType: 'expense_recorded',
-          mapId: currentMapId,
-          locationId: currentLocation,
-          amount: expenseAmountNum,
-          details: { category: savedCategory, note: savedNote },
-          sessionId: activeSessionId,
-        });
-        gameDatabaseService.incrementUserLevelStats({ expensesRecorded: 1 });
+        if (gameMode === 'story') {
+          // ── Log expense to Supabase game_activity_log + update user_levels ──
+          gameDatabaseService.logActivity({
+            activityType: 'expense_recorded',
+            mapId: currentMapId,
+            locationId: currentLocation,
+            amount: expenseAmountNum,
+            details: { category: savedCategory, note: savedNote },
+            sessionId: activeSessionId,
+          });
+          gameDatabaseService.incrementUserLevelStats({ expensesRecorded: 1 });
+        }
 
         // Update session spending if in story mode
         if (activeSessionId && gameMode === 'story') {
@@ -4816,6 +4840,7 @@ export default function BuildScreen() {
     setLevelResults(null);
     setDailyTaskCompletion({});
     setDailyTaskRuntimeByDay({});
+    dailyTaskRuntimeByDayRef.current = {};
     setActiveStoryDay(1);
     dailyTaskAnnouncedDayRef.current = null;
     setGameMode(null);
@@ -6356,7 +6381,7 @@ export default function BuildScreen() {
       ) : (
         <View style={styles.header}>
           <View style={styles.headerLeftControls}>
-            <TouchableOpacity
+            {/* <TouchableOpacity
               style={styles.backToMenuButton}
               onPress={() => {
                 if (tutorialActive) {
@@ -6368,8 +6393,8 @@ export default function BuildScreen() {
                 setShowMainMenu(true);
               }}
             >
-              <Ionicons name="home" size={20} color="#FFF" />
-            </TouchableOpacity>
+              <Ionicons name="home" size={20} color="#FFF" /> 
+            </TouchableOpacity>*/}
             <TouchableOpacity
               style={styles.historyButton}
               onPress={() => setIsHistoryModalVisible(true)}
@@ -6917,6 +6942,7 @@ export default function BuildScreen() {
                         category: 'No Spend Day',
                         description: 'No expenses today - keeping my streak! 🎯',
                         created_at: new Date().toISOString(),
+                        appMode: 'story',
                       });
 
                       // Check achievements for logging activity
@@ -7043,6 +7069,7 @@ export default function BuildScreen() {
                         sub_category: savedSubCategory || null,
                         note: savedNote || `${savedCategory} expense`,
                         date: currentDate.toISOString(),
+                        appMode: 'story',
                       };
 
                       console.log('💾 Notebook: Saving expense via DataContext:', JSON.stringify(expenseData));
@@ -7054,7 +7081,7 @@ export default function BuildScreen() {
                       } else {
                         console.log('✅ Notebook: Expense saved successfully');
 
-                        if (Math.abs(savedAmount - 1) < 0.0001) {
+                        if (gameMode === 'story' && Math.abs(savedAmount - 1) < 0.0001) {
                           const testAchievement = AchievementService.getAchievementDefinitions().test_hello_world;
                           if (testAchievement) {
                             showAchievementPopup(testAchievement);
@@ -7078,6 +7105,9 @@ export default function BuildScreen() {
                               dayState.needsAfterTravelCount = (dayState.needsAfterTravelCount || 0) + 1;
                             }
                           });
+                          // Immediately evaluate tasks against the freshest runtime (ref)
+                          evaluateActiveStoryDayTasks();
+                          fetchTodaySpending();
                         }
 
                         // Persist session spending to Supabase (fire-and-forget)
@@ -7098,16 +7128,18 @@ export default function BuildScreen() {
                           gameDatabaseService.updateStorySessionSpending(activeSessionId, sessionUpdate);
                         }
 
-                        // Log to Supabase game activity (fire-and-forget)
-                        gameDatabaseService.logActivity({
-                          activityType: 'expense_recorded',
-                          mapId: currentMapId,
-                          locationId: currentLocation,
-                          amount: savedAmount,
-                          details: { category: savedCategory, note: savedNote, source: 'notebook' },
-                          sessionId: activeSessionId,
-                        });
-                        gameDatabaseService.incrementUserLevelStats({ expensesRecorded: 1 });
+                        if (gameMode === 'story') {
+                          // Log to Supabase game activity (fire-and-forget)
+                          gameDatabaseService.logActivity({
+                            activityType: 'expense_recorded',
+                            mapId: currentMapId,
+                            locationId: currentLocation,
+                            amount: savedAmount,
+                            details: { category: savedCategory, note: savedNote, source: 'notebook' },
+                            sessionId: activeSessionId,
+                          });
+                          gameDatabaseService.incrementUserLevelStats({ expensesRecorded: 1 });
+                        }
 
                         // Achievements — fire-and-forget (no await blocking)
                         checkAchievements('expense_logged', {

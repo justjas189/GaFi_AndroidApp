@@ -295,6 +295,9 @@ export class AchievementService {
    */
   static async checkAndAwardAchievements(userId, activityType, activityData = {}) {
     try {
+      if (activityData?.appMode && activityData.appMode !== 'story') {
+        return [];
+      }
       const newAchievements = [];
       const definitions = this.getAchievementDefinitions();
 
@@ -565,7 +568,8 @@ export class AchievementService {
       const { data: expenses } = await supabase
         .from('expenses')
         .select('id')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .eq('app_mode', 'story');
 
       return {
         currentLevel: userLevels?.current_level || 1,

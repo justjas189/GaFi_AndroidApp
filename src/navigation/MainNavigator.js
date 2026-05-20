@@ -76,8 +76,8 @@ const TabNavigator = () => {
 
           if (route.name === 'Game') {
             iconName = focused ? 'game-controller' : 'game-controller-outline';
-          } else if (route.name === 'CustomModeDashboard') {
-            iconName = focused ? 'stats-chart' : 'stats-chart-outline';
+          } else if (route.name === 'Custom') {
+            iconName = focused ? 'grid' : 'grid-outline';
           } else if (route.name === 'Expenses') {
             iconName = focused ? 'stats-chart' : 'stats-chart-outline';
           } else if (route.name === 'Predictions') {
@@ -104,7 +104,7 @@ const TabNavigator = () => {
     >
       <Tab.Screen name="Game" component={GameScreen} />
       {/* <Tab.Screen name="Home" component={HomeScreen} /> */}
-      <Tab.Screen name="CustomModeDashboard" component={CustomModeDashboard} />
+      <Tab.Screen name="Custom" component={CustomModeDashboard} />
       <Tab.Screen name="Expenses" component={ExpenseScreen} />
       <Tab.Screen name="Predictions" component={DataPredictionScreen} />
       <Tab.Screen name="Explore" component={ExploreScreen} />

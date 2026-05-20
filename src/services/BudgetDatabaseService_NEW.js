@@ -607,6 +607,7 @@ export class BudgetDatabaseService {
       
       // Validate required fields
       const { amount, category, description, date, sub_category, naturalLanguageInput, confidence } = transactionData;
+      const appMode = transactionData.app_mode === 'story' ? 'story' : 'custom';
       
       if (!amount || amount <= 0) {
         throw new Error('Amount must be greater than 0');
@@ -633,6 +634,7 @@ export class BudgetDatabaseService {
         category: validCategory,
         sub_category: sub_category || null,
         note: description || null,
+        app_mode: appMode,
         // Enhanced date/time handling - respect manually selected dates
         date: (() => {
           try {
@@ -691,6 +693,7 @@ export class BudgetDatabaseService {
       
       DebugUtils.log('DB_SERVICE', 'Expense insertion details', {
         userId,
+        appMode,
         originalDate: date,
         dateProvided: !!(date && date.trim() !== ''),
         formattedDate: expenseToInsert.date,
@@ -721,7 +724,7 @@ export class BudgetDatabaseService {
       // Get updated category spending
       let categoryInfo = null;
       try {
-        categoryInfo = await this.getCategorySpending(userId, validCategory);
+        categoryInfo = await this.getCategorySpending(userId, validCategory, 'this_month', appMode);
       } catch (categoryError) {
         console.error('Error getting category spending:', categoryError);
         categoryInfo = { success: false, error: categoryError.message };
@@ -749,9 +752,9 @@ export class BudgetDatabaseService {
    * @param {string} period - Time period
    * @returns {Object} Category spending data
    */
-  async getCategorySpending(userId, category, period = 'this_month') {
+  async getCategorySpending(userId, category, period = 'this_month', appMode = 'custom') {
     try {
-      DebugUtils.log('DB_SERVICE', 'Getting category spending', { userId, category, period });
+      DebugUtils.log('DB_SERVICE', 'Getting category spending', { userId, category, period, appMode });
 
       const dateFilter = this.getDateFilter(period);
       
@@ -761,6 +764,7 @@ export class BudgetDatabaseService {
         .select('*')
         .eq('user_id', userId)
         .eq('category', category)
+        .eq('app_mode', appMode)
         .gte('date', dateFilter.start + 'T00:00:00.000Z')
         .lte('date', dateFilter.end + 'T23:59:59.999Z')
         .order('created_at', { ascending: false });
@@ -1037,7 +1041,7 @@ export class BudgetDatabaseService {
    * @param {string} period - Time period
    * @returns {Object} Budget summary
    */
-  async getBudgetSummary(userId, period = 'this_month') {
+  async getBudgetSummary(userId, period = 'this_month', appMode = 'custom') {
     try {
       // Critical security validation
       if (!userId || typeof userId !== 'string' || userId.trim() === '') {
@@ -1057,7 +1061,7 @@ export class BudgetDatabaseService {
         }
       }
 
-      DebugUtils.log('DB_SERVICE', 'Getting budget summary with strict validation', { userId, period });
+      DebugUtils.log('DB_SERVICE', 'Getting budget summary with strict validation', { userId, period, appMode });
 
       const budgetResult = await this.getUserBudget(userId);
       if (!budgetResult.success) throw new Error(budgetResult.error);
@@ -1085,6 +1089,7 @@ export class BudgetDatabaseService {
         .from('expenses')
         .select('amount, category, user_id, date, id, note')
         .eq('user_id', userId)
+        .eq('app_mode', appMode)
         .gte('date', dateFilter.start + 'T00:00:00.000Z')
         .lte('date', dateFilter.end + 'T23:59:59.999Z');
 
@@ -1408,12 +1413,13 @@ export class BudgetDatabaseService {
    * @param {number} limit - Result limit
    * @returns {Object} Search results
    */
-  async searchTransactions(userId, query, limit = 10) {
+  async searchTransactions(userId, query, limit = 10, appMode = 'custom') {
     try {
       const { data: expenses, error } = await this.supabase
         .from('expenses')
         .select('*')
         .eq('user_id', userId)
+        .eq('app_mode', appMode)
         .or(`note.ilike.%${query}%,category.ilike.%${query}%`)
         .order('created_at', { ascending: false })
         .limit(limit);
@@ -1506,9 +1512,9 @@ export class BudgetDatabaseService {
    * @param {string} userId - User ID
    * @returns {Object} Diagnostic results
    */
-  async getUserDataDiagnostic(userId) {
+  async getUserDataDiagnostic(userId, appMode = 'custom') {
     try {
-      DebugUtils.log('DB_SERVICE', 'Running user data diagnostic from expenses table', { userId });
+      DebugUtils.log('DB_SERVICE', 'Running user data diagnostic from expenses table', { userId, appMode });
 
       // Get current date for filtering
       const now = new Date();
@@ -1521,6 +1527,7 @@ export class BudgetDatabaseService {
       const { data: allExpenses, error: allExpensesError } = await this.supabase
         .from('expenses')
         .select('*')
+        .eq('app_mode', appMode)
         .gte('date', thisMonth.start + 'T00:00:00.000Z')
         .lte('date', thisMonth.end + 'T23:59:59.999Z');
 
@@ -1531,6 +1538,7 @@ export class BudgetDatabaseService {
         .from('expenses')
         .select('*')
         .eq('user_id', userId)
+        .eq('app_mode', appMode)
         .gte('date', thisMonth.start + 'T00:00:00.000Z')
         .lte('date', thisMonth.end + 'T23:59:59.999Z');
 

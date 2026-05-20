@@ -187,6 +187,7 @@ export const DataProvider = ({ children }) => {
           .from('expenses')
           .select('*')
           .eq('user_id', userId)
+          .eq('app_mode', 'custom')
           .order('date', { ascending: false })
           .range(0, 9999);
 
@@ -322,6 +323,7 @@ export const DataProvider = ({ children }) => {
     try {
       const session = await ensureAuthenticated();
       const userId = session.user.id;
+      const appMode = expense.appMode === 'story' ? 'story' : 'custom';
 
       console.log('Adding expense for user:', userId, expense);
 
@@ -339,7 +341,8 @@ export const DataProvider = ({ children }) => {
         date: expense.date || null, // Pass the selected date or null for current time
         sub_category: expense.sub_category || null, // Sub-category for granular tracking
         naturalLanguageInput: null, // null for manual entries
-        confidence: null  // null for manual entries
+        confidence: null,  // null for manual entries
+        app_mode: appMode
       };
       
       const result = await budgetService.recordExpense(userId, transactionData);
@@ -350,15 +353,17 @@ export const DataProvider = ({ children }) => {
 
       console.log('Expense recorded successfully:', result);
 
-      // ── Check budget thresholds for notification alerts ──
-      try {
-        await notificationService.checkBudgetThresholds(
-          budget,
-          parseFloat(expense.amount),
-          normalizedCategory
-        );
-      } catch (alertError) {
-        console.warn('Budget alert check failed (non-critical):', alertError);
+      // ── Check budget thresholds for notification alerts (custom mode only) ──
+      if (appMode === 'custom') {
+        try {
+          await notificationService.checkBudgetThresholds(
+            budget,
+            parseFloat(expense.amount),
+            normalizedCategory
+          );
+        } catch (alertError) {
+          console.warn('Budget alert check failed (non-critical):', alertError);
+        }
       }
 
       // Refresh local state by reloading all data
