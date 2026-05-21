@@ -1,5 +1,5 @@
 import React, { useState, useRef, useContext, useEffect, useCallback, useMemo } from 'react';
-import { View, StyleSheet, ImageBackground, Dimensions, TouchableWithoutFeedback, Animated, Modal, Text, TextInput, TouchableOpacity, Alert, ScrollView, Easing, Image, useWindowDimensions, AppState } from 'react-native';
+import { View, StyleSheet, ImageBackground, Dimensions, TouchableWithoutFeedback, Animated, Modal, Text, TextInput, TouchableOpacity, Alert, ScrollView, SectionList, Easing, Image, useWindowDimensions, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
@@ -719,6 +719,7 @@ export default function BuildScreen() {
   const [dayReportViewed, setDayReportViewed] = useState(false); // Tracks if day report has been viewed
   const [lastProgressTimestamp, setLastProgressTimestamp] = useState(null); // Last saved progress timestamp
   const [showDayReportNotification, setShowDayReportNotification] = useState(false); // UI: color of Day Report Modal icon
+  const [hasUnreadReport, setHasUnreadReport] = useState(false);
   const [showLevelCompleteModal, setShowLevelCompleteModal] = useState(false); // Level Complete modal visibility
   const [showDayReportModal, setShowDayReportModal] = useState(false);
   const [liveDayReportData, setLiveDayReportData] = useState(null);
@@ -754,6 +755,8 @@ export default function BuildScreen() {
   const [isHistoryModalVisible, setIsHistoryModalVisible] = useState(false);
   const [showHistoryReportModal, setShowHistoryReportModal] = useState(false);
   const [historyReportData, setHistoryReportData] = useState(null);
+  const [dayReportHistory, setDayReportHistory] = useState([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [allocationAmount, setAllocationAmount] = useState('');
   const [selectedGoal, setSelectedGoal] = useState(null);
 
@@ -1240,6 +1243,8 @@ export default function BuildScreen() {
     }));
 
     return {
+      dayNumber: dayItem.dayNumber,
+      displayDay: dayItem.displayDay,
       title: `Day ${dayItem.displayDay} Report`,
       weeklyBudgetRemaining,
       spentToday,
@@ -1254,12 +1259,190 @@ export default function BuildScreen() {
     };
   }, [dailyTaskRuntimeByDay, getDayRuntimeState, weeklyBudget, storyLevel]);
 
+  const buildLocalHistoryItems = useCallback(() => {
+    if (!completedDaysHistory.length) return [];
+
+    return completedDaysHistory.map((dayItem) => ({
+      id: `local-${storyLevel}-${dayItem.dayNumber}`,
+      storyLevel,
+      dayNumber: dayItem.dayNumber,
+      displayDay: dayItem.displayDay,
+      completedCount: dayItem.completedCount,
+      totalCount: dayItem.totalCount,
+      xpEarned: dayItem.xpEarned,
+      tasks: dayItem.tasks,
+    }));
+  }, [completedDaysHistory, storyLevel]);
+
+  const normalizeDayReportRow = useCallback((row) => {
+    const details = row?.details || {};
+    const reportData = details?.report || null;
+    const storyLevelValue = Number(details?.storyLevel ?? reportData?.storyLevel);
+    if (!Number.isFinite(storyLevelValue)) return null;
+
+    const dailyTasks = Array.isArray(reportData?.dailyTasks) ? reportData.dailyTasks : [];
+    const completedCount = dailyTasks.filter((task) => task.completed).length;
+    const totalCount = dailyTasks.length;
+    const dayNumberValue = Number(details?.dayNumber ?? reportData?.dayNumber ?? reportData?.displayDay);
+    const displayDayValue = reportData?.displayDay ?? dayNumberValue;
+
+    return {
+      id: row?.id ?? `${storyLevelValue}-${dayNumberValue || 'day'}-${row?.created_at || 'unknown'}`,
+      storyLevel: storyLevelValue,
+      dayNumber: Number.isFinite(dayNumberValue) ? dayNumberValue : null,
+      displayDay: displayDayValue,
+      completedCount,
+      totalCount,
+      xpEarned: Number(reportData?.xpEarned) || 0,
+      tasks: dailyTasks,
+      reportData,
+      createdAt: row?.created_at || null,
+    };
+  }, []);
+
+  const buildHistorySections = useCallback((reports) => {
+    if (!reports?.length) return [];
+
+    const levelsReached = new Set([storyLevel, ...unlockedLevels].filter((level) => Number.isFinite(level)));
+    const filteredReports = reports.filter((report) => {
+      if (!Number.isFinite(report?.storyLevel)) return false;
+      if (levelsReached.size === 0) return true;
+      return levelsReached.has(report.storyLevel);
+    });
+
+    if (!filteredReports.length) return [];
+
+    const grouped = filteredReports.reduce((acc, report) => {
+      const levelKey = report.storyLevel;
+      if (!acc[levelKey]) acc[levelKey] = [];
+      acc[levelKey].push(report);
+      return acc;
+    }, {});
+
+    const levelKeys = Object.keys(grouped)
+      .map((level) => Number(level))
+      .filter((level) => Number.isFinite(level))
+      .sort((a, b) => b - a);
+
+    const orderedLevels = Number.isFinite(storyLevel) && levelKeys.includes(storyLevel)
+      ? [storyLevel, ...levelKeys.filter((level) => level !== storyLevel)]
+      : levelKeys;
+
+    return orderedLevels
+      .map((level) => {
+        const sortedItems = grouped[level].slice().sort((a, b) => {
+          const dayA = Number(a.dayNumber);
+          const dayB = Number(b.dayNumber);
+          if (Number.isFinite(dayA) && Number.isFinite(dayB) && dayA !== dayB) {
+            return dayB - dayA;
+          }
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return dateB - dateA;
+        });
+
+        return {
+          title: `Level ${level}`,
+          level,
+          data: sortedItems,
+        };
+      })
+      .filter((section) => section.data.length > 0);
+  }, [storyLevel, unlockedLevels]);
+
+  const fetchDayReportHistory = useCallback(async () => {
+    if (gameMode !== 'story') {
+      setDayReportHistory([]);
+      return;
+    }
+
+    const localFallback = buildLocalHistoryItems();
+
+    if (!user?.id) {
+      setDayReportHistory(localFallback);
+      return;
+    }
+
+    setIsHistoryLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('game_activity_log')
+        .select('id, created_at, details')
+        .eq('user_id', user.id)
+        .eq('activity_type', 'day_report')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const normalized = (data || [])
+        .map((row) => normalizeDayReportRow(row))
+        .filter(Boolean);
+
+      setDayReportHistory(normalized);
+    } catch (err) {
+      console.warn('⚠️ Failed to load day report history:', err?.message || err);
+      setDayReportHistory(localFallback);
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  }, [gameMode, user?.id, buildLocalHistoryItems, normalizeDayReportRow]);
+
+  const dayReportSections = useMemo(() => buildHistorySections(dayReportHistory), [dayReportHistory, buildHistorySections]);
+
+  const openDayReportHistory = useCallback(() => {
+    setHasUnreadReport(false);
+    fetchDayReportHistory();
+    setIsHistoryModalVisible(true);
+  }, [fetchDayReportHistory]);
+
+  const handleCloseDayReport = useCallback(() => {
+    setShowDayReportModal(false);
+    setLiveDayReportData(null);
+  }, []);
+
   const openHistoryReport = useCallback((dayItem) => {
-    const reportData = buildHistoryReportData(dayItem);
+    const reportData = dayItem?.reportData || dayItem?.report || buildHistoryReportData(dayItem);
+    if (!reportData) return;
     setHistoryReportData(reportData);
     setIsHistoryModalVisible(false);
     setShowHistoryReportModal(true);
   }, [buildHistoryReportData]);
+
+  const renderHistoryItem = useCallback(({ item }) => {
+    const displayDay = item.displayDay ?? item.dayNumber ?? '-';
+    const completedCount = Number(item.completedCount) || 0;
+    const totalCount = Number(item.totalCount) || 0;
+    const xpEarned = Number(item.xpEarned) || 0;
+
+    return (
+      <TouchableOpacity
+        onPress={() => openHistoryReport(item)}
+        className="flex-row items-center justify-between bg-slate-800 p-4 mb-3 rounded-2xl"
+        style={styles.historyItem}
+      >
+        <View className="flex-row items-center flex-1" style={styles.historyItemLeft}>
+          <View className="h-10 w-10 rounded-full bg-[#2a1c12] items-center justify-center mr-3" style={styles.historyItemIcon}>
+            <Ionicons name="document-text-outline" size={20} color="#ff7a00" />
+          </View>
+          <View className="flex-1">
+            <Text className="text-[#e5e2e1] text-base font-semibold" style={styles.historyItemTitle}>
+              Day {displayDay}
+            </Text>
+            <Text className="text-[#a78b7c] text-xs" style={styles.historyItemSubtitle}>
+              Tasks: {completedCount}/{totalCount} • +{xpEarned} XP
+            </Text>
+          </View>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color="#a78b7c" />
+      </TouchableOpacity>
+    );
+  }, [openHistoryReport]);
+
+  const renderHistorySectionHeader = useCallback(({ section }) => (
+    <View style={styles.historySectionHeader}>
+      <Text style={styles.historySectionTitle}>{section.title}</Text>
+    </View>
+  ), []);
 
   const closeHistoryReport = useCallback(() => {
     setShowHistoryReportModal(false);
@@ -1913,7 +2096,27 @@ export default function BuildScreen() {
   };
 
   const handleStartNextDay = async () => {
+    const reportPayload = liveDayReportData || null;
     setShowDayReportModal(false);
+    setLiveDayReportData(null);
+    setHasUnreadReport(true);
+    setTodaySpending(0);
+
+    if (activeSessionId && reportPayload) {
+      try {
+        await gameDatabaseService.logActivity({
+          activityType: 'day_report',
+          sessionId: activeSessionId,
+          details: {
+            storyLevel,
+            dayNumber: reportPayload.dayNumber || activeStoryDay,
+            report: reportPayload,
+          },
+        });
+      } catch (e) {
+        console.warn('Failed to persist day report:', e?.message || e);
+      }
+    }
     
     // Save last progress timestamp
     const nowTimestamp = new Date().toISOString();
@@ -3408,6 +3611,18 @@ export default function BuildScreen() {
       backgroundColor: 'rgba(90, 90, 122, 0.9)',
       justifyContent: 'center',
       alignItems: 'center',
+      position: 'relative',
+    },
+    historyBadge: {
+      position: 'absolute',
+      top: 4,
+      right: 4,
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: '#ff3b30',
+      borderWidth: 1,
+      borderColor: '#1a1a2e',
     },
     giveUpButton: {
       flexDirection: 'row',
@@ -3724,6 +3939,15 @@ export default function BuildScreen() {
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: 'rgba(255,255,255,0.1)',
+    },
+    historySectionHeader: {
+      marginBottom: 8,
+      marginTop: 4,
+    },
+    historySectionTitle: {
+      color: '#F5DEB3',
+      fontSize: 14,
+      fontWeight: '600',
     },
     historyItem: {
       flexDirection: 'row',
@@ -6590,11 +6814,14 @@ export default function BuildScreen() {
                 if (showDayReportNotification) {
                   handleEndDay();
                 } else {
-                  setIsHistoryModalVisible(true);
+                  openDayReportHistory();
                 }
               }}
             >
               <Ionicons name="calendar" size={18} color={showDayReportNotification ? '#1c1c1c' : '#FFF'} />
+              {hasUnreadReport && !showDayReportNotification && (
+                <View style={styles.historyBadge} />
+              )}
             </TouchableOpacity>
           </View>
           {(gameMode === 'story') && (
@@ -7488,37 +7715,21 @@ export default function BuildScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {completedDaysHistory.length > 0 ? (
-                completedDaysHistory.map((dayItem) => (
-                  <TouchableOpacity
-                    key={`history-day-${dayItem.dayNumber}`}
-                    onPress={() => openHistoryReport(dayItem)}
-                    className="flex-row items-center justify-between bg-slate-800 p-4 mb-3 rounded-2xl"
-                    style={styles.historyItem}
-                  >
-                    <View className="flex-row items-center flex-1" style={styles.historyItemLeft}>
-                      <View className="h-10 w-10 rounded-full bg-[#2a1c12] items-center justify-center mr-3" style={styles.historyItemIcon}>
-                        <Ionicons name="document-text-outline" size={20} color="#ff7a00" />
-                      </View>
-                      <View className="flex-1">
-                        <Text className="text-[#e5e2e1] text-base font-semibold" style={styles.historyItemTitle}>
-                          Day {dayItem.displayDay}
-                        </Text>
-                        <Text className="text-[#a78b7c] text-xs" style={styles.historyItemSubtitle}>
-                          Tasks: {dayItem.completedCount}/{dayItem.totalCount} • +{dayItem.xpEarned} XP
-                        </Text>
-                      </View>
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color="#a78b7c" />
-                  </TouchableOpacity>
-                ))
-              ) : (
+            <SectionList
+              sections={dayReportSections}
+              keyExtractor={(item) => String(item.id)}
+              renderItem={renderHistoryItem}
+              renderSectionHeader={renderHistorySectionHeader}
+              showsVerticalScrollIndicator={false}
+              stickySectionHeadersEnabled={false}
+              ListEmptyComponent={(
                 <View className="items-center py-8" style={styles.historyEmptyState}>
-                  <Text className="text-[#a78b7c] text-sm" style={styles.historyEmptyText}>No completed days yet.</Text>
+                  <Text className="text-[#a78b7c] text-sm" style={styles.historyEmptyText}>
+                    {isHistoryLoading ? 'Loading reports...' : 'No completed days yet.'}
+                  </Text>
                 </View>
               )}
-            </ScrollView>
+            />
           </View>
         </View>
       </Modal>
@@ -7533,6 +7744,7 @@ export default function BuildScreen() {
       <EndOfDayReportModal
         isVisible={showDayReportModal}
         {...liveDayReportData}
+        onClose={handleCloseDayReport}
         onStartNextDay={handleStartNextDay}
       />
 
@@ -7704,7 +7916,7 @@ export default function BuildScreen() {
                 }}
                 onPress={() => {
                   setShowLevelComplete(false);
-                  setIsHistoryModalVisible(true);
+                  openDayReportHistory();
                 }}
               >
                 <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' }}>

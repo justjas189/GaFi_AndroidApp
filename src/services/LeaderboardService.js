@@ -339,33 +339,33 @@ const LeaderboardService = {
       }
 
       const { data, error } = await supabase
-        .from('savings_transactions')
-        .select(`
-          *,
-          gamified_savings_goals(goal_name, level)
-        `)
+        .from('expenses')
+        .select('id, amount, category, sub_category, note, date, app_mode, created_at')
         .eq('user_id', userId)
-        .order('transaction_date', { ascending: false })
+        .order('date', { ascending: false })
         .limit(limit);
 
       if (error) throw error;
 
       // Transform data for easier consumption
-      const transactions = data.map(transaction => ({
-        id: transaction.id,
-        amount: parseFloat(transaction.amount || 0),
-        type: transaction.transaction_type,
-        notes: transaction.notes,
-        date: transaction.transaction_date,
-        goalName: transaction.gamified_savings_goals?.goal_name || 'Unknown Goal',
-        goalLevel: transaction.gamified_savings_goals?.level || 1
+      const transactions = (data || []).map(expense => ({
+        id: expense.id,
+        amount: parseFloat(expense.amount || 0),
+        type: 'expense',
+        notes: expense.note || null,
+        date: expense.date || expense.created_at,
+        goalName: expense.category || 'Expense',
+        goalLevel: 1,
+        category: expense.category || null,
+        subCategory: expense.sub_category || null,
+        appMode: expense.app_mode || null
       }));
 
-      console.log('Retrieved savings transactions:', transactions.length);
+      console.log('Retrieved expense transactions:', transactions.length);
       return transactions;
 
     } catch (error) {
-      console.error('Error getting savings transactions:', error);
+      console.error('Error getting expense transactions:', error);
       return [];
     }
   },
@@ -384,18 +384,25 @@ const LeaderboardService = {
       // Get user level data
       const userLevels = await this.getUserLevels();
       
-      // Get additional stats from transactions
-      const { data: transactionStats, error } = await supabase
-        .from('savings_transactions')
-        .select('amount, transaction_date')
+      // Get additional stats from expenses (legacy transactions replaced)
+      const { count: totalTransactions, error: countError } = await supabase
+        .from('expenses')
+        .select('id', { count: 'exact', head: true })
         .eq('user_id', userId);
 
-      if (error) throw error;
+      if (countError) throw countError;
 
-      const totalTransactions = transactionStats?.length || 0;
-      const lastTransactionDate = transactionStats?.length > 0 
-        ? transactionStats[0].transaction_date 
-        : null;
+      const { data: latestExpense, error: latestError } = await supabase
+        .from('expenses')
+        .select('date, created_at')
+        .eq('user_id', userId)
+        .order('date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (latestError) throw latestError;
+
+      const lastTransactionDate = latestExpense?.date || latestExpense?.created_at || null;
 
       return {
         currentLevel: userLevels.current_level || 1,
@@ -404,7 +411,7 @@ const LeaderboardService = {
         goalsCompleted: userLevels.goals_completed || 0,
         streakDays: userLevels.streak_days || 0,
         lastSaveDate: userLevels.last_save_date,
-        totalTransactions,
+        totalTransactions: totalTransactions || 0,
         lastTransactionDate
       };
 

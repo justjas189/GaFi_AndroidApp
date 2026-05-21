@@ -93,8 +93,9 @@ const EndOfDayReportModal = ({
       ? 'Koin is analyzing your day...'
       : (liveInsight || resolvedKoinInsight || 'Koin is calculating your daily insight...'));
 
-  const primaryLabel = resolvedActionLabel || (isViewOnly ? 'Close' : 'Start Next Day');
+  const primaryLabel = resolvedActionLabel || (isViewOnly ? 'Close' : 'Proceed to Next Day');
   const handlePrimaryPress = isViewOnly ? onClose : onStartNextDay;
+  const showDualActions = !isViewOnly;
 
   const progressPercent = useMemo(() => {
     const current = Number(resolvedCurrentXP) || 0;
@@ -111,7 +112,7 @@ const EndOfDayReportModal = ({
       visible={isVisible}
       animationType="slide"
       transparent
-      onRequestClose={isViewOnly ? (onClose || (() => { })) : () => { }}
+      onRequestClose={onClose || (() => { })}
     >
       <View style={styles.overlay}>
         <View style={styles.overlayInner}>
@@ -259,7 +260,7 @@ const EndOfDayReportModal = ({
 
             {/* Bottom Action Button */}
             <SafeAreaView edges={['bottom']} style={styles.bottomSafeArea}>
-              {handlePrimaryPress && (
+              {handlePrimaryPress && !showDualActions && (
                 <View style={styles.buttonWrapper}>
                   <TouchableOpacity
                     onPress={handlePrimaryPress}
@@ -269,6 +270,28 @@ const EndOfDayReportModal = ({
                     accessibilityLabel={primaryLabel}
                   >
                     <Text style={styles.primaryButtonText}>{primaryLabel}</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              {showDualActions && (
+                <View style={styles.buttonRow}>
+                  <TouchableOpacity
+                    onPress={onClose}
+                    style={styles.secondaryButton}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Close"
+                  >
+                    <Text style={styles.primaryButtonText}>Close</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handlePrimaryPress}
+                    style={styles.primaryButton}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Proceed to Next Day"
+                  >
+                    <Text style={styles.primaryButtonText}>Next Day</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -503,17 +526,40 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 10,
   },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 10,
+  },
   primaryButton: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 16,
     borderRadius: 32,
     backgroundColor: '#ff7a00',
+    flex: 1,
   },
   primaryButtonText: {
     color: '#ffffff',
     fontSize: 24,
     fontWeight: '700',
+  },
+  secondaryButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    flex: 1,
+  },
+  secondaryButtonText: {
+    color: '#e5e2e1',
+    fontSize: 18,
+    fontWeight: '600',
   },
 });
 
