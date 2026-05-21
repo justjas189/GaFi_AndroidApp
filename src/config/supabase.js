@@ -36,43 +36,92 @@ if (typeof crypto === 'undefined') {
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://dfhhocaenejltfxxzaky.supabase.co'
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRmaGhvY2FlbmVqbHRmeHh6YWt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4MjkzNzIsImV4cCI6MjA2NTQwNTM3Mn0.eLc1Qt0AIkLIeTaQDnai6aoxT0scYOClaLLIvXusvf4'
 
-// Resilient storage adapter — wraps AsyncStorage so that transient
-// read/write failures don't silently destroy the session.
+// Memory-cached storage adapter — prevents stale reads during token refresh.
+// Wraps AsyncStorage but always serves the most recent in-memory value.
 // Includes diagnostic logging for the auth token key to debug session loss.
-const AUTH_TOKEN_KEY = 'sb-dfhhocaenejltfxxzaky-auth-token';
+const supabaseRefMatch = supabaseUrl.match(/https?:\/\/([^.]*)\.supabase\.co/i)
+const supabaseRef = supabaseRefMatch ? supabaseRefMatch[1] : null
+const AUTH_TOKEN_KEY = supabaseRef ? `sb-${supabaseRef}-auth-token` : 'sb-auth-token'
+const memoryCache = new Map();
 
-const resilientStorage = {
+const normalizeStorageValue = (value) => {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'string') return value
+  try {
+    return JSON.stringify(value)
+  } catch (_) {
+    return String(value)
+  }
+};
+
+const isValidAuthSessionString = (value) => {
+  if (typeof value !== 'string' || value.trim().length === 0) return false
+  try {
+    const parsed = JSON.parse(value)
+    return Boolean(parsed?.access_token && (parsed?.expires_at || parsed?.expires_in))
+  } catch (_) {
+    return false
+  }
+};
+
+const memoryCachedStorage = {
   async getItem(key) {
-    try {
-      const value = await AsyncStorage.getItem(key);
-      if (key === AUTH_TOKEN_KEY) {
-        console.log('[SUPABASE_STORAGE] getItem auth-token →', value ? `exists (${value.length} chars)` : 'NULL');
+    if (memoryCache.has(key)) {
+      const cachedValue = memoryCache.get(key)
+      if (cachedValue === null || cachedValue === undefined) {
+        return null
       }
-      return value;
+
+      if (key === AUTH_TOKEN_KEY && !isValidAuthSessionString(cachedValue)) {
+        memoryCache.delete(key)
+        await AsyncStorage.removeItem(key)
+        return null
+      }
+
+      return cachedValue
+    }
+
+    try {
+      const value = normalizeStorageValue(await AsyncStorage.getItem(key))
+      if (key === AUTH_TOKEN_KEY && value && !isValidAuthSessionString(value)) {
+        await AsyncStorage.removeItem(key)
+        memoryCache.delete(key)
+        return null
+      }
+      memoryCache.set(key, value)
+      if (key === AUTH_TOKEN_KEY) {
+        console.log('[SUPABASE_STORAGE] getItem auth-token ->', value ? `exists (${value.length} chars)` : 'NULL');
+      }
+      return value
     } catch (e) {
       console.error('[SUPABASE_STORAGE] getItem failed for key:', key, e.message);
-      return null;
+      return null
     }
   },
   async setItem(key, value) {
+    const normalizedValue = normalizeStorageValue(value)
+    memoryCache.set(key, normalizedValue)
     try {
       if (key === AUTH_TOKEN_KEY) {
-        console.log('[SUPABASE_STORAGE] setItem auth-token ←', value ? `storing (${value.length} chars)` : 'NULL VALUE');
-        // Log stack trace to find who's setting the token
+        console.log('[SUPABASE_STORAGE] setItem auth-token <-', normalizedValue ? `storing (${normalizedValue.length} chars)` : 'NULL VALUE');
         if (__DEV__) {
           console.log('[SUPABASE_STORAGE] setItem caller stack:', new Error().stack?.split('\n').slice(1, 5).join('\n'));
         }
       }
-      await AsyncStorage.setItem(key, value);
+      if (normalizedValue === null) {
+        await AsyncStorage.removeItem(key)
+        return
+      }
+      await AsyncStorage.setItem(key, normalizedValue)
     } catch (e) {
       console.error('[SUPABASE_STORAGE] setItem failed for key:', key, e.message);
     }
   },
   async removeItem(key) {
+    memoryCache.set(key, null)
     try {
       if (key === AUTH_TOKEN_KEY) {
-        console.warn('[SUPABASE_STORAGE] ⚠️ removeItem auth-token — SESSION BEING DELETED');
-        // Log stack trace to find who's deleting the session
+        console.warn('[SUPABASE_STORAGE] removeItem auth-token - SESSION BEING DELETED');
         if (__DEV__) {
           console.warn('[SUPABASE_STORAGE] removeItem caller stack:', new Error().stack?.split('\n').slice(1, 8).join('\n'));
         }
@@ -86,7 +135,8 @@ const resilientStorage = {
 
 const supabaseConfig = {
   auth: {
-    storage: resilientStorage,
+    storage: memoryCachedStorage,
+    storageKey: AUTH_TOKEN_KEY,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
@@ -112,7 +162,13 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, supabaseConfig);
+const supabaseClient = global.__supabaseClient || createClient(supabaseUrl, supabaseAnonKey, supabaseConfig);
+
+if (!global.__supabaseClient) {
+  global.__supabaseClient = supabaseClient;
+}
+
+export const supabase = supabaseClient;
 
 // Helper function to check if error is a Supabase error
 export const isSupabaseError = (error) => {

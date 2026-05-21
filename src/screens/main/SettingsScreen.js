@@ -20,7 +20,7 @@ import { AuthContext } from '../../context/AuthContext';
 import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
 import { supabase } from '../../config/supabase';
-import { getSessionSafe } from '../../services/AuthSessionHelper';
+import { getSessionForMutation } from '../../services/AuthSessionHelper';
 
 const SettingsScreen = ({ navigation }) => {
   const { logout, userInfo } = useContext(AuthContext);
@@ -43,6 +43,7 @@ const SettingsScreen = ({ navigation }) => {
           text: 'Logout',
           style: 'destructive',
           onPress: async () => {
+            const { userId } = await getSessionForMutation();
             const result = await logout();
             if (!result.success) {
               Alert.alert('Error', 'Failed to logout. Please try again.');
@@ -136,12 +137,7 @@ const SettingsScreen = ({ navigation }) => {
           style: 'destructive',
           onPress: async () => {
             try {
-              const sessionResult = await getSessionSafe({ force: true, retry: 1, retryDelayMs: 500 });
-              if (sessionResult.rateLimited) {
-                Alert.alert('Network Busy', 'Please wait a moment and try again.');
-                return;
-              }
-              const userId = sessionResult.session?.user?.id;
+              const { userId } = await getSessionForMutation();
               // Clear locally-cached keys (keep auth tokens so user stays signed in)
               const allKeys = await AsyncStorage.getAllKeys();
               const keysToRemove = allKeys.filter(
@@ -201,17 +197,11 @@ const SettingsScreen = ({ navigation }) => {
     try {
       setDeletingAccount(true);
 
-      const sessionResult = await getSessionSafe({ force: true, retry: 1, retryDelayMs: 500 });
-      if (sessionResult.rateLimited) {
-        Alert.alert('Network Busy', 'Please wait a moment and try again.');
-        return;
-      }
-      if (!sessionResult.session) {
+      const { userId } = await getSessionForMutation();
+      if (!userId) {
         Alert.alert('Error', 'You are not signed in.');
         return;
       }
-
-      const userId = sessionResult.session.user.id;
 
       // Delete user data from related tables (order matters for foreign keys)
       const tablesToClear = [

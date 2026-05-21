@@ -1,5 +1,5 @@
 import React, { useState, useRef, useContext, useEffect, useCallback, useMemo } from 'react';
-import { View, StyleSheet, ImageBackground, Dimensions, TouchableWithoutFeedback, Animated, Modal, Text, TextInput, TouchableOpacity, Alert, ScrollView, Easing, Image, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, ImageBackground, Dimensions, TouchableWithoutFeedback, Animated, Modal, Text, TextInput, TouchableOpacity, Alert, ScrollView, Easing, Image, useWindowDimensions, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
@@ -35,6 +35,14 @@ const QUICK_AMOUNTS = [20, 50, 100, 150];
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const DAILY_TASK_STORAGE_KEY_PREFIX = 'story_daily_task_state_';
 const DEBUG_MOVEMENT = false;
+
+// Dynamic Level Mapping Configuration
+const LEVEL_CONFIG = {
+  1: { maxDays: 3 },
+  2: { maxDays: 3 },
+  3: { maxDays: 4 },
+  // Easily scalable for future levels - just add new entries
+};
 
 // Sub-categories per expense category
 const SUBCATEGORIES = {
@@ -705,6 +713,15 @@ export default function BuildScreen() {
   const [activeStoryDay, setActiveStoryDay] = useState(1);
   const dailyTaskAnnouncedDayRef = useRef(null);
   const isHydratingDailyTaskStateRef = useRef(false);
+
+  // End of Day/Level Progression State
+  const [dailyTasksCompleted, setDailyTasksCompleted] = useState(false); // Tracks if all daily tasks are checked
+  const [dayReportViewed, setDayReportViewed] = useState(false); // Tracks if day report has been viewed
+  const [lastProgressTimestamp, setLastProgressTimestamp] = useState(null); // Last saved progress timestamp
+  const [showDayReportNotification, setShowDayReportNotification] = useState(false); // UI: color of Day Report Modal icon
+  const [showLevelCompleteModal, setShowLevelCompleteModal] = useState(false); // Level Complete modal visibility
+  const [showDayReportModal, setShowDayReportModal] = useState(false);
+  const [liveDayReportData, setLiveDayReportData] = useState(null);
 
   // Level 1 (Budgeting) - 50/30/20 Rule tracking
   const [budgetCategories, setBudgetCategories] = useState({
@@ -1700,7 +1717,44 @@ export default function BuildScreen() {
     };
   }, [isWalking, spriteFrameAnim, walkingPulse]);
 
+  // AppState foreground listener - checks for new day when app comes to foreground
+  useEffect(() => {
+    const handleAppStateChange = async (nextAppState) => {
+      if (gameMode !== 'story' || !activeSessionId || !showLevelComplete) return;
+
+      // Only check when coming to foreground
+      if (nextAppState === 'active') {
+        // Check if it's a new day based on last progress timestamp
+        const now = new Date();
+        const lastTimestamp = lastProgressTimestamp ? new Date(lastProgressTimestamp) : null;
+
+        // If we have a last timestamp and it's from a previous day, check for day report
+        if (lastTimestamp && now.toDateString() !== lastTimestamp.toDateString()) {
+
+          // Check if all daily tasks are completed for current day
+          const activeDay = getActiveStoryDay();
+          const dayConfig = getStoryDayTasks(storyLevel, activeDay);
+
+          if (dayConfig) {
+            const dayAlreadyComplete = dayConfig.tasks.every((task) => !!dailyTaskCompletion[task.conditionKey]);
+
+            if (dayAlreadyComplete && !dayReportViewed) {
+              // Trigger day report notification
+              setShowDayReportNotification(true);
+            }
+          }
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => {
+      subscription.remove();
+    };
+  }, [gameMode, activeSessionId, showLevelComplete, storyLevel, dailyTaskCompletion, dayReportViewed, lastProgressTimestamp, getActiveStoryDay, getStoryDayTasks]);
+
   const fetchTodaySpending = async () => {
+    if (!user?.id) return; // Guard: don't overwrite state when auth is transiently unavailable
     try {
       // Build start/end of today as ISO strings for range query
       const now = new Date();
@@ -1727,6 +1781,7 @@ export default function BuildScreen() {
   // Fetch weekly spending for Story Mode
   const fetchWeeklySpending = async () => {
     if (!storyStartDate || !storyEndDate) return;
+    if (!user?.id) return; // Guard: don't overwrite state when auth is transiently unavailable
 
     try {
       const startDateStr = storyStartDate.toISOString().split('T')[0];
@@ -1821,6 +1876,58 @@ export default function BuildScreen() {
     return Math.max(0, diffDays);
   };
 
+  // End of Day Handler
+  const handleEndDay = async () => {
+    // 1. Generate report data using the current active story day
+    const dayItem = {
+      dayNumber: activeStoryDay,
+      displayDay: getStoryDayDisplayNumber(storyLevel, activeStoryDay),
+      completedCount: activeStoryDayCompletedCount,
+      totalCount: activeStoryDayTotalCount,
+      xpEarned: activeStoryDayConfigForUi?.tasks?.reduce((sum, task) => {
+        return sum + (dailyTaskCompletion[task.conditionKey] ? (task.reward?.xp || 0) : 0);
+      }, 0) || 0,
+      tasks: activeStoryDayConfigForUi?.tasks?.map(t => ({
+        id: t.id,
+        label: t.requiredAppAction,
+        completed: !!dailyTaskCompletion[t.conditionKey],
+        rewardXp: t.reward?.xp || 0
+      })) || []
+    };
+
+    const reportData = buildHistoryReportData(dayItem);
+    
+    // Evaluate if this is the final day of the level
+    const maxDays = STORY_DAY_COUNTS[storyLevel] || 3;
+    const isFinalDay = activeStoryDay >= maxDays;
+
+    if (isFinalDay) {
+      // It's the final day, trigger checkLevelCompletion which handles the end of level
+      checkLevelCompletion(weeklySpending);
+    } else {
+      // It's not the final day, show the Day Report Modal
+      setLiveDayReportData(reportData);
+      setShowDayReportNotification(false);
+      setShowDayReportModal(true);
+    }
+  };
+
+  const handleStartNextDay = async () => {
+    setShowDayReportModal(false);
+    
+    // Save last progress timestamp
+    const nowTimestamp = new Date().toISOString();
+    setLastProgressTimestamp(nowTimestamp);
+    try {
+      await AsyncStorage.setItem(`lastProgressTimestamp_${user?.id}`, nowTimestamp);
+    } catch (e) {
+      console.error('Failed to save last progress timestamp:', e);
+    }
+
+    // Advance the day
+    setActiveStoryDay((prev) => prev + 1);
+  };
+
   // Check if level is completed - handles all 3 level types
   const checkLevelCompletion = async (totalSpent) => {
     const currentLevel = STORY_LEVELS[storyLevel];
@@ -1912,6 +2019,7 @@ export default function BuildScreen() {
     }
 
     setLevelPassed(passed);
+    results.history = completedDaysHistory;
     setLevelResults(results);
 
     // Only unlock next story levels in Story Mode
@@ -1962,6 +2070,10 @@ export default function BuildScreen() {
 
   // Start Story Mode with a specific level
   const startStoryLevel = async (level) => {
+    if (!user?.id) {
+      Alert.alert('Error', 'You must be logged in to start Story Mode.');
+      return;
+    }
     // Guard: if an active session already exists for this level, resume it instead
     const existingSession = await gameDatabaseService.findActiveStorySession(level);
     if (existingSession) {
@@ -2425,6 +2537,28 @@ export default function BuildScreen() {
       setWeeklySpending(prev => prev + amount);
     }
 
+    // ── Optimistic: update daily task runtime & evaluate INSTANTLY (before DB save) ──
+    if (gameMode === 'story') {
+      const normalizedCategory = normalizeCategory(category);
+      updateDailyTaskRuntimeForActiveDay((dayState) => {
+        dayState.expenseCount = (dayState.expenseCount || 0) + 1;
+        dayState.expenseTotal = (dayState.expenseTotal || 0) + amount;
+        dayState.categoryCounts[normalizedCategory] = (dayState.categoryCounts[normalizedCategory] || 0) + 1;
+        dayState.categoryTotals[normalizedCategory] = (dayState.categoryTotals[normalizedCategory] || 0) + amount;
+        dayState.expenseEntries.push({
+          category: normalizedCategory,
+          amount,
+          note: description,
+          source: 'transport',
+        });
+        if ((dayState.travelCount || 0) > 0 && CATEGORY_BUDGET_MAP[normalizedCategory] === 'needs') {
+          dayState.needsAfterTravelCount = (dayState.needsAfterTravelCount || 0) + 1;
+        }
+      });
+      // Evaluate tasks instantly against the freshest runtime (ref)
+      evaluateActiveStoryDayTasks();
+    }
+
     // Background save — non-blocking
     try {
       const appMode = gameMode === 'story' ? 'story' : 'custom';
@@ -2445,27 +2579,6 @@ export default function BuildScreen() {
         Alert.alert('Sync Error', 'Transport expense may not have been saved.');
       } else {
         console.log(`✅ Transport: Recorded ${description}: ₱${amount}`);
-
-        if (gameMode === 'story') {
-          const normalizedCategory = normalizeCategory(category);
-          updateDailyTaskRuntimeForActiveDay((dayState) => {
-            dayState.expenseCount = (dayState.expenseCount || 0) + 1;
-            dayState.expenseTotal = (dayState.expenseTotal || 0) + amount;
-            dayState.categoryCounts[normalizedCategory] = (dayState.categoryCounts[normalizedCategory] || 0) + 1;
-            dayState.categoryTotals[normalizedCategory] = (dayState.categoryTotals[normalizedCategory] || 0) + amount;
-            dayState.expenseEntries.push({
-              category: normalizedCategory,
-              amount,
-              note: description,
-              source: 'transport',
-            });
-            if ((dayState.travelCount || 0) > 0 && CATEGORY_BUDGET_MAP[normalizedCategory] === 'needs') {
-              dayState.needsAfterTravelCount = (dayState.needsAfterTravelCount || 0) + 1;
-            }
-          });
-          // Immediately evaluate tasks against the freshest runtime (ref)
-          evaluateActiveStoryDayTasks();
-        }
 
         // Persist session spending to Supabase (fire-and-forget)
         if (activeSessionId && gameMode === 'story') {
@@ -3126,11 +3239,35 @@ export default function BuildScreen() {
       [{ text: 'OK' }]
     );
 
+    const expenseAmountNum = parseFloat(savedAmount);
+    const normalizedCategory = normalizeCategory(savedCategory);
+
+    // ── Optimistic: update daily task runtime & evaluate INSTANTLY (before DB save) ──
+    if (gameMode === 'story') {
+      updateDailyTaskRuntimeForActiveDay((dayState) => {
+        dayState.expenseCount = (dayState.expenseCount || 0) + 1;
+        dayState.expenseTotal = (dayState.expenseTotal || 0) + expenseAmountNum;
+        dayState.categoryCounts[normalizedCategory] = (dayState.categoryCounts[normalizedCategory] || 0) + 1;
+        dayState.categoryTotals[normalizedCategory] = (dayState.categoryTotals[normalizedCategory] || 0) + expenseAmountNum;
+        dayState.expenseEntries.push({
+          category: normalizedCategory,
+          amount: expenseAmountNum,
+          note: savedNote || savedSubCategory || savedCategory,
+          source: 'map',
+        });
+        if ((dayState.travelCount || 0) > 0 && CATEGORY_BUDGET_MAP[normalizedCategory] === 'needs') {
+          dayState.needsAfterTravelCount = (dayState.needsAfterTravelCount || 0) + 1;
+        }
+      });
+      // Evaluate tasks instantly against the freshest runtime (ref)
+      evaluateActiveStoryDayTasks();
+    }
+
     // Save in background
     try {
       // Use DataContext's addExpense for proper syncing across the app
       const expenseData = {
-        amount: parseFloat(savedAmount),
+        amount: expenseAmountNum,
         category: savedCategory,
         sub_category: savedSubCategory || null,
         note: `${savedNote || savedSubCategory || savedCategory} (at ${currentMap.name})`, // Include location in note
@@ -3148,29 +3285,6 @@ export default function BuildScreen() {
         Alert.alert('Sync Error', 'Your expense may not have been saved. Please check your expenses list.');
       } else {
         console.log('✅ Expense saved successfully via DataContext');
-
-        const expenseAmountNum = parseFloat(savedAmount);
-        const normalizedCategory = normalizeCategory(savedCategory);
-
-        if (gameMode === 'story') {
-          updateDailyTaskRuntimeForActiveDay((dayState) => {
-            dayState.expenseCount = (dayState.expenseCount || 0) + 1;
-            dayState.expenseTotal = (dayState.expenseTotal || 0) + expenseAmountNum;
-            dayState.categoryCounts[normalizedCategory] = (dayState.categoryCounts[normalizedCategory] || 0) + 1;
-            dayState.categoryTotals[normalizedCategory] = (dayState.categoryTotals[normalizedCategory] || 0) + expenseAmountNum;
-            dayState.expenseEntries.push({
-              category: normalizedCategory,
-              amount: expenseAmountNum,
-              note: savedNote || savedSubCategory || savedCategory,
-              source: 'map',
-            });
-            if ((dayState.travelCount || 0) > 0 && CATEGORY_BUDGET_MAP[normalizedCategory] === 'needs') {
-              dayState.needsAfterTravelCount = (dayState.needsAfterTravelCount || 0) + 1;
-            }
-          });
-          // Immediately evaluate tasks against the freshest runtime (ref)
-          evaluateActiveStoryDayTasks();
-        }
 
         // Update category spending tracking (for all levels)
         setCategorySpending(prev => ({
@@ -5292,6 +5406,81 @@ export default function BuildScreen() {
     },
   });
 
+  const renderStoryIntro = () => (
+    <ImageBackground
+      source={require('../../../assets/Game_Graphics/menu/main_menu_bg.jpg')}
+      style={storyStyles.background}
+      resizeMode="cover"
+    >
+      <View style={storyStyles.overlay}>
+        <TouchableOpacity
+          style={storyStyles.backButton}
+          onPress={() => {
+            setShowStoryIntro(false);
+            setGameMode(null);
+            setShowMainMenu(true);
+          }}
+        >
+          <Ionicons name="arrow-back" size={24} color="#F5DEB3" />
+        </TouchableOpacity>
+
+        <View style={storyStyles.titleContainer}>
+          <Text style={storyStyles.title}>📖 Story Mode</Text>
+          <Text style={storyStyles.subtitle}>Master your finances!</Text>
+        </View>
+
+        <View style={storyStyles.levelsContainer}>
+          {[1, 2, 3].map((level) => {
+            const levelConfig = STORY_LEVELS[level];
+            const isUnlocked = unlockedLevels.includes(level);
+
+            return (
+              <TouchableOpacity
+                key={level}
+                style={[
+                  storyStyles.levelButton,
+                  isUnlocked ? storyStyles.levelUnlocked : storyStyles.levelLocked,
+                ]}
+                onPress={() => isUnlocked && handleLevelSelect(level)}
+                activeOpacity={isUnlocked ? 0.7 : 1}
+                disabled={!isUnlocked}
+              >
+                <View style={storyStyles.levelIconContainer}>
+                  <Text style={storyStyles.levelIcon}>
+                    {isUnlocked ? levelConfig.icon : '🔒'}
+                  </Text>
+                </View>
+                <View style={storyStyles.levelInfo}>
+                  <Text style={[storyStyles.levelName, !isUnlocked && storyStyles.lockedText]}>
+                    Level {level}: {levelConfig.name}
+                  </Text>
+                  <Text style={[storyStyles.levelDesc, !isUnlocked && storyStyles.lockedText]}>
+                    {isUnlocked ? levelConfig.description : 'Complete previous level to unlock'}
+                  </Text>
+                  <View style={storyStyles.levelGoal}>
+                    <Text style={[storyStyles.goalText, !isUnlocked && storyStyles.lockedText]}>
+                      🎯 {levelConfig.goalText}
+                    </Text>
+                  </View>
+                </View>
+                {isUnlocked && (
+                  <Ionicons name="play-circle" size={32} color="#F5DEB3" />
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <View style={storyStyles.infoBox}>
+          <Ionicons name="information-circle" size={20} color="#F5DEB3" />
+          <Text style={storyStyles.infoText}>
+            Daily progression: Level 1 = {STORY_DAY_COUNTS[1]} days, Level 2 = {STORY_DAY_COUNTS[2]} days, Level 3 = {STORY_DAY_COUNTS[3]} days. Complete all tasks each day to advance.
+          </Text>
+        </View>
+      </View>
+    </ImageBackground>
+  );
+
   // ==================== POKÉMON-STYLE PRE-LEVEL INTRO ====================
   const renderLevelIntro = () => {
     const scripts = LEVEL_INTRO_SCRIPTS[introLevel];
@@ -6396,10 +6585,16 @@ export default function BuildScreen() {
               <Ionicons name="home" size={20} color="#FFF" /> 
             </TouchableOpacity>*/}
             <TouchableOpacity
-              style={styles.historyButton}
-              onPress={() => setIsHistoryModalVisible(true)}
+              style={[styles.historyButton, showDayReportNotification && { backgroundColor: '#ffb68b' }]}
+              onPress={() => {
+                if (showDayReportNotification) {
+                  handleEndDay();
+                } else {
+                  setIsHistoryModalVisible(true);
+                }
+              }}
             >
-              <Ionicons name="calendar" size={18} color="#FFF" />
+              <Ionicons name="calendar" size={18} color={showDayReportNotification ? '#1c1c1c' : '#FFF'} />
             </TouchableOpacity>
           </View>
           {(gameMode === 'story') && (
@@ -6411,13 +6606,23 @@ export default function BuildScreen() {
                 <Ionicons name="flag" size={16} color="#FFF" />
                 <Text style={styles.giveUpButtonText}>Give Up</Text>
               </TouchableOpacity>*/}
-              <TouchableOpacity
-                style={[styles.dailyTasksButton, { backgroundColor: dailyTaskButtonColor }]}
-                onPress={() => setShowDailyTasksModal(true)}
-              >
-                <Ionicons name="list" size={19} color={dailyTaskButtonTextColor} />
-                {/* <Text style={[styles.dailyTasksButtonText, { color: dailyTaskButtonTextColor }]}>Daily Tasks</Text> */}
-              </TouchableOpacity>
+              {isDailyTaskDone ? (
+                <TouchableOpacity
+                  style={[styles.dailyTasksButton, { backgroundColor: '#5c6bc0' }]}
+                  onPress={handleEndDay}
+                >
+                  <Ionicons name="moon" size={19} color="#FFFFFF" />
+                  {/* <Text style={[styles.dailyTasksButtonText, { color: '#FFFFFF', marginLeft: 6 }]}>Sleep</Text> */}
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.dailyTasksButton, { backgroundColor: dailyTaskButtonColor }]}
+                  onPress={() => setShowDailyTasksModal(true)}
+                >
+                  <Ionicons name="list" size={19} color={dailyTaskButtonTextColor} />
+                  {/* <Text style={[styles.dailyTasksButtonText, { color: dailyTaskButtonTextColor }]}>Daily Tasks</Text> */}
+                </TouchableOpacity>
+              )}
             </View>
           )}
           <View style={styles.headerLeft}>
@@ -7061,6 +7266,28 @@ export default function BuildScreen() {
                       setWeeklySpending(prev => prev + savedAmount);
                     }
 
+                    // ── Optimistic: update daily task runtime & evaluate INSTANTLY (before DB save) ──
+                    if (gameMode === 'story') {
+                      const normalizedCategory = normalizeCategory(savedCategory);
+                      updateDailyTaskRuntimeForActiveDay((dayState) => {
+                        dayState.expenseCount = (dayState.expenseCount || 0) + 1;
+                        dayState.expenseTotal = (dayState.expenseTotal || 0) + savedAmount;
+                        dayState.categoryCounts[normalizedCategory] = (dayState.categoryCounts[normalizedCategory] || 0) + 1;
+                        dayState.categoryTotals[normalizedCategory] = (dayState.categoryTotals[normalizedCategory] || 0) + savedAmount;
+                        dayState.expenseEntries.push({
+                          category: normalizedCategory,
+                          amount: savedAmount,
+                          note: savedNote || savedSubCategory || savedCategory,
+                          source: 'notebook',
+                        });
+                        if ((dayState.travelCount || 0) > 0 && CATEGORY_BUDGET_MAP[normalizedCategory] === 'needs') {
+                          dayState.needsAfterTravelCount = (dayState.needsAfterTravelCount || 0) + 1;
+                        }
+                      });
+                      // Evaluate tasks instantly against the freshest runtime (ref)
+                      evaluateActiveStoryDayTasks();
+                    }
+
                     // Save in background — non-blocking
                     try {
                       const expenseData = {
@@ -7089,24 +7316,6 @@ export default function BuildScreen() {
                         }
 
                         if (gameMode === 'story') {
-                          const normalizedCategory = normalizeCategory(savedCategory);
-                          updateDailyTaskRuntimeForActiveDay((dayState) => {
-                            dayState.expenseCount = (dayState.expenseCount || 0) + 1;
-                            dayState.expenseTotal = (dayState.expenseTotal || 0) + savedAmount;
-                            dayState.categoryCounts[normalizedCategory] = (dayState.categoryCounts[normalizedCategory] || 0) + 1;
-                            dayState.categoryTotals[normalizedCategory] = (dayState.categoryTotals[normalizedCategory] || 0) + savedAmount;
-                            dayState.expenseEntries.push({
-                              category: normalizedCategory,
-                              amount: savedAmount,
-                              note: savedNote || savedSubCategory || savedCategory,
-                              source: 'notebook',
-                            });
-                            if ((dayState.travelCount || 0) > 0 && CATEGORY_BUDGET_MAP[normalizedCategory] === 'needs') {
-                              dayState.needsAfterTravelCount = (dayState.needsAfterTravelCount || 0) + 1;
-                            }
-                          });
-                          // Immediately evaluate tasks against the freshest runtime (ref)
-                          evaluateActiveStoryDayTasks();
                           fetchTodaySpending();
                         }
 
@@ -7321,6 +7530,12 @@ export default function BuildScreen() {
         onClose={closeHistoryReport}
       />
 
+      <EndOfDayReportModal
+        isVisible={showDayReportModal}
+        {...liveDayReportData}
+        onStartNextDay={handleStartNextDay}
+      />
+
       <DailyTaskPopup
         visible={showDailyTaskPopup}
         title={dailyTaskPopupPayload?.title || 'Daily Tasks'}
@@ -7478,6 +7693,25 @@ export default function BuildScreen() {
             )}
 
             <View style={{ width: '100%', gap: 12 }}>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#4CAF50',
+                  paddingVertical: 16,
+                  paddingHorizontal: 24,
+                  borderRadius: 12,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                onPress={() => {
+                  setShowLevelComplete(false);
+                  setIsHistoryModalVisible(true);
+                }}
+              >
+                <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' }}>
+                  Day Report History
+                </Text>
+              </TouchableOpacity>
+
               {/* Next Level button - only for Story Mode levels 1-2 */}
               {gameMode === 'story' && levelPassed && storyLevel < 3 && (
                 <TouchableOpacity
@@ -7491,6 +7725,7 @@ export default function BuildScreen() {
                   }}
                   onPress={() => {
                     setShowLevelComplete(false);
+                    setActiveStoryDay(1); // Reset local day state
                     openLevelIntro(storyLevel + 1);
                   }}
                 >
@@ -7513,6 +7748,7 @@ export default function BuildScreen() {
                   }}
                   onPress={() => {
                     setShowLevelComplete(false);
+                    setActiveStoryDay(1); // Reset local day state
                     setCompletionPage(0);
                     setCompletionDisplayedText('');
                     setCompletionTypingDone(false);
@@ -7537,6 +7773,7 @@ export default function BuildScreen() {
                 }}
                 onPress={() => {
                   setShowLevelComplete(false);
+                  setActiveStoryDay(1); // Reset local day state
                   startStoryLevel(storyLevel);
                 }}
               >

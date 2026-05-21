@@ -1,6 +1,6 @@
 // context/AuthContext.js
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import { Alert } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { supabase, supabaseAdmin, formatSupabaseError } from '../config/supabase';
@@ -33,10 +33,12 @@ export const AuthProvider = ({ children }) => {
   const isResettingPasswordRef = React.useRef(false);
   const isLoggingOutRef = React.useRef(false);
   const lastRateLimitNoticeRef = React.useRef(0);
+  const lastTokenRefreshAtRef = React.useRef(0);
   const unexpectedSignOutTimerRef = React.useRef(null);
 
   const SIGNED_OUT_GRACE_MS = 30000;
   const RATE_LIMIT_NOTICE_COOLDOWN_MS = 30000;
+  const TOKEN_REFRESH_DEBOUNCE_MS = 2000;
 
   // Helper: build enhanced user info from a Supabase session
   const applySession = async (session) => {
@@ -88,7 +90,7 @@ export const AuthProvider = ({ children }) => {
 
     unexpectedSignOutTimerRef.current = setTimeout(async () => {
       try {
-        const result = await getSessionSafe({ force: true, retry: 1, retryDelayMs: 1000 });
+        const result = await getSessionSafe({ retry: 1, retryDelayMs: 1000 });
         if (result.rateLimited) {
           clearUnexpectedSignOutTimer();
           scheduleUnexpectedSignOutCheck();
@@ -231,6 +233,12 @@ export const AuthProvider = ({ children }) => {
 
       // ── TOKEN_REFRESHED: keep stored access token in sync ──
       if (event === 'TOKEN_REFRESHED' && session) {
+        const now = Date.now();
+        if (now - lastTokenRefreshAtRef.current < TOKEN_REFRESH_DEBOUNCE_MS) {
+          updateSessionCache(session);
+          return;
+        }
+        lastTokenRefreshAtRef.current = now;
         console.log('Auth: Token refreshed successfully for user:', session.user.id);
         setUserToken(session.access_token);
         await AsyncStorage.setItem('userToken', session.access_token);
@@ -298,7 +306,7 @@ export const AuthProvider = ({ children }) => {
         console.warn('Auth: INITIAL_SESSION never fired after 5s — falling back to getSession()');
         (async () => {
           try {
-            const result = await getSessionSafe({ force: true, retry: 1, retryDelayMs: 1000 });
+            const result = await getSessionSafe({ retry: 1, retryDelayMs: 1000 });
             if (result.rateLimited) {
               scheduleUnexpectedSignOutCheck();
             } else if (result.session) {
@@ -318,6 +326,41 @@ export const AuthProvider = ({ children }) => {
     return () => {
       clearTimeout(timeout);
       if (subscription) subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    const startAutoRefresh = () => {
+      if (typeof supabase?.auth?.startAutoRefresh === 'function') {
+        supabase.auth.startAutoRefresh();
+      }
+    };
+
+    const stopAutoRefresh = () => {
+      if (typeof supabase?.auth?.stopAutoRefresh === 'function') {
+        supabase.auth.stopAutoRefresh();
+      }
+    };
+
+    const handleAppStateChange = (nextState) => {
+      if (nextState === 'active') {
+        startAutoRefresh();
+      } else {
+        stopAutoRefresh();
+      }
+    };
+
+    if (AppState.currentState === 'active') {
+      startAutoRefresh();
+    } else {
+      stopAutoRefresh();
+    }
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      subscription.remove();
+      stopAutoRefresh();
     };
   }, []);
 
@@ -344,7 +387,7 @@ export const AuthProvider = ({ children }) => {
 
   const checkLoginStatus = async () => {
     try {
-      const result = await getSessionSafe({ force: true, retry: 1, retryDelayMs: 1000 });
+      const result = await getSessionSafe({ retry: 1, retryDelayMs: 1000 });
       if (result.rateLimited) {
         setError('Network busy. Retrying authentication...');
         return;

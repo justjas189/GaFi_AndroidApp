@@ -1,10 +1,8 @@
 // context/DataContext.js
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ThemeContext } from './ThemeContext';
 import { useAuth } from './AuthContext';
 import { supabase } from '../config/supabase';
-import { getSessionSafe, getUserIdSafe } from '../services/AuthSessionHelper';
 import { analyzeExpenses, getRecommendations } from '../config/nvidia';
 import { BudgetDatabaseService } from '../services/BudgetDatabaseService_NEW';
 import { normalizeCategory } from '../utils/categoryUtils';
@@ -35,22 +33,18 @@ export const DataProvider = ({ children }) => {
   const [expenses, setExpenses] = useState([]);
   const [notes, setNotes] = useState([]);
 
-  // Helper function to get current user ID (with retry for token refresh)
+  // Helper function to get current user ID (resilient multi-layer lookup)
   const getCurrentUserId = async () => {
-    const result = await getUserIdSafe({ force: true, retry: 1, retryDelayMs: 500 });
-    if (result.rateLimited) throw new Error('Network busy');
-    if (result.error) throw result.error;
-    if (!result.userId) throw new Error('No authenticated user');
-    return result.userId;
+    const userId = userInfo?.id || null;
+    if (!userId) throw new Error('No authenticated user');
+    return userId;
   };
 
-  // Helper function to ensure user is authenticated (with retry for token refresh)
+  // Helper function to ensure user is authenticated (resilient multi-layer lookup)
   const ensureAuthenticated = async () => {
-    const result = await getSessionSafe({ force: true, retry: 1, retryDelayMs: 500 });
-    if (result.rateLimited) throw new Error('Network busy');
-    if (result.error) throw result.error;
-    if (!result.session) throw new Error('User not authenticated');
-    return result.session;
+    const userId = userInfo?.id || null;
+    if (!userId) throw new Error('User not authenticated');
+    return { user: { id: userId } };
   };
 
   // ── Initialize / tear-down data when auth state changes ──
@@ -88,7 +82,7 @@ export const DataProvider = ({ children }) => {
               schema: 'public',
               table: 'expenses',
               filter: `user_id=eq.${userId}`
-            }, async () => { await loadData(); })
+            }, async () => { await loadData({ deferInsights: true }); })
             .subscribe();
 
           budgetSubscription = supabase
@@ -98,7 +92,7 @@ export const DataProvider = ({ children }) => {
               schema: 'public',
               table: 'budgets',
               filter: `user_id=eq.${userId}`
-            }, async () => { await loadData(); })
+            }, async () => { await loadData({ deferInsights: true }); })
             .subscribe();
 
         } catch (err) {
@@ -136,12 +130,11 @@ export const DataProvider = ({ children }) => {
   //                           Used during login so the UI renders fast.
   const loadData = async ({ deferInsights = false } = {}) => {
     try {
-      const result = await getSessionSafe({ force: true, retry: 1, retryDelayMs: 500 });
-      if (result.rateLimited || result.error || !result.session) {
+      const userId = userInfo?.id || null;
+      if (!userId) {
         console.log('loadData skipped: User not authenticated');
         return;
       }
-      const userId = result.session.user.id;
 
       console.log('Loading data for user ID:', userId, deferInsights ? '(insights deferred)' : '');
 
@@ -269,7 +262,7 @@ export const DataProvider = ({ children }) => {
             });
 
             const aiInsights = await analyzeExpenses(currentMonthExpenses, transformedBudget);
-            const recommendations = await getRecommendations(result.session.user, currentMonthExpenses, transformedBudget);
+            const recommendations = await getRecommendations(userInfo, currentMonthExpenses, transformedBudget);
             setInsights([...aiInsights, ...recommendations]);
             console.log('AI insights generated:', aiInsights.length + recommendations.length);
           } catch (insightError) {
@@ -321,6 +314,11 @@ export const DataProvider = ({ children }) => {
 
   const addExpense = async (expense) => {
     try {
+      if (!userInfo?.id) {
+        setError('Session not ready. Please try again.');
+        return false;
+      }
+
       const session = await ensureAuthenticated();
       const userId = session.user.id;
       const appMode = expense.appMode === 'story' ? 'story' : 'custom';
@@ -366,8 +364,8 @@ export const DataProvider = ({ children }) => {
         }
       }
 
-      // Refresh local state by reloading all data
-      await loadData();
+      // Refresh local state by reloading all data (defer AI insights to avoid blocking)
+      await loadData({ deferInsights: true });
 
       return true;
     } catch (error) {
@@ -549,22 +547,13 @@ export const DataProvider = ({ children }) => {
     try {
       // Use the userId passed from the caller (e.g. onboarding) if available,
       // otherwise fall back to the current session.
-      let userId = newBudget.userId || null;
+      let userId = newBudget.userId || userInfo?.id || null;
 
       if (!userId) {
-        const session = await ensureAuthenticated();
-        userId = session.user.id;
-      }
-
-      // Extra safety: verify Supabase session is live before any DB write
-      const sessionResult = await getSessionSafe({ force: true, retry: 1, retryDelayMs: 500 });
-      if (sessionResult.rateLimited || sessionResult.error || !sessionResult.session?.user?.id) {
-        console.warn('updateBudget: Supabase session not ready, falling back to local state');
+        console.warn('updateBudget: No authenticated user, falling back to local state');
         setBudget(newBudget);
         return true;
       }
-      // Always prefer the session user id to avoid RLS mismatch
-      userId = sessionResult.session.user.id;
 
       console.log('Updating budget for user:', userId, newBudget);
 

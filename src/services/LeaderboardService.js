@@ -1,5 +1,5 @@
 import { supabase } from '../config/supabase';
-import { getUserIdSafe } from './AuthSessionHelper';
+import { getSessionForMutation } from './AuthSessionHelper';
 
 /**
  * LeaderboardService - Unified service for gamified savings and leaderboard functionality
@@ -12,16 +12,7 @@ const LeaderboardService = {
    */
   async getCurrentUserId() {
     try {
-      const { userId, rateLimited, error } = await getUserIdSafe({
-        force: true,
-        retry: 1,
-        retryDelayMs: 500,
-      });
-      if (rateLimited) {
-        console.warn('LeaderboardService: rate limited while getting user ID');
-        return null;
-      }
-      if (error) return null;
+      const { userId } = await getSessionForMutation();
       return userId || null;
     } catch (error) {
       console.error('Error getting current user ID:', error);

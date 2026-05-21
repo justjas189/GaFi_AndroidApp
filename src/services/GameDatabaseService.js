@@ -12,16 +12,17 @@
  */
 
 import { supabase } from '../config/supabase';
-import { getUserIdSafe } from './AuthSessionHelper';
+import { getSessionForMutation } from './AuthSessionHelper';
 
 class GameDatabaseService {
   // ─── helpers ──────────────────────────────────────────────
 
   async _getUserId() {
-    const { userId, rateLimited } = await getUserIdSafe({ force: true, retry: 1, retryDelayMs: 500 });
-    if (rateLimited) {
-      console.warn('GameDatabaseService: rate limited while getting user ID');
-      return null;
+    // Use getSessionForMutation for multi-layer resilient userId lookup
+    // (cache → getSession → AsyncStorage fallback)
+    const { userId } = await getSessionForMutation();
+    if (!userId) {
+      console.warn('GameDatabaseService: user not authenticated (all fallback layers exhausted)');
     }
     return userId || null;
   }

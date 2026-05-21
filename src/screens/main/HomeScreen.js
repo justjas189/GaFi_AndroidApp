@@ -17,7 +17,7 @@ import { supabase } from '../../config/supabase';
 import { AuthContext } from '../../context/AuthContext';
 import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
-import { getSessionSafe } from '../../services/AuthSessionHelper';
+import { getSessionForMutation } from '../../services/AuthSessionHelper';
 
 const HomeScreen = ({ navigation }) => {
   const { userInfo } = useContext(AuthContext);
@@ -39,18 +39,11 @@ const HomeScreen = ({ navigation }) => {
   // Test function to reset onboarding status for testing
   const resetOnboardingForTesting = async () => {
     try {
-      const sessionResult = await getSessionSafe({ force: true, retry: 1, retryDelayMs: 500 });
-      
-      if (sessionResult.rateLimited) {
-        Alert.alert('Network Busy', 'Please wait a moment and try again.');
-        return;
-      }
-      if (sessionResult.error || !sessionResult.session) {
+      const { userId } = await getSessionForMutation();
+      if (!userId) {
         Alert.alert('Error', 'No active session found.');
         return;
       }
-
-      const userId = sessionResult.session.user.id;
       
       Alert.alert(
         '🧪 Test Onboarding Reset',

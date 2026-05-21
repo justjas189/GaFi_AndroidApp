@@ -7,7 +7,7 @@ import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../config/supabase';
-import { getSessionSafe } from '../../services/AuthSessionHelper';
+import { getSessionForMutation } from '../../services/AuthSessionHelper';
 
 const { width } = Dimensions.get('window');
 
@@ -95,17 +95,8 @@ const BudgetGoalsScreen = ({ navigation }) => {
 
     try {
       // ── Wait for a verified Supabase session to prevent RLS errors ──
-      const sessionResult = await getSessionSafe({ force: true, retry: 2, retryDelayMs: 1000 });
-      if (sessionResult.rateLimited) {
-        Alert.alert(
-          'Network Busy',
-          'Authentication is being rate limited. Please wait a moment and try again.',
-          [{ text: 'OK' }]
-        );
-        return;
-      }
-
-      if (sessionResult.error || !sessionResult.session?.user?.id) {
+      const { session: budgetSession, userId } = await getSessionForMutation();
+      if (!userId) {
         Alert.alert(
           'Session Not Ready',
           'Your login session is still being established. Please wait a moment and try again.',
@@ -113,8 +104,6 @@ const BudgetGoalsScreen = ({ navigation }) => {
         );
         return;
       }
-
-      const userId = sessionResult.session.user.id;
       const monthly = parseFloat(monthlyBudget);
       const categories = isEmployee
         ? buildEmployeeCategories(monthly)

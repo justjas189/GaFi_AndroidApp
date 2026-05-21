@@ -3,7 +3,7 @@
 
 import { supabase } from '../config/supabase';
 import DebugUtils from '../utils/DebugUtils';
-import { getSessionSafe } from './AuthSessionHelper';
+import { getSessionForMutation } from './AuthSessionHelper';
 
 /**
  * Service class for budget-related database operations
@@ -317,6 +317,36 @@ export class BudgetDatabaseService {
   }
 
   /**
+   * Returns true only when Supabase has a live JWT session for this user.
+   * AsyncStorage-only userId is intentionally ignored — RLS requires auth.uid().
+   * @param {string} userId
+   * @returns {Promise<{ ok: boolean, session: object|null, reason?: string }>}
+   */
+  async getActiveSupabaseSession(userId) {
+    const { session, error } = await getSessionForMutation();
+
+    if (!session?.access_token || !session?.user?.id) {
+      return { ok: false, session: null, reason: 'no_jwt_session', error };
+    }
+
+    const expiresAtMs = session.expires_at ? session.expires_at * 1000 : null;
+    if (expiresAtMs && expiresAtMs <= Date.now()) {
+      return { ok: false, session: null, reason: 'session_expired', error };
+    }
+
+    if (session.user.id !== userId) {
+      return {
+        ok: false,
+        session: null,
+        reason: 'user_mismatch',
+        error: new Error(`Session user ${session.user.id} does not match ${userId}`),
+      };
+    }
+
+    return { ok: true, session };
+  }
+
+  /**
    * Create a default budget for new users with proper allocation
    * @param {string} userId - User ID
    * @param {number} monthlyBudget - Monthly budget amount from onboarding
@@ -326,45 +356,40 @@ export class BudgetDatabaseService {
     try {
       // Guard: user_id must be a non-empty string for RLS to succeed
       if (!userId || typeof userId !== 'string' || userId.trim() === '') {
-        console.error('createDefaultBudget called with invalid userId:', userId);
+        DebugUtils.warn('DB_SERVICE', 'createDefaultBudget skipped — invalid userId', { userId });
+        return this.getFallbackBudgetData(monthlyBudget);
+      }
+
+      // ── Strict auth guard (must run before any DB write) ──
+      // Never INSERT without a JWT: auth.uid() is null when the session is dropped.
+      let activeSession = null;
+      const maxAttempts = 5;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const authCheck = await this.getActiveSupabaseSession(userId);
+        if (authCheck.ok) {
+          activeSession = authCheck.session;
+          DebugUtils.log('DB_SERVICE', `Active Supabase session confirmed (attempt ${attempt})`, {
+            userId: activeSession.user.id,
+          });
+          break;
+        }
+        DebugUtils.warn('DB_SERVICE', 'No active Supabase session for budget creation', {
+          attempt,
+          maxAttempts,
+          reason: authCheck.reason,
+          expectedUserId: userId,
+        });
+        if (attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt - 1)));
+        }
+      }
+
+      if (!activeSession) {
+        DebugUtils.warn('DB_SERVICE', 'createDefaultBudget skipped — no active session', { userId });
         return this.getFallbackBudgetData(monthlyBudget);
       }
 
       DebugUtils.log('DB_SERVICE', 'Creating default budget', { userId, monthlyBudget });
-
-      // ── CRITICAL: Force the Supabase client to sync its auth session ──
-      // After signup/login the JWT may not be loaded from AsyncStorage into
-      // the client's request headers yet.  We poll getSession() with backoff
-      // so that when the INSERT fires, the Authorization header carries the
-      // real JWT and auth.uid() resolves correctly on the backend.
-      let sessionReady = false;
-      for (let attempt = 1; attempt <= 5; attempt++) {
-        const result = await getSessionSafe({ force: true });
-        if (result.rateLimited) {
-          DebugUtils.warn('DB_SERVICE', 'Auth session rate limited during budget creation', { attempt });
-          return this.getFallbackBudgetData(monthlyBudget);
-        }
-        if (!result.error && result.session?.access_token && result.session.user?.id === userId) {
-          sessionReady = true;
-          DebugUtils.log('DB_SERVICE', `Auth session confirmed on attempt ${attempt}`, {
-            userId: result.session.user.id
-          });
-          break;
-        }
-        DebugUtils.warn('DB_SERVICE', `Auth session not ready (attempt ${attempt}/5)`, {
-          hasSession: !!result.session,
-          sessionUserId: result.session?.user?.id || 'none',
-          expectedUserId: userId,
-          error: result.error?.message
-        });
-        // Exponential backoff: 500ms, 1s, 2s, 4s, 8s
-        await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt - 1)));
-      }
-
-      if (!sessionReady) {
-        DebugUtils.error('DB_SERVICE', 'Auth session never became ready — returning fallback budget', { userId });
-        return this.getFallbackBudgetData(monthlyBudget);
-      }
 
       // Check if tables exist first
       const tablesExist = await this.checkTablesExist();
@@ -399,9 +424,19 @@ export class BudgetDatabaseService {
         if (updateError) throw updateError;
         budget = updatedBudget;
       } else {
+        // Re-check session immediately before INSERT (session may drop during setup)
+        const preInsertAuth = await this.getActiveSupabaseSession(userId);
+        if (!preInsertAuth.ok) {
+          DebugUtils.warn('DB_SERVICE', 'createDefaultBudget INSERT aborted — session lost', {
+            userId,
+            reason: preInsertAuth.reason,
+          });
+          return this.getFallbackBudgetData(monthlyBudget);
+        }
+
         // Create new budget — user_id is REQUIRED for RLS
         DebugUtils.log('DB_SERVICE', 'Creating new budget', { userId });
-        
+
         const { data: newBudget, error: budgetError } = await this.supabase
           .from('budgets')
           .insert({
@@ -521,17 +556,21 @@ export class BudgetDatabaseService {
         }
       };
     } catch (error) {
-      console.error('Error creating default budget:', error);
+      const isRlsViolation = error?.code === '42501';
+      if (isRlsViolation) {
+        DebugUtils.warn('DB_SERVICE', 'createDefaultBudget RLS blocked — returning fallback', {
+          userId,
+          errorCode: error.code,
+        });
+        return this.getFallbackBudgetData(monthlyBudget);
+      }
+
       DebugUtils.error('DB_SERVICE', 'createDefaultBudget failed', {
         userId,
         errorCode: error?.code,
-        errorMessage: error?.message
+        errorMessage: error?.message,
       });
-      return {
-        success: false,
-        error: error.message,
-        code: error?.code
-      };
+      return this.getFallbackBudgetData(monthlyBudget);
     }
   }
 
@@ -543,6 +582,11 @@ export class BudgetDatabaseService {
    */
   async ensureCategoryExists(budgetId, category) {
     try {
+      if (!budgetId || budgetId === 'fallback-budget') {
+        DebugUtils.warn('DB_SERVICE', 'ensureCategoryExists skipped — invalid budgetId', { budgetId, category });
+        return;
+      }
+
       // Normalize category to lowercase for consistency
       const normalizedCategory = category.toLowerCase().trim();
       
@@ -591,18 +635,10 @@ export class BudgetDatabaseService {
     try {
       DebugUtils.log('DB_SERVICE', 'Recording expense', { userId, transactionData });
 
-      // 1. Guard Clause for Auth State
-      const { data: { session } } = await this.supabase.auth.getSession();
-      if (!session) {
-        console.error('No active session found during recordExpense');
+      // Rely on caller-provided userId (from AuthContext) to avoid session fetch races.
+      if (!userId || typeof userId !== 'string') {
+        console.error('No authenticated userId provided to recordExpense');
         return { success: false, error: 'Authentication session expired or missing' };
-      }
-
-      // 2. Verify the Payload matches the authenticated user
-      const authenticatedUserId = session.user.id;
-      if (userId !== authenticatedUserId) {
-        DebugUtils.warn('DB_SERVICE', 'User ID mismatch, using authenticated session user ID');
-        userId = authenticatedUserId;
       }
       
       // Validate required fields
@@ -623,6 +659,11 @@ export class BudgetDatabaseService {
       if (!budgetResult.success) throw new Error(budgetResult.error);
 
       const budget = budgetResult.data;
+
+      if (!budget || budget.id === 'fallback-budget') {
+        DebugUtils.warn('DB_SERVICE', 'recordExpense skipped — fallback budget (no active session)', { userId });
+        return { success: false, error: 'Authentication session expired or missing' };
+      }
       
       // Ensure the category exists in budget_categories table
       await this.ensureCategoryExists(budget.id, validCategory);
