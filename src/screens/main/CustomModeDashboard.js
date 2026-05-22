@@ -22,6 +22,7 @@ import { ThemeContext } from '../../context/ThemeContext';
 import { AuthContext } from '../../context/AuthContext';
 import { DataContext } from '../../context/DataContext';
 import { supabase } from '../../config/supabase';
+import goalNotificationService from '../../services/GoalNotificationService';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -594,20 +595,20 @@ export default function CustomModeDashboard({ navigation }) {
       Alert.alert('Invalid Input', 'Please enter a valid goal name and target amount.');
       return;
     }
-    if (newGoalDeadline.trim() && !newGoalDeadlineDate) {
-      Alert.alert('Invalid Date', 'Please enter a valid date in MM/DD/YYYY format.');
+    if (!newGoalDeadline.trim() || !newGoalDeadlineDate) {
+      Alert.alert('Invalid Date', 'Please enter a valid deadline date in MM/DD/YYYY format.');
       return;
     }
     setGoalSubmitting(true);
     try {
-      const { error } = await supabase.from('goals_custom_mode').insert({
+      const { data, error } = await supabase.from('goals_custom_mode').insert({
         user_id: user.id,
         title: newGoalTitle.trim(),
         target_amount: target,
         current_amount: 0,
         is_completed: false,
         target_date: formatIsoDate(newGoalDeadlineDate),
-      });
+      }).select().single();
       if (error) throw error;
       const savedTitle = newGoalTitle.trim();
       setNewGoalTitle('');
@@ -616,6 +617,15 @@ export default function CustomModeDashboard({ navigation }) {
       setNewGoalDeadlineDate(null);
       setShowAddGoal(false);
       await fetchGoals();
+      if (data && data.target_date) {
+        goalNotificationService.scheduleGoalNotifications(
+          data.id,
+          savedTitle,
+          data.target_date,
+          0,
+          target
+        );
+      }
       Alert.alert('Goal Added', `Goal added successfully: ${savedTitle}`);
     } catch (err) {
       Alert.alert('Error', err.message);
@@ -640,6 +650,7 @@ export default function CustomModeDashboard({ navigation }) {
               .eq('id', goal.id);
             if (error) throw error;
             await fetchGoals();
+            goalNotificationService.cancelGoalNotifications(goal.id);
           } catch (err) {
             Alert.alert('Error', err.message);
           }
@@ -668,6 +679,11 @@ export default function CustomModeDashboard({ navigation }) {
       if (error) throw error;
       setAllocateAmount('');
       setShowAllocate(false);
+      
+      if (isAchieved) {
+        goalNotificationService.cancelGoalNotifications(allocateGoal.id);
+      }
+      
       setAllocateGoal(null);
       await fetchGoals();
       if (isAchieved) {

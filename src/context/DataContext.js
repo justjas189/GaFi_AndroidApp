@@ -7,6 +7,7 @@ import { analyzeExpenses, getRecommendations } from '../config/nvidia';
 import { BudgetDatabaseService } from '../services/BudgetDatabaseService_NEW';
 import { normalizeCategory } from '../utils/categoryUtils';
 import notificationService from '../services/OneSignalNotificationService';
+import goalNotificationService from '../services/GoalNotificationService';
 
 export const DataContext = createContext();
 
@@ -209,6 +210,20 @@ export const DataProvider = ({ children }) => {
         }
       } catch (notesErr) {
         console.warn('Notes load warning:', notesErr?.message || notesErr);
+      }
+
+      // Load custom mode goals to resync notifications
+      try {
+        const { data: goalsData, error: goalsError } = await supabase
+          .from('goals_custom_mode')
+          .select('*')
+          .eq('user_id', userId);
+        
+        if (!goalsError && goalsData) {
+          goalNotificationService.resyncAllGoalNotifications(goalsData);
+        }
+      } catch (goalErr) {
+        console.warn('Goals resync warning:', goalErr?.message || goalErr);
       }
 
       console.log('Data loaded successfully:', {

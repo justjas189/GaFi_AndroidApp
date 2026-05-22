@@ -21,6 +21,7 @@ const PREF_KEYS = {
   BUDGET_RESET: 'notif_pref_budget_reset',
   DAILY_REMINDER: 'notif_pref_daily_reminder',
   DAILY_REMINDER_TIME: 'notif_pref_daily_reminder_time',
+  GOAL_DEADLINE: 'notif_pref_goal_deadline',
 };
 
 // ─── Budget Alert Thresholds ────────────────────────────────────────────────
@@ -332,7 +333,10 @@ class OneSignalNotificationService {
           nextMonth.setMonth(nextMonth.getMonth() + 1);
         }
 
-        trigger = { date: nextMonth };
+        trigger = { 
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: nextMonth 
+        };
       } else {
         // Weekly: schedule 7 days from the last reset at 8:00 AM
         const nextWeek = new Date(lastResetDate);
@@ -343,7 +347,10 @@ class OneSignalNotificationService {
           nextWeek.setDate(nextWeek.getDate() + 7);
         }
 
-        trigger = { date: nextWeek };
+        trigger = { 
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: nextWeek 
+        };
       }
 
       const notificationId = await Notifications.scheduleNotificationAsync({
@@ -551,6 +558,14 @@ class OneSignalNotificationService {
         );
         break;
 
+      case 'goal_deadline':
+        await this._sendLocalNotification(
+          '⏰ 15 days left for "New Laptop"! (Test)',
+          "Keep saving!",
+          { type: 'test_goal_deadline' }
+        );
+        break;
+
       default:
         await this._sendLocalNotification(
           '🔔 Test Notification',
@@ -635,6 +650,7 @@ class OneSignalNotificationService {
       [PREF_KEYS.WEEKLY_CHECKIN]: 'weekly_checkin_opt_in',
       [PREF_KEYS.BUDGET_RESET]: 'budget_reset_opt_in',
       [PREF_KEYS.DAILY_REMINDER]: 'daily_reminder_opt_in',
+      [PREF_KEYS.GOAL_DEADLINE]: 'goal_deadline_opt_in',
     };
 
     const tagName = tagMap[key];

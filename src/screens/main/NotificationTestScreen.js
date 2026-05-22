@@ -54,6 +54,12 @@ const TEST_BUTTONS = [
     description: 'Expense logging nudge',
     color: '#FF9500',
   },
+  {
+    type: 'goal_deadline',
+    label: '🎯 Goal Deadline',
+    description: 'Nudges for approaching goal deadlines',
+    color: '#007DFE',
+  },
 ];
 
 const NotificationTestScreen = ({ navigation }) => {
