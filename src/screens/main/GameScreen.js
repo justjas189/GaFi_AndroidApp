@@ -6794,7 +6794,7 @@ export default function BuildScreen() {
       ) : (
         <View style={styles.header}>
           <View style={styles.headerLeftControls}>
-            {/* <TouchableOpacity
+            <TouchableOpacity
               style={styles.backToMenuButton}
               onPress={() => {
                 if (tutorialActive) {
@@ -6807,7 +6807,7 @@ export default function BuildScreen() {
               }}
             >
               <Ionicons name="home" size={20} color="#FFF" /> 
-            </TouchableOpacity>*/}
+            </TouchableOpacity>
             <TouchableOpacity
               style={[styles.historyButton, showDayReportNotification && { backgroundColor: '#ffb68b' }]}
               onPress={() => {

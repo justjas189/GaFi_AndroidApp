@@ -226,17 +226,24 @@ export default function App() {
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    // 1. Initialize OneSignal
-    OneSignal.Debug.setLogLevel(LogLevel.Verbose); // Remove this before production
-    OneSignal.initialize(Constants.expoConfig.extra.oneSignalAppId);
+    const appId = Constants.expoConfig?.extra?.oneSignalAppId;
 
-    // 2. Request Permission (Required for iOS)
+    if (!appId) {
+      console.warn('Missing OneSignal app id in Expo config');
+      initializeApp();
+      return;
+    }
+
+    OneSignal.Debug.setLogLevel(LogLevel.Verbose);
+    OneSignal.initialize(appId);
+
+    // Prompts on iOS and Android 13+ when the OS requires it
     OneSignal.Notifications.requestPermission(true);
 
-    // 3. Listen for Notifications (Optional: Handle what happens when clicked)
     OneSignal.Notifications.addEventListener('click', (event) => {
       console.log('OneSignal: notification clicked:', event);
     });
+
     initializeApp();
   }, []);
 
