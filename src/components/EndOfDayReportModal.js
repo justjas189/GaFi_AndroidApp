@@ -260,24 +260,28 @@ const EndOfDayReportModal = ({
 
             {/* Bottom Action Button */}
             <SafeAreaView edges={['bottom']} style={styles.bottomSafeArea}>
+              
+              {/* SINGLE BUTTON BLOCK */}
               {handlePrimaryPress && !showDualActions && (
                 <View style={styles.buttonWrapper}>
                   <TouchableOpacity
-                    onPress={handlePrimaryPress}
-                    style={styles.primaryButton}
+                    onPress={onClose}
+                    style={styles.primaryButton} // Uses natural height now
                     activeOpacity={0.8}
                     accessibilityRole="button"
-                    accessibilityLabel={primaryLabel}
+                    accessibilityLabel="Close"
                   >
-                    <Text style={styles.primaryButtonText}>{primaryLabel}</Text>
+                    <Text style={styles.primaryButtonText}>{primaryLabel || 'Close'}</Text>
                   </TouchableOpacity>
                 </View>
               )}
+
+              {/* DUAL BUTTON BLOCK */}
               {showDualActions && (
                 <View style={styles.buttonRow}>
                   <TouchableOpacity
                     onPress={onClose}
-                    style={styles.secondaryButton}
+                    style={[styles.primaryButton, { flex: 1 }]} // Added flex: 1 back for horizontal split
                     activeOpacity={0.8}
                     accessibilityRole="button"
                     accessibilityLabel="Close"
@@ -286,12 +290,12 @@ const EndOfDayReportModal = ({
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={handlePrimaryPress}
-                    style={styles.primaryButton}
+                    style={[styles.primaryButton, { flex: 1 }]} // Added flex: 1 back for horizontal split
                     activeOpacity={0.8}
                     accessibilityRole="button"
-                    accessibilityLabel="Proceed to Next Day"
+                    accessibilityLabel={resolvedActionLabel || 'Proceed to Next Day'}
                   >
-                    <Text style={styles.primaryButtonText}>Next Day</Text>
+                    <Text style={styles.primaryButtonText}>{resolvedActionLabel || 'Next Day'}</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -539,7 +543,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 32,
     backgroundColor: '#ff7a00',
-    flex: 1,
   },
   primaryButtonText: {
     color: '#ffffff',
