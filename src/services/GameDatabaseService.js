@@ -495,6 +495,59 @@ class GameDatabaseService {
     }
   }
 
+  /**
+   * Upsert a day report for a specific session and day.
+   */
+  async saveDayReport({
+    sessionId,
+    storyLevel,
+    dayNumber,
+    report,
+  }) {
+    try {
+      const userId = await this._getUserId();
+      if (!userId) throw new Error('Not authenticated');
+
+      const timestamp = new Date().toISOString();
+      const details = { storyLevel, dayNumber, report, updated_at: timestamp };
+
+      const { data: existingLogs } = await supabase
+        .from('game_activity_log')
+        .select('id, details')
+        .eq('user_id', userId)
+        .eq('activity_type', 'day_report')
+        .eq('session_id', sessionId);
+
+      let existingId = null;
+      if (existingLogs && existingLogs.length > 0) {
+        const found = existingLogs.find(log => log.details?.dayNumber === dayNumber && log.details?.storyLevel === storyLevel);
+        if (found) {
+          existingId = found.id;
+        }
+      }
+
+      if (existingId) {
+        const { error } = await supabase
+          .from('game_activity_log')
+          .update({ details })
+          .eq('id', existingId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('game_activity_log')
+          .insert({
+            user_id: userId,
+            session_id: sessionId,
+            activity_type: 'day_report',
+            details,
+          });
+        if (error) throw error;
+      }
+    } catch (err) {
+      console.warn('⚠️ saveDayReport error:', err.message);
+    }
+  }
+
   // ─── 8. Load all saved game progress on startup ───────────
 
   /**

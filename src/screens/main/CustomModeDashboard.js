@@ -23,6 +23,8 @@ import { AuthContext } from '../../context/AuthContext';
 import { DataContext } from '../../context/DataContext';
 import { supabase } from '../../config/supabase';
 import goalNotificationService from '../../services/GoalNotificationService';
+import { getCategoryIcon } from '../../utils/categoryIcons';
+import { normalizeCategory } from '../../utils/categoryUtils';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -271,7 +273,8 @@ export default function CustomModeDashboard({ navigation }) {
     filtered.forEach((e) => {
       const amt = parseFloat(e.amount) || 0;
       spent += amt;
-      const cat = e.category || 'Other';
+      const rawCat = e.category || 'Other';
+      const cat = normalizeCategory(rawCat);
       breakdown[cat] = (breakdown[cat] || 0) + amt;
     });
     return { categoryBreakdown: breakdown, totalSpent: spent };
@@ -845,23 +848,23 @@ export default function CustomModeDashboard({ navigation }) {
     const meta = CATEGORY_META[cat] || CATEGORY_META.Other;
     const budgetType = CATEGORY_BUDGET_MAP[cat] || 'wants';
     return (
-      <View style={s.categoryRow} key={cat}>
-        <View style={[s.categoryIcon, { backgroundColor: meta.color + '18' }]}>
-          <Ionicons name={meta.icon} size={20} color={meta.color} />
-        </View>
-        <View style={{ flex: 1, marginLeft: 12 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text, flex: 1 }} numberOfLines={1}>
+      <View style={[s.expenseItem, { backgroundColor: colors.surface }]} key={cat}>
+        <View style={s.expenseLeft}>
+          <View style={[s.expenseIcon, { backgroundColor: meta.color + '20' }]}>
+            <Ionicons name={getCategoryIcon(cat)} size={20} color={meta.color} />
+          </View>
+          <View style={s.expenseInfo}>
+            <Text style={[s.expenseCategory, { color: colors.text }]} numberOfLines={1}>
               {cat}
             </Text>
-            <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text, marginLeft: 8 }}>
-              {formatCurrency(amt)}
+            <Text style={[s.expenseNote, { color: colors.text }]}>
+              {budgetType === 'needs' ? 'Needs' : 'Wants'}
             </Text>
           </View>
-          <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
-            {budgetType === 'needs' ? 'Needs' : 'Wants'}
-          </Text>
         </View>
+        <Text style={[s.expenseAmount, { color: '#FF4444' }]}>
+          -₱{amt.toFixed(2)}
+        </Text>
       </View>
     );
   };
@@ -1737,7 +1740,7 @@ export default function CustomModeDashboard({ navigation }) {
               <Text style={s.inputLabel}>Target Amount (₱)</Text>
               <TextInput style={s.input} placeholder="0.00" placeholderTextColor={colors.placeholder} keyboardType="numeric" value={newGoalTarget} onChangeText={setNewGoalTarget} />
 
-              <Text style={s.inputLabel}>Deadline (optional, MM/DD/YYYY)</Text>
+              <Text style={s.inputLabel}>Deadline</Text>
               <View style={s.dateInputRow}>
                 <TextInput
                   style={s.dateInputField}
@@ -2105,20 +2108,43 @@ const createStyles = (colors) =>
       fontWeight: '800',
     },
 
-    // ── Category ─────────────────────────────────────────────────────
-    categoryRow: {
+    // ── Expense Item (Matches ExpenseScreen) ─────────────────────────
+    expenseItem: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
+      padding: 14,
+      borderRadius: 12,
+    },
+    expenseLeft: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 10,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.border,
+      flex: 1,
     },
-    categoryIcon: {
-      width: 36,
-      height: 36,
-      borderRadius: 10,
-      alignItems: 'center',
+    expenseIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
       justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 12,
+    },
+    expenseInfo: {
+      flex: 1,
+    },
+    expenseCategory: {
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    expenseNote: {
+      fontSize: 13,
+      opacity: 0.7,
+      marginTop: 2,
+    },
+    expenseAmount: {
+      fontSize: 16,
+      fontWeight: 'bold',
     },
 
     // ── Goal Card ────────────────────────────────────────────────────

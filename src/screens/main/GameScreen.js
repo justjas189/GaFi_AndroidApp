@@ -1285,6 +1285,7 @@ export default function BuildScreen() {
     const totalCount = dailyTasks.length;
     const dayNumberValue = Number(details?.dayNumber ?? reportData?.dayNumber ?? reportData?.displayDay);
     const displayDayValue = reportData?.displayDay ?? dayNumberValue;
+    const updatedAt = details?.updated_at || row?.created_at || null;
 
     return {
       id: row?.id ?? `${storyLevelValue}-${dayNumberValue || 'day'}-${row?.created_at || 'unknown'}`,
@@ -1297,6 +1298,7 @@ export default function BuildScreen() {
       tasks: dailyTasks,
       reportData,
       createdAt: row?.created_at || null,
+      updatedAt: updatedAt,
     };
   }, []);
 
@@ -1304,7 +1306,23 @@ export default function BuildScreen() {
     if (!reports?.length) return [];
 
     const levelsReached = new Set([storyLevel, ...unlockedLevels].filter((level) => Number.isFinite(level)));
-    const filteredReports = reports.filter((report) => {
+    
+    // Deduplicate array, keep most recently updated report for any Level/Day combination
+    const dedupedReports = Object.values(
+      reports.reduce((acc, report) => {
+        const key = `${report.storyLevel}_${report.dayNumber}`;
+        const existing = acc[key];
+        const reportDate = new Date(report.updatedAt || report.createdAt || 0).getTime();
+        const existingDate = existing ? new Date(existing.updatedAt || existing.createdAt || 0).getTime() : 0;
+        
+        if (!existing || reportDate > existingDate) {
+          acc[key] = report;
+        }
+        return acc;
+      }, {})
+    );
+
+    const filteredReports = dedupedReports.filter((report) => {
       if (!Number.isFinite(report?.storyLevel)) return false;
       if (levelsReached.size === 0) return true;
       return levelsReached.has(report.storyLevel);
@@ -1414,6 +1432,21 @@ export default function BuildScreen() {
     const totalCount = Number(item.totalCount) || 0;
     const xpEarned = Number(item.xpEarned) || 0;
 
+    let formattedDate = '';
+    if (item.updatedAt) {
+      const dateObj = new Date(item.updatedAt);
+      if (!isNaN(dateObj.getTime())) {
+        formattedDate = dateObj.toLocaleString('en-US', { 
+          weekday: 'long', 
+          month: 'long', 
+          day: 'numeric', 
+          hour: 'numeric', 
+          minute: '2-digit', 
+          hour12: true 
+        });
+      }
+    }
+
     return (
       <TouchableOpacity
         onPress={() => openHistoryReport(item)}
@@ -1428,6 +1461,11 @@ export default function BuildScreen() {
             <Text className="text-[#e5e2e1] text-base font-semibold" style={styles.historyItemTitle}>
               Day {displayDay}
             </Text>
+            {formattedDate ? (
+              <Text className="text-[#e0c0af] text-[10px] mb-1" style={styles.historyItemSubtitle}>
+                {formattedDate}
+              </Text>
+            ) : null}
             <Text className="text-[#a78b7c] text-xs" style={styles.historyItemSubtitle}>
               Tasks: {completedCount}/{totalCount} • +{xpEarned} XP
             </Text>
@@ -2104,14 +2142,11 @@ export default function BuildScreen() {
 
     if (activeSessionId && reportPayload) {
       try {
-        await gameDatabaseService.logActivity({
-          activityType: 'day_report',
+        await gameDatabaseService.saveDayReport({
           sessionId: activeSessionId,
-          details: {
-            storyLevel,
-            dayNumber: reportPayload.dayNumber || activeStoryDay,
-            report: reportPayload,
-          },
+          storyLevel,
+          dayNumber: reportPayload.dayNumber || activeStoryDay,
+          report: reportPayload,
         });
       } catch (e) {
         console.warn('Failed to persist day report:', e?.message || e);

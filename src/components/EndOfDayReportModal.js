@@ -293,9 +293,9 @@ const EndOfDayReportModal = ({
                     style={[styles.primaryButton, { flex: 1 }]} // Added flex: 1 back for horizontal split
                     activeOpacity={0.8}
                     accessibilityRole="button"
-                    accessibilityLabel={resolvedActionLabel || 'Proceed to Next Day'}
+                    accessibilityLabel="Proceed to Next Day"
                   >
-                    <Text style={styles.primaryButtonText}>{resolvedActionLabel || 'Next Day'}</Text>
+                    <Text style={styles.primaryButtonText}>{resolvedActionLabel !== 'Close' && resolvedActionLabel ? resolvedActionLabel : 'Next Day'}</Text>
                   </TouchableOpacity>
                 </View>
               )}
