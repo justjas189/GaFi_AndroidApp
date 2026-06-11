@@ -439,7 +439,23 @@ export default function BuildScreen() {
     animatedPositionRef.current = { x, y };
   }, [animatedX, animatedY]);
 
+  // Mirror the native-driven animated values into a JS ref so movement math
+  // can read the live character position.
+  //
+  // IMPORTANT: this must re-run every time the game view re-mounts. Tapping the
+  // home button sets showMainMenu=true, which early-returns the render and
+  // unmounts the character's <Animated.View>. On unmount, React Native's
+  // AnimatedNode.__detach() calls removeAllListeners() — destroying these
+  // listeners AND the native value-update subscription, and resetting the
+  // value's native tag. With stable [animatedX, animatedY] deps this effect
+  // never re-ran on re-entry, so the listeners stayed dead and
+  // animatedPositionRef froze at the previous session's position — causing the
+  // character to rubber-band/teleport back on the next redirect. Keying on
+  // showMainMenu re-registers the listeners (and re-subscribes to the new
+  // native node) each time we return to the game view.
   useEffect(() => {
+    if (showMainMenu) return; // game view (and its native animated nodes) not mounted
+
     const xId = animatedX.addListener(({ value }) => {
       animatedPositionRef.current = { x: value, y: animatedPositionRef.current.y };
     });
@@ -451,7 +467,7 @@ export default function BuildScreen() {
       animatedX.removeListener(xId);
       animatedY.removeListener(yId);
     };
-  }, [animatedX, animatedY]);
+  }, [showMainMenu, animatedX, animatedY]);
 
   // Travel modal state
   const [showTravelModal, setShowTravelModal] = useState(false);
@@ -3145,6 +3161,9 @@ export default function BuildScreen() {
     animation.start(({ finished }) => {
       if (finished) {
         characterPositionRef.current = { x: targetPixelX, y: targetPixelY };
+        // Keep the animated-position mirror authoritative at each tile boundary
+        // (defense-in-depth: stays correct even if a native listener update is missed).
+        animatedPositionRef.current = { x: targetX, y: targetY };
         onComplete();
       }
     });
@@ -4693,8 +4712,8 @@ export default function BuildScreen() {
     },
     achievementGlow: {
       position: 'absolute',
-      width: Math.round(screenWidth * 0.275),
-      height: Math.round(screenWidth * 0.275),
+      width: Math.round(screenWidth * 0.25),
+      height: Math.round(screenWidth * 0.25),
       backgroundColor: '#FFD700',
       borderRadius: Math.round(screenWidth * 0.25),
       opacity: 0.1,
@@ -6893,7 +6912,7 @@ export default function BuildScreen() {
       ) : (
         <View style={styles.header}>
           <View style={styles.headerLeftControls}>
-            {/* <TouchableOpacity
+            <TouchableOpacity
               style={styles.backToMenuButton}
               onPress={() => {
                 if (tutorialActive) {
@@ -6906,7 +6925,7 @@ export default function BuildScreen() {
               }}
             >
               <Ionicons name="home" size={20} color="#FFF" />  
-            </TouchableOpacity>*/}
+            </TouchableOpacity>
             <TouchableOpacity
               style={[styles.historyButton, showDayReportNotification && { backgroundColor: '#ffb68b' }]}
               onPress={() => {
