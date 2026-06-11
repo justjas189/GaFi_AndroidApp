@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "107416690526",
+    "project_id": "gafiapp-push",
+    "storage_bucket": "gafiapp-push.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:107416690526:android:4b0f3cf89d3847d14a79cf",
+        "android_client_info": {
+          "package_name": "com.gafi.app.dev"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA4r5VLUSRXGoyGlSCtZaAP98Fwt6doM0k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

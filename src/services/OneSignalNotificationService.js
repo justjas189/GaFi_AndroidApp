@@ -507,71 +507,72 @@ class OneSignalNotificationService {
 
   /**
    * Send a test notification for each type (useful from NotificationTestScreen).
+   * Mirrors GoalNotificationService.sendTestNotification: explicit handler setup,
+   * direct scheduleNotificationAsync call, re-throws so the UI surfaces failures.
    */
   async sendTestNotification(type = 'budget_warning') {
-    switch (type) {
-      case 'budget_warning':
-        await this._sendLocalNotification(
-          '⚠️ Budget Warning (Test)',
-          "Watch out! You've used 85% of your 'Wants' budget for this level. Play it safe!",
-          { type: 'test_budget_warning' }
-        );
-        break;
+    try {
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: false,
+        }),
+      });
 
-      case 'budget_critical':
-        await this._sendLocalNotification(
-          '🔴 Budget Critical (Test)',
-          "Critical! You've used 95% of your 'Food' budget. Almost at the limit!",
-          { type: 'test_budget_critical' }
-        );
-        break;
+      const testPayloads = {
+        budget_warning: {
+          title: '⚠️ Budget Warning (Test)',
+          body: "Watch out! You've used 85% of your 'Wants' budget for this level. Play it safe!",
+          data: { type: 'test_budget_warning' },
+        },
+        budget_critical: {
+          title: '🔴 Budget Critical (Test)',
+          body: "Critical! You've used 95% of your 'Food' budget. Almost at the limit!",
+          data: { type: 'test_budget_critical' },
+        },
+        level_up: {
+          title: '🎉 Level Complete! (Test)',
+          body: 'You successfully managed your Needs vs. Wants. Tap to claim your next challenge!',
+          data: { type: 'test_level_up' },
+        },
+        weekly_checkin: {
+          title: '🤖 Koin AI Weekly Check-In (Test)',
+          body: 'Koin AI has analyzed your spending this week. Tap here to see your personalized tip on how to save more next week!',
+          data: { type: 'test_weekly_checkin' },
+        },
+        budget_reset: {
+          title: '💰 A New Cycle Begins! (Test)',
+          body: 'Your budget has been reset. Start fresh and make this cycle count!',
+          data: { type: 'test_budget_reset' },
+        },
+        daily_reminder: {
+          title: '📝 Time to Track! (Test)',
+          body: "Don't forget to log today's expenses. Stay on top of your spending game!",
+          data: { type: 'test_daily_reminder' },
+        },
+        goal_deadline: {
+          title: '🎯 Goal Deadline Reminder (Test)',
+          body: '⏰ 15 days left for "New Laptop"! Keep saving!',
+          data: { type: 'test_goal_deadline' },
+        },
+      };
 
-      case 'level_up':
-        await this._sendLocalNotification(
-          '🎉 Level Complete! (Test)',
-          'You successfully managed your Needs vs. Wants. Tap to claim your next challenge!',
-          { type: 'test_level_up' }
-        );
-        break;
+      const payload = testPayloads[type] ?? {
+        title: '🔔 Test Notification',
+        body: 'This is a test notification from GaFI!',
+        data: { type: 'test' },
+      };
 
-      case 'weekly_checkin':
-        await this._sendLocalNotification(
-          '🤖 Koin AI Weekly Check-In (Test)',
-          'Koin AI has analyzed your spending this week. Tap here to see your personalized tip on how to save more next week!',
-          { type: 'test_weekly_checkin' }
-        );
-        break;
+      await Notifications.scheduleNotificationAsync({
+        content: { ...payload, sound: 'default' },
+        trigger: null,
+      });
 
-      case 'budget_reset':
-        await this._sendLocalNotification(
-          '💰 A New Cycle Begins! (Test)',
-          'Your budget has been reset. Start fresh and make this cycle count!',
-          { type: 'test_budget_reset' }
-        );
-        break;
-
-      case 'daily_reminder':
-        await this._sendLocalNotification(
-          '📝 Time to Track! (Test)',
-          "Don't forget to log today's expenses. Stay on top of your spending game!",
-          { type: 'test_daily_reminder' }
-        );
-        break;
-
-      case 'goal_deadline':
-        await this._sendLocalNotification(
-          '⏰ 15 days left for "New Laptop"! (Test)',
-          "Keep saving!",
-          { type: 'test_goal_deadline' }
-        );
-        break;
-
-      default:
-        await this._sendLocalNotification(
-          '🔔 Test Notification',
-          'This is a test notification from GaFI!',
-          { type: 'test' }
-        );
+      DebugUtils.log('ONESIGNAL', 'Test notification sent', { type });
+    } catch (err) {
+      DebugUtils.error('ONESIGNAL', 'sendTestNotification failed', err);
+      throw err; // Re-throw so NotificationTestScreen can show the real error
     }
   }
 

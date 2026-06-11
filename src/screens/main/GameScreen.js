@@ -25,6 +25,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTutorial, TUTORIAL_PHASE } from '../../context/TutorialContext';
 import DailyTaskPopup from '../../components/DailyTaskPopup';
 import EndOfDayReportModal from '../../components/EndOfDayReportModal';
+import useBackgroundMusic from '../../hooks/useBackgroundMusic';
+
+const BGM_SOURCE = require('../../../assets/audio/bgm-placeholder.mp3');
 
 const { width: INITIAL_WIDTH, height: INITIAL_HEIGHT } = Dimensions.get('window');
 const CHARACTER_SIZE = 48;
@@ -368,6 +371,9 @@ export default function BuildScreen() {
   const { addExpense, expenses } = useContext(DataContext);
   const { startGameTutorial: startContextTutorial, markConditionComplete, cancelTutorial, tutorialPhase } = useTutorial();
   const navigation = useNavigation();
+
+  // Background music — plays on focus, pauses on blur / app background.
+  useBackgroundMusic(BGM_SOURCE);
 
   // ─── Responsive dimensions ─────────────────────────────────────────
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -4636,6 +4642,8 @@ export default function BuildScreen() {
       backgroundColor: '#FFD700',
       borderRadius: Math.round(screenWidth * 0.25),
       opacity: 0.1,
+      zIndex: 0,
+      elevation: 0,
     },
     achievementUnlockedText: {
       fontSize: Math.round(screenWidth * 0.04),
@@ -6798,7 +6806,7 @@ export default function BuildScreen() {
       {tutorialActive && gameMode === 'tutorial' ? (
         <View style={tutorialStyles.tutorialHeader}>
           <View style={tutorialStyles.tutorialRow1}>
-            <TouchableOpacity
+            {/* <TouchableOpacity
               style={styles.backToMenuButton}
               onPress={() => {
                 setTutorialActive(false);
@@ -6809,7 +6817,7 @@ export default function BuildScreen() {
               }}
             >
               <Ionicons name="home" size={20} color="#FFF" />
-            </TouchableOpacity>
+            </TouchableOpacity> */}
             <View style={tutorialStyles.tutorialTextArea}>
               <Text style={tutorialStyles.tutorialTitle} numberOfLines={1}>
                 🎓 Tutorial Mode
@@ -6829,7 +6837,7 @@ export default function BuildScreen() {
       ) : (
         <View style={styles.header}>
           <View style={styles.headerLeftControls}>
-            <TouchableOpacity
+            {/* <TouchableOpacity
               style={styles.backToMenuButton}
               onPress={() => {
                 if (tutorialActive) {
@@ -6841,8 +6849,8 @@ export default function BuildScreen() {
                 setShowMainMenu(true);
               }}
             >
-              <Ionicons name="home" size={20} color="#FFF" /> 
-            </TouchableOpacity>
+              <Ionicons name="home" size={20} color="#FFF" />  
+            </TouchableOpacity>*/}
             <TouchableOpacity
               style={[styles.historyButton, showDayReportNotification && { backgroundColor: '#ffb68b' }]}
               onPress={() => {
@@ -6857,6 +6865,12 @@ export default function BuildScreen() {
               {hasUnreadReport && !showDayReportNotification && (
                 <View style={styles.historyBadge} />
               )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.historyButton}
+              onPress={() => setIsHistoryModalVisible(true)}
+            >
+              <Ionicons name="receipt-outline" size={18} color="#FFF" />
             </TouchableOpacity>
           </View>
           {(gameMode === 'story') && (
@@ -8618,24 +8632,26 @@ export default function BuildScreen() {
         <View style={styles.achievementModalOverlay}>
           <View style={styles.achievementModalContent}>
             <View style={styles.achievementGlow} />
-            <Text style={styles.achievementUnlockedText}>🏆 ACHIEVEMENT UNLOCKED!</Text>
-            {newAchievement && (
-              <>
-                <Text style={styles.achievementIcon}>{newAchievement.icon}</Text>
-                <Text style={styles.achievementTitle}>{newAchievement.title || newAchievement.name}</Text>
-                <Text style={styles.achievementDescription}>{newAchievement.description}</Text>
-                <View style={styles.achievementPoints}>
-                  <Ionicons name="star" size={20} color="#FFD700" />
-                  <Text style={styles.achievementPointsText}>+{newAchievement.points} XP</Text>
-                </View>
-              </>
-            )}
-            <TouchableOpacity
-              style={styles.achievementCloseButton}
-              onPress={() => setShowAchievementModal(false)}
-            >
-              <Text style={styles.achievementCloseText}>Awesome!</Text>
-            </TouchableOpacity>
+            <View style={{ zIndex: 1, alignItems: 'center', width: '100%' }}>
+              <Text style={styles.achievementUnlockedText}>🏆 ACHIEVEMENT UNLOCKED!</Text>
+              {newAchievement && (
+                <>
+                  <Text style={styles.achievementIcon}>{newAchievement.icon}</Text>
+                  <Text style={styles.achievementTitle}>{newAchievement.title || newAchievement.name}</Text>
+                  <Text style={styles.achievementDescription}>{newAchievement.description}</Text>
+                  <View style={styles.achievementPoints}>
+                    <Ionicons name="star" size={20} color="#FFD700" />
+                    <Text style={styles.achievementPointsText}>+{newAchievement.points} XP</Text>
+                  </View>
+                </>
+              )}
+              <TouchableOpacity
+                style={styles.achievementCloseButton}
+                onPress={() => setShowAchievementModal(false)}
+              >
+                <Text style={styles.achievementCloseText}>Awesome!</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>

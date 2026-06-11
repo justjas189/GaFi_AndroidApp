@@ -173,21 +173,10 @@ const daysUntil = (dateStr) => {
   return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
 };
 
-const getBudgetHealthScore = (breakdown, monthlyBudget) => {
-  if (!monthlyBudget || monthlyBudget <= 0) return 0;
-  const nb = breakdown.needs.budget || 0;
-  const wb = breakdown.wants.budget || 0;
-  const sb = breakdown.savings.budget || 0;
-  const ns = breakdown.needs.spent || 0;
-  const ws = breakdown.wants.spent || 0;
-  const sa = breakdown.savings.actual || 0;
-  const needsScore = nb > 0 ? (ns <= nb ? 1 : Math.max(0, 1 - (ns - nb) / nb)) : (ns === 0 ? 1 : 0);
-  const wantsScore = wb > 0 ? (ws <= wb ? 1 : Math.max(0, 1 - (ws - wb) / wb)) : (ws === 0 ? 1 : 0);
-  const savingsScore = sb > 0 ? Math.min(sa / sb, 1) : sa > 0 ? 1 : 0.5;
-  const raw = (needsScore * 0.35 + wantsScore * 0.35 + savingsScore * 0.3) * 100;
-  const score = Math.round(raw);
-  if (!isFinite(score) || isNaN(score)) return 0;
-  return Math.max(0, Math.min(100, score));
+const getBudgetHealthScore = (totalSpent, monthlyBudget) => {
+  if (!monthlyBudget || monthlyBudget <= 0) return 100;
+  const spendingPct = (totalSpent / monthlyBudget) * 100;
+  return Math.max(0, Math.min(100, Math.round(100 - spendingPct)));
 };
 
 const getHealthLabel = (score) => {
@@ -282,7 +271,27 @@ export default function CustomModeDashboard({ navigation }) {
 
   const monthlyBudget = budget?.monthly || 0;
 
-  // Spendable budget = income - expenses - goal allocations - net savings
+  // ── Derived: Saving (declared here — required by spendable budget below) ─
+  const totalInWallets = wallets.reduce((s, w) => s + (parseFloat(w.current_amount) || 0), 0);
+
+  const { monthlyDeposits, monthlyWithdrawals } = useMemo(() => {
+    const { start, end } = getCurrentMonthRange();
+    let deps = 0;
+    let wds = 0;
+    (transactions || []).forEach((t) => {
+      const d = new Date(t.created_at);
+      if (d >= start && d <= end) {
+        const amt = t.signed_amount != null ? t.signed_amount : (parseFloat(t.amount) || 0);
+        if (amt > 0) deps += amt;
+        else wds += Math.abs(amt);
+      }
+    });
+    return { monthlyDeposits: deps, monthlyWithdrawals: wds };
+  }, [transactions]);
+
+  const savingsTarget = budgetRules.savings;
+
+  // Spendable money left = allowance − expenses − active goal deposits − saved in wallets
   const totalGoalAllocations = useMemo(
     () => savingsGoals
       .filter((g) => !g.is_achieved && !g.is_deleted)
@@ -307,8 +316,8 @@ export default function CustomModeDashboard({ navigation }) {
   }, [categoryBreakdown, monthlyBudget, totalSpent, budgetRules]);
 
   const healthScore = useMemo(
-    () => getBudgetHealthScore(budgetBreakdown, monthlyBudget),
-    [budgetBreakdown, monthlyBudget],
+    () => getBudgetHealthScore(totalSpent, monthlyBudget),
+    [totalSpent, monthlyBudget],
   );
   const healthInfo = getHealthLabel(healthScore);
 
@@ -353,26 +362,10 @@ export default function CustomModeDashboard({ navigation }) {
   }, [savingsGoals, goalFilter, goalSort]);
 
   // ── Derived: Saving ─────────────────────────────────────────────────
+  // (totalInWallets, monthlyDeposits, monthlyWithdrawals, savingsTarget declared above)
 
-  const totalInWallets = wallets.reduce((s, w) => s + (parseFloat(w.current_amount) || 0), 0);
-
-  const { monthlyDeposits, monthlyWithdrawals } = useMemo(() => {
-    const { start, end } = getCurrentMonthRange();
-    let deps = 0;
-    let wds = 0;
-    (transactions || []).forEach((t) => {
-      const d = new Date(t.created_at);
-      if (d >= start && d <= end) {
-        const amt = t.signed_amount != null ? t.signed_amount : (parseFloat(t.amount) || 0);
-        if (amt > 0) deps += amt;
-        else wds += Math.abs(amt);
-      }
-    });
-    return { monthlyDeposits: deps, monthlyWithdrawals: wds };
-  }, [transactions]);
-
-  const savingsTarget = budgetRules.savings;
-  const savingsRate = monthlyBudget > 0 ? Math.min((monthlyDeposits / monthlyBudget) * 100, savingsTarget) : 0;
+  const savingsTargetAmount = monthlyBudget * (savingsTarget / 100);
+  const savingsRate = savingsTargetAmount > 0 ? (monthlyDeposits / savingsTargetAmount) * 100 : 0;
   const rateInfo = getSavingsRateLabel(savingsRate, savingsTarget);
 
   // ── Data fetching ───────────────────────────────────────────────────
@@ -1108,10 +1101,10 @@ export default function CustomModeDashboard({ navigation }) {
     <>
       {/* Summary Card */}
       <View style={s.summaryCard}>
-        <Text style={s.summaryLabel}>Spendable Budget</Text>
-        {/* <Text style={[s.summaryValue, { color: remaining >= 0 ? colors.success : colors.error }]}>
+        <Text style={s.summaryLabel}>Spendable Money Left</Text>
+        <Text style={[s.summaryValue, { color: remaining >= 0 ? colors.success : colors.error }]}>
           {formatCurrency(remaining)}
-        </Text> */}
+        </Text>
         <View style={s.summaryDivider} />
         <View style={s.summaryRow}>
           <View style={s.summaryCol}>
@@ -1150,7 +1143,7 @@ export default function CustomModeDashboard({ navigation }) {
             <View style={{ flex: 1, marginLeft: 16 }}>
               <Text style={{ fontSize: 18, fontWeight: '700', color: healthInfo.color }}>{healthInfo.label}</Text>
               <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
-                Based on your {budgetRules.needs}/{budgetRules.wants}/{budgetRules.savings} budget split adherence.
+                Based on your spending vs. your total budget limit.
               </Text>
             </View>
           </View>
@@ -1417,7 +1410,7 @@ export default function CustomModeDashboard({ navigation }) {
                 <Text style={{ fontSize: 18, fontWeight: '700', color: rateInfo.color }}>{rateInfo.label}</Text>
                 <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
                   {monthlyBudget > 0
-                    ? `You've saved ${savingsRate.toFixed(1)}% of your ${isEmployee ? 'income' : 'allowance'} this month (target: ${savingsTarget}%).`
+                    ? `You've achieved ${savingsRate.toFixed(1)}% of your savings target (${savingsTarget}% of your ${isEmployee ? 'income' : 'allowance'}).`
                     : 'Set a monthly budget to track your savings rate.'}
                 </Text>
               </View>
@@ -1426,7 +1419,7 @@ export default function CustomModeDashboard({ navigation }) {
             <View style={{ marginTop: 12 }}>
               <View style={s.barTrack}>
                 <View
-                  style={[s.barFill, { width: `${savingsTarget > 0 ? Math.min((savingsRate / savingsTarget) * 100, 100) : 0}%`, backgroundColor: rateInfo.color }]}
+                  style={[s.barFill, { width: `${Math.min(savingsRate, 100)}%`, backgroundColor: rateInfo.color }]}
                 />
               </View>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
