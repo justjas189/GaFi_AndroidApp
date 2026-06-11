@@ -4686,11 +4686,15 @@ export default function BuildScreen() {
       shadowRadius: 20,
       elevation: 15,
     },
+    iconContainer: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      position: 'relative',
+    },
     achievementGlow: {
       position: 'absolute',
-      top: screenHeight - 750 ,
-      width: Math.round(screenWidth * 0.3),
-      height: Math.round(screenWidth * 0.3),
+      width: Math.round(screenWidth * 0.275),
+      height: Math.round(screenWidth * 0.275),
       backgroundColor: '#FFD700',
       borderRadius: Math.round(screenWidth * 0.25),
       opacity: 0.1,
@@ -8758,12 +8762,14 @@ export default function BuildScreen() {
       >
         <View style={styles.achievementModalOverlay}>
           <View style={styles.achievementModalContent}>
-            <View style={styles.achievementGlow} />
             <View style={{ zIndex: 1, alignItems: 'center', width: '100%' }}>
               <Text style={styles.achievementUnlockedText}>🏆 ACHIEVEMENT UNLOCKED!</Text>
               {newAchievement && (
                 <>
-                  <Text style={styles.achievementIcon}>{newAchievement.icon}</Text>
+                  <View style={styles.iconContainer}>
+                    <View style={styles.achievementGlow} />
+                    <Text style={styles.achievementIcon}>{newAchievement.icon}</Text>
+                  </View>
                   <Text style={styles.achievementTitle}>{newAchievement.title || newAchievement.name}</Text>
                   <Text style={styles.achievementDescription}>{newAchievement.description}</Text>
                   <View style={styles.achievementPoints}>
