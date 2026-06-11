@@ -3,6 +3,7 @@ import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, Dimensions
 import { getChatCompletion } from '../config/nvidia';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { getCategoryIcon } from '../utils/categoryIcons';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -157,18 +158,24 @@ const EndOfDayReportModal = ({
                 <View className="mt-5 pt-4 border-t border-white/10" style={styles.expenseSection}>
                   <Text style={[styles.cardLabel, styles.expenseHeader]} className="mb-3">EXPENSE BREAKDOWN</Text>
                   {resolvedExpensesToday?.length > 0 ? (
-                    <View className="max-h-40" style={styles.expenseListContainer}>
+                    <View style={styles.expenseListContainer}>
                       <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={true}>
-                        {resolvedExpensesToday.map((exp, index) => (
-                          <View key={exp.id || index} className="flex-row justify-between items-center mb-3 pr-2" style={styles.expenseRow}>
-                            <Text className="text-[#e5e2e1] text-sm flex-1 mr-4" style={styles.expenseName} numberOfLines={1}>
-                              {exp.name || exp.category || 'Unnamed Expense'}
-                            </Text>
-                            <Text className="text-[#ffb68b] text-sm font-medium" style={styles.expenseAmount}>
-                              {formatCurrency(exp.amount)}
-                            </Text>
-                          </View>
-                        ))}
+                        {resolvedExpensesToday.map((exp, index) => {
+                          const iconName = getCategoryIcon(exp.category);
+                          return (
+                            <View key={exp.id || index} style={styles.expenseRow}>
+                              <View style={styles.expenseIconWrap}>
+                                <Ionicons name={iconName} size={16} color="#ffb68b" />
+                              </View>
+                              <Text style={styles.expenseName} numberOfLines={1}>
+                                {exp.name || exp.category || 'Unnamed Expense'}
+                              </Text>
+                              <Text style={styles.expenseAmount}>
+                                {formatCurrency(exp.amount)}
+                              </Text>
+                            </View>
+                          );
+                        })}
                       </ScrollView>
                     </View>
                   ) : (
@@ -397,9 +404,17 @@ const styles = StyleSheet.create({
   expenseRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     marginBottom: 12,
     paddingRight: 8,
+  },
+  expenseIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,182,139,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
   },
   expenseName: {
     color: '#e5e2e1',

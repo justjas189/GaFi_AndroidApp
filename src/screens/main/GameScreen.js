@@ -11,6 +11,7 @@ import { collisionSystem } from '../../utils/CollisionSystem';
 import { AchievementService } from '../../services/AchievementService';
 import gameDatabaseService from '../../services/GameDatabaseService';
 import { normalizeCategory } from '../../utils/categoryUtils';
+import { getCategoryIcon } from '../../utils/categoryIcons';
 import {
   STORY_DAILY_TASKS,
   STORY_DAY_COUNTS,
@@ -359,9 +360,9 @@ const NPC_POSITIONS = {
     { id: 'gym_worker', sprite: 'Gym_Worker', tileX: 10, tileY: 16, direction: 'left' },
   ],
   office: [
-    { id: 'receptionist', sprite: 'Library_Worker', tileX: 2, tileY: 7, direction: 'right' },
-    { id: 'office_staff', sprite: 'Clothing_Worker', tileX: 8, tileY: 8, direction: 'left' },
-    { id: 'pantry_staff', sprite: 'Food_Worker', tileX: 2, tileY: 17, direction: 'up' },
+    { id: 'receptionist', sprite: 'Library_Worker', tileX: 3, tileY: 7, direction: 'down' },
+    { id: 'office_staff', sprite: 'Clothing_Worker', tileX: 2, tileY: 17, direction: 'right' },
+    { id: 'pantry_staff', sprite: 'Food_Worker', tileX: 8, tileY: 6, direction: 'down' },
   ],
 };
 
@@ -759,6 +760,7 @@ export default function BuildScreen() {
   const [showDailyTaskPopup, setShowDailyTaskPopup] = useState(false);
   const [dailyTaskPopupPayload, setDailyTaskPopupPayload] = useState(null);
   const [isHistoryModalVisible, setIsHistoryModalVisible] = useState(false);
+  const [isExpenseListModalVisible, setIsExpenseListModalVisible] = useState(false);
   const [showHistoryReportModal, setShowHistoryReportModal] = useState(false);
   const [historyReportData, setHistoryReportData] = useState(null);
   const [dayReportHistory, setDayReportHistory] = useState([]);
@@ -1246,6 +1248,7 @@ export default function BuildScreen() {
       name: entry.note || entry.category || 'Expense',
       category: entry.category,
       amount: Number(entry.amount) || 0,
+      timestamp: entry.timestamp || null,
     }));
 
     return {
@@ -1492,6 +1495,11 @@ export default function BuildScreen() {
     setShowHistoryReportModal(false);
     setHistoryReportData(null);
   }, []);
+
+  const currentDayExpenseEntries = useMemo(() => {
+    const dayState = dailyTaskRuntimeByDay[activeStoryDay];
+    return dayState?.expenseEntries || [];
+  }, [dailyTaskRuntimeByDay, activeStoryDay]);
 
   const evaluateActiveStoryDayTasks = useCallback(() => {
     if (gameMode !== 'story') return;
@@ -2143,6 +2151,7 @@ export default function BuildScreen() {
     const reportPayload = liveDayReportData || null;
     setShowDayReportModal(false);
     setLiveDayReportData(null);
+    setIsExpenseListModalVisible(false);
     setHasUnreadReport(true);
     setTodaySpending(0);
 
@@ -2794,6 +2803,7 @@ export default function BuildScreen() {
           amount,
           note: description,
           source: 'transport',
+          timestamp: new Date().toISOString(),
         });
         if ((dayState.travelCount || 0) > 0 && CATEGORY_BUDGET_MAP[normalizedCategory] === 'needs') {
           dayState.needsAfterTravelCount = (dayState.needsAfterTravelCount || 0) + 1;
@@ -3498,6 +3508,7 @@ export default function BuildScreen() {
           amount: expenseAmountNum,
           note: savedNote || savedSubCategory || savedCategory,
           source: 'map',
+          timestamp: new Date().toISOString(),
         });
         if ((dayState.travelCount || 0) > 0 && CATEGORY_BUDGET_MAP[normalizedCategory] === 'needs') {
           dayState.needsAfterTravelCount = (dayState.needsAfterTravelCount || 0) + 1;
@@ -4029,6 +4040,47 @@ export default function BuildScreen() {
     historyEmptyText: {
       color: '#a78b7c',
       fontSize: 12,
+    },
+    expenseListRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#1e293b',
+      padding: 14,
+      marginBottom: 10,
+      borderRadius: 14,
+    },
+    expenseListIconWrap: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: '#2a1c12',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 12,
+    },
+    expenseListCenter: {
+      flex: 1,
+      marginRight: 12,
+    },
+    expenseListCategory: {
+      color: '#ffb68b',
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    expenseListNote: {
+      color: '#e5e2e1',
+      fontSize: 14,
+      marginTop: 2,
+    },
+    expenseListTime: {
+      color: '#a78b7c',
+      fontSize: 11,
+      marginTop: 2,
+    },
+    expenseListAmount: {
+      color: '#ffffff',
+      fontSize: 16,
+      fontWeight: '700',
     },
     dailyTaskSheetOverlay: {
       flex: 1,
@@ -4636,9 +4688,9 @@ export default function BuildScreen() {
     },
     achievementGlow: {
       position: 'absolute',
-      top: -screenHeight * 0.002,
-      width: Math.round(screenWidth * 0.2),
-      height: Math.round(screenWidth * 0.2),
+      top: screenHeight - 750 ,
+      width: Math.round(screenWidth * 0.3),
+      height: Math.round(screenWidth * 0.3),
       backgroundColor: '#FFD700',
       borderRadius: Math.round(screenWidth * 0.25),
       opacity: 0.1,
@@ -6868,7 +6920,7 @@ export default function BuildScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.historyButton}
-              onPress={() => setIsHistoryModalVisible(true)}
+              onPress={() => setIsExpenseListModalVisible(true)}
             >
               <Ionicons name="receipt-outline" size={18} color="#FFF" />
             </TouchableOpacity>
@@ -7555,6 +7607,7 @@ export default function BuildScreen() {
                           amount: savedAmount,
                           note: savedNote || savedSubCategory || savedCategory,
                           source: 'notebook',
+                          timestamp: new Date().toISOString(),
                         });
                         if ((dayState.travelCount || 0) > 0 && CATEGORY_BUDGET_MAP[normalizedCategory] === 'needs') {
                           dayState.needsAfterTravelCount = (dayState.needsAfterTravelCount || 0) + 1;
@@ -7779,6 +7832,80 @@ export default function BuildScreen() {
                 </View>
               )}
             />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Current Day Expense List Modal */}
+      <Modal
+        visible={isExpenseListModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIsExpenseListModalVisible(false)}
+      >
+        <View style={styles.historyOverlay}>
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => setIsExpenseListModalVisible(false)}
+            style={styles.historyBackdrop}
+          />
+          <View style={styles.historySheet}>
+            <View style={styles.historyHeaderRow}>
+              <Text style={styles.historyTitle}>
+                Today's Expenses
+              </Text>
+              <TouchableOpacity
+                onPress={() => setIsExpenseListModalVisible(false)}
+                style={styles.historyCloseButton}
+              >
+                <Ionicons name="close" size={20} color="#F5DEB3" />
+              </TouchableOpacity>
+            </View>
+
+            {gameMode === 'story' && (
+              <Text style={{ color: '#a78b7c', fontSize: 12, marginBottom: 12 }}>
+                Level {storyLevel} — Day {getStoryDayDisplayNumber(storyLevel, activeStoryDay)}
+              </Text>
+            )}
+
+            {currentDayExpenseEntries.length > 0 ? (
+              <ScrollView showsVerticalScrollIndicator style={{ maxHeight: 420 }}>
+                {currentDayExpenseEntries.map((entry, index) => {
+                  const iconName = getCategoryIcon(entry.category);
+                  const timeStr = entry.timestamp
+                    ? new Date(entry.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+                    : '';
+                  return (
+                    <View key={index} style={styles.expenseListRow}>
+                      <View style={styles.expenseListIconWrap}>
+                        <Ionicons name={iconName} size={20} color="#ffb68b" />
+                      </View>
+                      <View style={styles.expenseListCenter}>
+                        <Text style={styles.expenseListCategory} numberOfLines={1}>
+                          {entry.category}
+                        </Text>
+                        <Text style={styles.expenseListNote} numberOfLines={1}>
+                          {entry.note || entry.category}
+                        </Text>
+                        {timeStr ? (
+                          <Text style={styles.expenseListTime}>{timeStr}</Text>
+                        ) : null}
+                      </View>
+                      <Text style={styles.expenseListAmount}>
+                        ₱{(Number(entry.amount) || 0).toFixed(2)}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            ) : (
+              <View style={{ alignItems: 'center', paddingVertical: 32 }}>
+                <Ionicons name="receipt-outline" size={40} color="#a78b7c" style={{ marginBottom: 12 }} />
+                <Text style={{ color: '#a78b7c', fontSize: 14, fontStyle: 'italic' }}>
+                  No expenses logged yet today
+                </Text>
+              </View>
+            )}
           </View>
         </View>
       </Modal>
