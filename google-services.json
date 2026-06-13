@@ -7,6 +7,25 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:107416690526:android:507d7b3ea3b5516b4a79cf",
+        "android_client_info": {
+          "package_name": "com.gafi.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA4r5VLUSRXGoyGlSCtZaAP98Fwt6doM0k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:107416690526:android:4b0f3cf89d3847d14a79cf",
         "android_client_info": {
           "package_name": "com.gafi.app.dev"
