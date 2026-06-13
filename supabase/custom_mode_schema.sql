@@ -94,6 +94,28 @@ CREATE INDEX IF NOT EXISTS idx_savings_logs_custom_mode_user
 
 
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- 3b.  goal_contributions_custom_mode  (1-to-Many per goal)
+--      Per-deposit ledger. goals_custom_mode.current_amount is a cumulative
+--      lifetime balance with no date, so it can't answer "how much was added
+--      THIS month". Each allocate writes one timestamped row here instead.
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CREATE TABLE IF NOT EXISTS goal_contributions_custom_mode (
+  id             UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id        UUID        NOT NULL
+                             REFERENCES auth.users (id) ON DELETE CASCADE,
+  goal_id        UUID        NOT NULL
+                             REFERENCES goals_custom_mode (id) ON DELETE CASCADE,
+  amount         NUMERIC     NOT NULL CHECK (amount > 0),
+  contributed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Fast month-range scans for a user's contributions
+CREATE INDEX IF NOT EXISTS idx_goal_contributions_custom_mode_user
+  ON goal_contributions_custom_mode (user_id, contributed_at DESC);
+
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -- 4.  Row Level Security (RLS)
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -160,6 +182,28 @@ CREATE POLICY "Users can update their own savings logs"
 
 CREATE POLICY "Users can delete their own savings logs"
   ON savings_logs_custom_mode FOR DELETE
+  USING (auth.uid() = user_id);
+
+
+-- ── 4d.  goal_contributions_custom_mode ─────────────────────────────────────
+
+ALTER TABLE goal_contributions_custom_mode ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own goal contributions"
+  ON goal_contributions_custom_mode FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own goal contributions"
+  ON goal_contributions_custom_mode FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own goal contributions"
+  ON goal_contributions_custom_mode FOR UPDATE
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own goal contributions"
+  ON goal_contributions_custom_mode FOR DELETE
   USING (auth.uid() = user_id);
 
 

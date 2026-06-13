@@ -3653,11 +3653,12 @@ export default function BuildScreen() {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: screenWidth * 0.04,
-      paddingVertical: screenHeight * 0.015,
-      backgroundColor: 'rgba(26, 26, 46, 0.95)',
-      borderBottomWidth: 1,
-      borderBottomColor: 'rgba(255,255,255,0.1)',
+      paddingHorizontal: 16,
+      paddingTop: screenHeight * 0.012,
+      paddingBottom: 12,
+      backgroundColor: '#1a1a2e',
+      borderBottomLeftRadius: 16,
+      borderBottomRightRadius: 16,
     },
     backToMenuButton: {
       width: Math.round(screenWidth * 0.09),
@@ -3666,13 +3667,14 @@ export default function BuildScreen() {
       backgroundColor: '#E67E22',
       justifyContent: 'center',
       alignItems: 'center',
-      marginRight: screenWidth * 0.05,
     },
     headerLeftControls: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: Math.round(screenWidth * 0.02),
-      marginRight: screenWidth * 0.02,
+      gap: 8,
+    },
+    historyButtonAlert: {
+      backgroundColor: '#ffb68b',
     },
     historyButton: {
       flexDirection: 'row',
@@ -3710,11 +3712,8 @@ export default function BuildScreen() {
       fontSize: Math.round(screenWidth * 0.026),
       fontWeight: 'bold',
     },
-    headerActionRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      marginRight: screenWidth * 0.02,
+    dailyTasksButtonSleep: {
+      backgroundColor: '#5c6bc0',
     },
     dailyTasksButton: {
       flexDirection: 'row',
@@ -3731,16 +3730,21 @@ export default function BuildScreen() {
     },
     headerLeft: {
       flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 8,
     },
     headerTitle: {
       fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: '#fff',
+      textAlign: 'center',
     },
     headerSubtitle: {
       fontSize: Math.round(screenWidth * 0.03),
       color: '#888',
       marginTop: 2,
+      textAlign: 'center',
     },
     headerRight: {
       alignItems: 'flex-end',
@@ -3749,11 +3753,22 @@ export default function BuildScreen() {
       fontSize: Math.round(screenWidth * 0.028),
       color: '#888',
       marginBottom: 2,
+      textAlign: 'right',
+    },
+    spendingLabelStacked: {
+      marginTop: 6,
     },
     spendingAmount: {
       fontSize: Math.round(screenWidth * 0.045),
       fontWeight: 'bold',
       color: '#FF9800',
+      textAlign: 'right',
+    },
+    weeklyBudgetRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      gap: 6,
     },
     settingsGearButton: {
       width: Math.round(screenWidth * 0.07),
@@ -3910,6 +3925,9 @@ export default function BuildScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
+      marginTop: 4,
+      paddingHorizontal: 4,
+      gap: 8,
     },
     budgetCompactLabel: {
       color: '#F5DEB3',
@@ -6599,21 +6617,24 @@ export default function BuildScreen() {
   // Koin Tutorial Styles - In-Game Interactive Tutorial
   const tutorialStyles = StyleSheet.create({
     // ===== Tutorial header (replaces normal header in tutorial mode) =====
+    // Unified, semi-transparent container with rounded bottom corners.
+    // Sits inside SafeAreaView (edges top), so the notch is already respected.
     tutorialHeader: {
-      backgroundColor: 'rgba(26, 26, 46, 0.97)',
-      paddingHorizontal: screenWidth * 0.025,
-      paddingTop: screenHeight * 0.007,
-      paddingBottom: screenHeight * 0.005,
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      paddingHorizontal: screenWidth * 0.04,
+      paddingTop: screenHeight * 0.012,
+      paddingBottom: screenHeight * 0.014,
+      borderBottomLeftRadius: 18,
+      borderBottomRightRadius: 18,
       borderBottomWidth: 1,
       borderBottomColor: 'rgba(255, 152, 0, 0.35)',
-      height: screenHeight * 0.15,
-      overflow: 'hidden',
     },
+    // Top row: text left, icons right.
     tutorialRow1: {
       flexDirection: 'row',
-      alignItems: 'flex-start',
+      alignItems: 'center',
+      justifyContent: 'space-between',
       gap: 8,
-      flex: 1,
     },
     koinMini: {
       width: Math.round(screenWidth * 0.095),
@@ -6623,7 +6644,7 @@ export default function BuildScreen() {
       flex: 1,
     },
     tutorialTitle: {
-      fontSize: Math.round(screenWidth * 0.033),
+      fontSize: Math.round(screenWidth * 0.036),
       fontWeight: 'bold',
       color: '#FF9800',
     },
@@ -6631,19 +6652,50 @@ export default function BuildScreen() {
       fontSize: Math.round(screenWidth * 0.028),
       color: '#CCC',
       lineHeight: Math.round(screenWidth * 0.035),
-      marginTop: 1,
+      marginTop: 2,
     },
-    tutorialRow2: {
+    tutorialRightIcons: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginTop: 5,
-      gap: 6,
+      gap: 8,
+    },
+    tutorialIconBadge: {
+      width: Math.round(screenWidth * 0.085),
+      height: Math.round(screenWidth * 0.085),
+      borderRadius: Math.round(screenWidth * 0.085) / 2,
+      backgroundColor: 'rgba(255, 255, 255, 0.12)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    // Middle row: centered status badge with breathing room.
+    tutorialBadgeRow: {
+      alignItems: 'center',
+      marginTop: 10,
+      marginBottom: 8,
+    },
+    tutorialBadge: {
+      backgroundColor: 'rgba(255, 152, 0, 0.18)',
+      borderWidth: 1,
+      borderColor: 'rgba(255, 152, 0, 0.5)',
+      paddingHorizontal: 12,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    tutorialBadgeText: {
+      fontSize: Math.round(screenWidth * 0.027),
+      fontWeight: '600',
+      color: '#FFB74D',
+    },
+    // Bottom row: centered instruction text that wraps cleanly.
+    tutorialRow2: {
+      alignItems: 'center',
     },
     tutorialHint: {
-      flex: 1,
-      fontSize: Math.round(screenWidth * 0.025),
-      color: '#FFB74D',
+      fontSize: Math.round(screenWidth * 0.03),
+      lineHeight: Math.round(screenWidth * 0.042),
+      color: '#FFD54F',
       fontStyle: 'italic',
+      textAlign: 'center',
     },
     tutorialDots: {
       flexDirection: 'row',
@@ -6880,19 +6932,8 @@ export default function BuildScreen() {
       {/* Header — tutorial mode shows simplified bar (Koin dialogue handled by KoinTutorialOverlay) */}
       {tutorialActive && gameMode === 'tutorial' ? (
         <View style={tutorialStyles.tutorialHeader}>
+          {/* Top row: title + location on the left, status icons pushed right */}
           <View style={tutorialStyles.tutorialRow1}>
-            {/* <TouchableOpacity
-              style={styles.backToMenuButton}
-              onPress={() => {
-                setTutorialActive(false);
-                cancelTutorial();
-                setTutorialStep(0);
-                setGameMode(null);
-                setShowMainMenu(true);
-              }}
-            >
-              <Ionicons name="home" size={20} color="#FFF" />
-            </TouchableOpacity> */}
             <View style={tutorialStyles.tutorialTextArea}>
               <Text style={tutorialStyles.tutorialTitle} numberOfLines={1}>
                 🎓 Tutorial Mode
@@ -6901,10 +6942,37 @@ export default function BuildScreen() {
                 {currentMap.icon} {currentMap.name}
               </Text>
             </View>
+            <View style={tutorialStyles.tutorialRightIcons}>
+              <View style={tutorialStyles.tutorialIconBadge}>
+                <Ionicons name="hourglass-outline" size={16} color="#FF9800" />
+              </View>
+              <TouchableOpacity
+                style={tutorialStyles.tutorialIconBadge}
+                onPress={() => {
+                  setTutorialActive(false);
+                  cancelTutorial();
+                  setTutorialStep(0);
+                  setGameMode(null);
+                  setShowMainMenu(true);
+                }}
+              >
+                <Ionicons name="home" size={16} color="#FFF" />
+              </TouchableOpacity>
+            </View>
           </View>
-          {/* Row 2: hint text for current step */}
+
+          {/* Middle row: centered status badge */}
+          <View style={tutorialStyles.tutorialBadgeRow}>
+            <View style={tutorialStyles.tutorialBadge}>
+              <Text style={tutorialStyles.tutorialBadgeText}>
+                Complete the action to continue
+              </Text>
+            </View>
+          </View>
+
+          {/* Bottom row: centered, readable instruction text that wraps cleanly */}
           <View style={tutorialStyles.tutorialRow2}>
-            <Text style={tutorialStyles.tutorialHint} numberOfLines={2}>
+            <Text style={tutorialStyles.tutorialHint} numberOfLines={3}>
               💡 {TUTORIAL_STEPS[tutorialStep]?.message || 'Follow Koin\'s instructions!'}
             </Text>
           </View>
@@ -6924,10 +6992,10 @@ export default function BuildScreen() {
                 setShowMainMenu(true);
               }}
             >
-              <Ionicons name="home" size={20} color="#FFF" />  
+              <Ionicons name="home" size={20} color="#FFF" />
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.historyButton, showDayReportNotification && { backgroundColor: '#ffb68b' }]}
+              style={[styles.historyButton, showDayReportNotification && styles.historyButtonAlert]}
               onPress={() => {
                 if (showDayReportNotification) {
                   handleEndDay();
@@ -6947,23 +7015,13 @@ export default function BuildScreen() {
             >
               <Ionicons name="receipt-outline" size={18} color="#FFF" />
             </TouchableOpacity>
-          </View>
-          {(gameMode === 'story') && (
-            <View style={styles.headerActionRow}>
-              {/*<TouchableOpacity
-                style={styles.giveUpButton}
-                onPress={handleAbandonSession}
-              >
-                <Ionicons name="flag" size={16} color="#FFF" />
-                <Text style={styles.giveUpButtonText}>Give Up</Text>
-              </TouchableOpacity>*/}
-              {isDailyTaskDone ? (
+            {gameMode === 'story' && (
+              isDailyTaskDone ? (
                 <TouchableOpacity
-                  style={[styles.dailyTasksButton, { backgroundColor: '#5c6bc0' }]}
+                  style={[styles.dailyTasksButton, styles.dailyTasksButtonSleep]}
                   onPress={handleEndDay}
                 >
                   <Ionicons name="moon" size={19} color="#FFFFFF" />
-                  {/* <Text style={[styles.dailyTasksButtonText, { color: '#FFFFFF', marginLeft: 6 }]}>Sleep</Text> */}
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
@@ -6971,11 +7029,10 @@ export default function BuildScreen() {
                   onPress={() => setShowDailyTasksModal(true)}
                 >
                   <Ionicons name="list" size={19} color={dailyTaskButtonTextColor} />
-                  {/* <Text style={[styles.dailyTasksButtonText, { color: dailyTaskButtonTextColor }]}>Daily Tasks</Text> */}
                 </TouchableOpacity>
-              )}
-            </View>
-          )}
+              )
+            )}
+          </View>
           <View style={styles.headerLeft}>
             <Text style={styles.headerTitle}>{currentMap.icon} {currentMap.name}</Text>
             <Text style={styles.headerSubtitle}>
@@ -6987,8 +7044,8 @@ export default function BuildScreen() {
             <Text style={styles.spendingAmount}>₱{todaySpending.toFixed(2)}</Text>
             {gameMode === 'story' && (
               <>
-                <Text style={[styles.spendingLabel, { marginTop: 6 }]}>Weekly Budget</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={[styles.spendingLabel, styles.spendingLabelStacked]}>Weekly Budget</Text>
+                <View style={styles.weeklyBudgetRow}>
                   <Text style={[styles.spendingAmount, {
                     color: getRemainingWeeklyBudget() < weeklyBudget * 0.2 ? '#FF4444' : '#4CAF50'
                   }]}>

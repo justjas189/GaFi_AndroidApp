@@ -254,12 +254,8 @@ const KoinTutorialOverlay = () => {
             <Ionicons name="hourglass" size={10} color="#FFF" />
           </View>
         </Animated.View>
-        {/* Hint text */}
-        <View style={styles.waitingHintContainer}>
-          <Text style={styles.waitingHintText}>
-            ⏳ Complete the action to continue
-          </Text>
-        </View>
+        {/* Hint text lives in the GameScreen tutorial header now — avoids a
+            duplicate "Complete the action" badge floating over it. */}
       </View>
     );
   }
@@ -542,16 +538,16 @@ const styles = StyleSheet.create({
   },
   minimizedKoin: {
     position: 'absolute',
-    top: 50,
-    right: 16,
+    top: 65,
+    right: 25,
     width: 50,
     height: 50,
     alignItems: 'center',
     justifyContent: 'center',
   },
   minimizedKoinImage: {
-    width: 45,
-    height: 45,
+    width: 60,
+    height: 60,
   },
   waitingBadge: {
     position: 'absolute',
@@ -563,22 +559,6 @@ const styles = StyleSheet.create({
     height: 16,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  waitingHintContainer: {
-    position: 'absolute',
-    top: 105,
-    right: 10,
-    backgroundColor: 'rgba(30, 30, 50, 0.9)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#FF6B00',
-  },
-  waitingHintText: {
-    color: '#F5DEB3',
-    fontSize: 11,
-    fontWeight: '600',
   },
 });
 

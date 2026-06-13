@@ -173,9 +173,9 @@ const daysUntil = (dateStr) => {
   return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
 };
 
-const getBudgetHealthScore = (totalSpent, monthlyBudget) => {
+const getBudgetHealthScore = (totalSpent, monthlyBudget, monthlyGoals = 0) => {
   if (!monthlyBudget || monthlyBudget <= 0) return 100;
-  const spendingPct = (totalSpent / monthlyBudget) * 100;
+  const spendingPct = ((totalSpent + monthlyGoals) / monthlyBudget) * 100;
   return Math.max(0, Math.min(100, Math.round(100 - spendingPct)));
 };
 
@@ -236,6 +236,9 @@ export default function CustomModeDashboard({ navigation }) {
   const [showAllocate, setShowAllocate] = useState(false);
   const [allocateGoal, setAllocateGoal] = useState(null);
   const [allocateAmount, setAllocateAmount] = useState('');
+  // Per-deposit ledger rows (goal_contributions_custom_mode). Source of truth
+  // for *this month's* goal funding — current_amount is a dateless lifetime total.
+  const [goalContributions, setGoalContributions] = useState([]);
 
   // ── Saving state ────────────────────────────────────────────────────
   const [wallets, setWallets] = useState([]);
@@ -291,14 +294,28 @@ export default function CustomModeDashboard({ navigation }) {
 
   const savingsTarget = budgetRules.savings;
 
-  // Spendable money left = allowance − expenses − active goal deposits − saved in wallets
-  const totalGoalAllocations = useMemo(
-    () => savingsGoals
-      .filter((g) => !g.is_achieved && !g.is_deleted)
-      .reduce((s, g) => s + (parseFloat(g.current_amount) || 0), 0),
-    [savingsGoals],
+  // Net funds moved into savings *this calendar month* (deposits − withdrawals).
+  // Resets to 0 when the month rolls over because the raw logs are month-filtered above.
+  const monthlySaved = monthlyDeposits - monthlyWithdrawals;
+
+  // Goal contributions made *this calendar month* — summed from the per-deposit
+  // ledger by each row's contributed_at, so only deposits that actually landed
+  // inside [start, end] count. Rolls to 0 next month with no new deposits.
+  const monthlyGoalContributions = useMemo(() => {
+    const { start, end } = getCurrentMonthRange();
+    return goalContributions.reduce((sum, c) => {
+      const at = new Date(c.contributed_at);
+      if (at < start || at > end) return sum;
+      return sum + (parseFloat(c.amount) || 0);
+    }, 0);
+  }, [goalContributions]);
+
+  // Spendable Money Left = Monthly Income − (Expenses + Goal Contributions + Savings).
+  // Clamped at 0 so an over-allocated month never renders a negative header.
+  const remaining = Math.max(
+    0,
+    monthlyBudget - (totalSpent + monthlyGoalContributions + monthlySaved),
   );
-  const remaining = monthlyBudget - totalSpent - totalGoalAllocations - totalInWallets;
 
   const budgetBreakdown = useMemo(() => {
     let needsSpent = 0;
@@ -307,17 +324,21 @@ export default function CustomModeDashboard({ navigation }) {
       if (CATEGORY_BUDGET_MAP[cat] === 'needs') needsSpent += amt;
       else wantsSpent += amt;
     });
-    const savingsActual = Math.max(0, monthlyBudget - totalSpent);
+    // Savings progress tracks real funds moved to savings this month, not budget leftover.
+    const savingsActual = Math.max(0, monthlySaved);
     return {
       needs: { budget: monthlyBudget * (budgetRules.needs / 100), spent: needsSpent },
       wants: { budget: monthlyBudget * (budgetRules.wants / 100), spent: wantsSpent },
       savings: { budget: monthlyBudget * (budgetRules.savings / 100), actual: savingsActual },
     };
-  }, [categoryBreakdown, monthlyBudget, totalSpent, budgetRules]);
+  }, [categoryBreakdown, monthlyBudget, monthlySaved, budgetRules]);
 
+  // Health = 100 − ((spent + goals) / budget × 100). Expenses AND goal funding
+  // both erode the score; savings is deliberately exempt (not a cost). goals is
+  // the same month-scoped sum bound everywhere else in the UI.
   const healthScore = useMemo(
-    () => getBudgetHealthScore(totalSpent, monthlyBudget),
-    [totalSpent, monthlyBudget],
+    () => getBudgetHealthScore(totalSpent, monthlyBudget, monthlyGoalContributions),
+    [totalSpent, monthlyBudget, monthlyGoalContributions],
   );
   const healthInfo = getHealthLabel(healthScore);
 
@@ -362,7 +383,7 @@ export default function CustomModeDashboard({ navigation }) {
   }, [savingsGoals, goalFilter, goalSort]);
 
   // ── Derived: Saving ─────────────────────────────────────────────────
-  // (totalInWallets, monthlyDeposits, monthlyWithdrawals, savingsTarget declared above)
+  // (totalInWallets, monthlyDeposits, monthlyWithdrawals, monthlySaved, savingsTarget declared above)
 
   const savingsTargetAmount = monthlyBudget * (savingsTarget / 100);
   const savingsRate = savingsTargetAmount > 0 ? (monthlyDeposits / savingsTargetAmount) * 100 : 0;
@@ -388,6 +409,21 @@ export default function CustomModeDashboard({ navigation }) {
       setSavingsGoals(mapped);
     } catch (err) {
       console.warn('fetchGoals:', err.message);
+    }
+  }, [user?.id]);
+
+  const fetchGoalContributions = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const { data, error } = await supabase
+        .from('goal_contributions_custom_mode')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('contributed_at', { ascending: false });
+      if (error) throw error;
+      setGoalContributions(data || []);
+    } catch (err) {
+      console.warn('fetchGoalContributions:', err.message);
     }
   }, [user?.id]);
 
@@ -471,15 +507,16 @@ export default function CustomModeDashboard({ navigation }) {
 
   useEffect(() => {
     fetchGoals();
+    fetchGoalContributions();
     fetchSavingsData();
     fetchBudgetRules();
-  }, [fetchGoals, fetchSavingsData, fetchBudgetRules]);
+  }, [fetchGoals, fetchGoalContributions, fetchSavingsData, fetchBudgetRules]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([fetchGoals(), fetchSavingsData(), fetchBudgetRules()]);
+    await Promise.all([fetchGoals(), fetchGoalContributions(), fetchSavingsData(), fetchBudgetRules()]);
     setRefreshing(false);
-  }, [fetchGoals, fetchSavingsData, fetchBudgetRules]);
+  }, [fetchGoals, fetchGoalContributions, fetchSavingsData, fetchBudgetRules]);
 
   // ── Tab switch ──────────────────────────────────────────────────────
 
@@ -673,15 +710,22 @@ export default function CustomModeDashboard({ navigation }) {
         })
         .eq('id', allocateGoal.id);
       if (error) throw error;
+
+      // Write the timestamped deposit row so monthly metrics can scope by date.
+      const { error: ledgerError } = await supabase
+        .from('goal_contributions_custom_mode')
+        .insert({ user_id: user.id, goal_id: allocateGoal.id, amount: amt });
+      if (ledgerError) throw ledgerError;
+
       setAllocateAmount('');
       setShowAllocate(false);
-      
+
       if (isAchieved) {
         goalNotificationService.cancelGoalNotifications(allocateGoal.id);
       }
-      
+
       setAllocateGoal(null);
-      await fetchGoals();
+      await Promise.all([fetchGoals(), fetchGoalContributions()]);
       if (isAchieved) {
         Alert.alert('Goal Achieved!', `You've reached your target for "${allocateGoal.title}"!`);
       } else {
@@ -1119,12 +1163,12 @@ export default function CustomModeDashboard({ navigation }) {
           <View style={s.summaryColDivider} />
           <View style={s.summaryCol}>
             <Text style={s.summarySmallLabel}>Goals</Text>
-            <Text style={[s.summarySmallValue, { color: colors.savings || '#2196F3' }]}>{formatCurrency(totalGoalAllocations)}</Text>
+            <Text style={[s.summarySmallValue, { color: colors.savings || '#2196F3' }]}>{formatCurrency(monthlyGoalContributions)}</Text>
           </View>
           <View style={s.summaryColDivider} />
           <View style={s.summaryCol}>
             <Text style={s.summarySmallLabel}>Saved</Text>
-            <Text style={[s.summarySmallValue, { color: colors.success }]}>{formatCurrency(totalInWallets)}</Text>
+            <Text style={[s.summarySmallValue, { color: colors.success }]}>{formatCurrency(monthlySaved)}</Text>
           </View>
         </View>
       </View>

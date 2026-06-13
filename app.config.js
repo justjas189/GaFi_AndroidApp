@@ -48,7 +48,7 @@ export default {
       [
         "onesignal-expo-plugin",
         {
-          "mode": "development"
+          "mode": IS_DEV ? "development" : "production"
         }
       ],
       "@react-native-community/datetimepicker",
