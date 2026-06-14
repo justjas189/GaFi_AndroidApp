@@ -837,7 +837,7 @@ export default function BuildScreen() {
       { text: "Since this level is 3 in-game days, you'll focus on two goals: an Emergency Fund and Fun Money." },
       { text: "Your Emergency Fund will be 15% of your budget — because unexpected expenses can happen anytime!" },
       { text: "Fun Money will be 5% — a small reward for yourself, because balance matters." },
-      { text: "Reach at least 80% of your target to pass. Every peso counts — let's go!" },
+      { text: "Reach at least 20% of your target to pass. Every peso counts — let's go!" },
     ],
     3: [
       { text: "Welcome to the final challenge... Level 3: Super Saver!" },
@@ -1051,11 +1051,11 @@ export default function BuildScreen() {
     },
     2: {
       name: 'Goal Setter',
-      description: 'Allocate money to your Emergency Fund (15%) and Fun Money (5%). Reach at least 80% of your goal!',
+      description: 'Allocate money to your Emergency Fund (15%) and Fun Money (5%). Reach at least 20% of your goal!',
       type: 'goals',
       icon: '🎯',
-      minGoalProgress: 0.80, // Must reach 80% of goal
-      goalText: 'Reach 80% of your savings goal',
+      minGoalProgress: 0.20, // Must reach 20% of goal (paced for the 3-day cycle)
+      goalText: 'Reach 20% of your savings goal',
     },
     3: {
       name: 'Super Saver',
@@ -3419,6 +3419,8 @@ export default function BuildScreen() {
         dayState.goalAllocations[goal.name] = (dayState.goalAllocations[goal.name] || 0) + amount;
         dayState.goalAllocationActions = (dayState.goalAllocationActions || 0) + 1;
       });
+      // Listen to the allocation event: check off goal tasks against the freshest runtime (ref)
+      evaluateActiveStoryDayTasks();
     }
 
     const newTotal = (goalAllocations[goalId] || 0) + amount;
@@ -3457,6 +3459,64 @@ export default function BuildScreen() {
           savingsAmount: weeklyBudget - (weeklySpending + amount),
         });
       }
+    }
+  };
+
+  // Level 2: Deduct money from a savings goal (rebalancing transaction).
+  // The addition/deduction buttons in the Allocate to Goals modal both feed the
+  // validation loop so goal tasks (e.g. rebalancing) check off dynamically.
+  const deallocateFromGoal = (goalId, amount) => {
+    const currentAllocated = goalAllocations[goalId] || 0;
+    const deduction = Math.min(amount, currentAllocated);
+    if (deduction <= 0) return;
+
+    // Return the funds to the weekly budget
+    setGoalAllocations(prev => ({
+      ...prev,
+      [goalId]: (prev[goalId] || 0) - deduction,
+    }));
+
+    // Allocating counts as spending toward goals; deducting returns it
+    setWeeklySpending(prev => prev - deduction);
+
+    setBudgetCategories(prev => {
+      const totalSavings = Object.values(goalAllocations).reduce((sum, val) => sum + val, 0) - deduction;
+      return {
+        needs: prev.needs,
+        wants: prev.wants,
+        savings: { ...prev.savings, spent: totalSavings },
+      };
+    });
+
+    const goal = savingsGoals.find(g => g.id === goalId);
+
+    if (gameMode === 'story' && goal?.name) {
+      updateDailyTaskRuntimeForActiveDay((dayState) => {
+        dayState.goalAllocations[goal.name] = Math.max(0, (dayState.goalAllocations[goal.name] || 0) - deduction);
+        // A deduction is still a rebalancing transaction — register it.
+        dayState.goalAllocationActions = (dayState.goalAllocationActions || 0) + 1;
+      });
+      // Listen to the deduction event: re-check goal tasks against the freshest runtime (ref)
+      evaluateActiveStoryDayTasks();
+    }
+
+    // ── Persist updated goal allocations to DB ──
+    if (activeSessionId && gameMode === 'story') {
+      const updatedAllocations = { ...goalAllocations, [goalId]: (goalAllocations[goalId] || 0) - deduction };
+      const totalAllocatedNow = Object.values(updatedAllocations).reduce((sum, val) => sum + val, 0);
+      const updatedGoalsData = savingsGoals.map(g => ({
+        id: g.id,
+        name: g.name,
+        icon: g.icon,
+        target: g.target,
+        allocated: updatedAllocations[g.id] || 0,
+      }));
+      gameDatabaseService.updateStorySessionSpending(activeSessionId, {
+        weeklySpending: weeklySpending - deduction,
+        totalAllocated: totalAllocatedNow,
+        goalsData: updatedGoalsData,
+        savingsAmount: weeklyBudget - (weeklySpending - deduction),
+      });
     }
   };
 
@@ -7825,7 +7885,7 @@ export default function BuildScreen() {
                     </View>
 
                     {/* Quick allocation buttons */}
-                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                       {[50, 100, 200].map((amount) => (
                         <TouchableOpacity
                           key={amount}
@@ -7838,6 +7898,14 @@ export default function BuildScreen() {
                           <Text style={styles.quickAllocateBtnText}>+₱{amount}</Text>
                         </TouchableOpacity>
                       ))}
+                      {allocated >= 50 && (
+                        <TouchableOpacity
+                          style={[styles.quickAllocateBtn, { backgroundColor: '#E67E22' }]}
+                          onPress={() => deallocateFromGoal(goal.id, 50)}
+                        >
+                          <Text style={styles.quickAllocateBtnText}>−₱50</Text>
+                        </TouchableOpacity>
+                      )}
                       {remaining > 0 && getRemainingWeeklyBudget() >= remaining && (
                         <TouchableOpacity
                           style={[styles.quickAllocateBtn, { backgroundColor: '#4CAF50' }]}

@@ -131,6 +131,16 @@ export const evaluateDailyTaskRule = (rule, context) => {
       return allocated >= toNumber(rule.min);
     }
 
+    case 'goal_allocation_total_min': {
+      // Sum this day's allocations across the named goals (or all goals if unspecified).
+      const allocations = dayState?.goalAllocations || {};
+      const names = Array.isArray(rule.goalNames) && rule.goalNames.length > 0
+        ? rule.goalNames
+        : Object.keys(allocations);
+      const total = names.reduce((sum, name) => sum + toNumber(allocations[name]), 0);
+      return total >= toNumber(rule.min);
+    }
+
     case 'goal_allocation_actions_min': {
       const actionCount = toNumber(dayState?.goalAllocationActions);
       return passesBounds(actionCount, rule);

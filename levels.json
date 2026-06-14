@@ -40,11 +40,10 @@
     "levelName": "Goals",
     "day": 4,
     "financialConcept": "Inflation (Purchasing power)",
-    "koinDialogue": "Have you noticed prices going up? That's Inflation eating your purchasing power! To keep up, money needs to grow. We need to raise our targets to survive the price hike.",
+    "koinDialogue": "Have you noticed prices going up? That's Inflation eating your purchasing power! To keep up, your money needs to grow. Allocate some cash into your savings goals today so it outpaces the price hike.",
     "tasks": [
-      "Log 1 Need at Home and 1 Need at School/Office to cover rising essentials.",
-      "Log 1 expense in the 'Other' category to simulate an inflation surcharge.",
-      "End the day with Needs <= 50% and total spending under 85% of your daily budget."
+      "Log 1 Food & Dining or Transport expense to cover today's rising essentials.",
+      "Allocate at least ₱50 to your Emergency Fund or Fun Money goals to outpace inflation."
     ]
   },
   {
@@ -52,11 +51,10 @@
     "levelName": "Goals",
     "day": 5,
     "financialConcept": "Risk vs. Return (Capital allocation)",
-    "koinDialogue": "Want your money to grow? You must choose: Low risk means safe but slow growth. High risk means potential for more, but you might lose some. How will you place your bets?",
+    "koinDialogue": "Want your money to grow? You must choose: low risk means safe but slow growth; high risk means more upside but you might lose some. Spread your capital across both your safe Emergency Fund and your riskier Fun Money goal.",
     "tasks": [
-      "Log exactly 3 Needs today (safe, essential spending).",
-      "Log exactly 1 Want at the Store (your risky splurge).",
-      "Keep Wants under 30% of today's total spend."
+      "Log 2 essential Need (Food & Dining and Transport) to stay covered.",
+      "Allocate funds to both a low-risk goal (Emergency Fund) and a high-risk savings target (Fun Money) to balance your capital allocation."
     ]
   },
   {
@@ -64,12 +62,10 @@
     "levelName": "Goals",
     "day": 6,
     "financialConcept": "Rebalancing (Portfolio parity)",
-    "koinDialogue": "After taking risks, it's time to Rebalance! A smart saver adjusts their goals constantly to make sure one doesn't fall too far behind the other.",
+    "koinDialogue": "After taking risks, it's time to Rebalance! A smart saver adjusts constantly so no goal falls too far behind. Open the Allocate to Goals modal and nudge your targets until both progress evenly.",
     "tasks": [
-      "Log 2 Needs and 2 Wants to balance your spending across both types.",
-      "Keep Needs between 40%-60% and Wants between 20%-40% of the day's total.",
-      "Visit at least 3 different map locations today."
-    ]
+      "Log 3 essential expenses (Food & Dining, Transport, and Groceries) before you rebalance.",
+      "Allocate funds at least twice and keep the progress of your Emergency Fund and Fun Money within 15% of each other."    ]
   },
   {
     "level": 3,

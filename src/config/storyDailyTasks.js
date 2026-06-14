@@ -75,63 +75,94 @@ const DAILY_TASK_RULES = {
       { type: 'level_savings_rate_min', min: 0.2 },
     ],
   },
+  // Level 2 — Goals: simplified essential logging + the "Allocate to Goals" mechanic.
+  // Day 4 (Inflation): log a basic essential, then hedge purchasing power via allocation.
   '2_4_1': {
-    type: 'all_of',
-    conditions: [
-      { type: 'expense_count', min: 1, categoryGroup: 'needs', destinations: ['home'] },
-      { type: 'expense_count', min: 1, categoryGroup: 'needs', destinations: ['school', 'office'] },
-    ],
-  },
-  '2_4_2': {
     type: 'expense_count',
     min: 1,
-    categories: ['Other'],
+    categories: ['Food & Dining', 'Transport'],
   },
-  '2_4_3': {
-    type: 'all_of',
-    conditions: [
-      { type: 'spending_ratio_max', categoryGroup: 'needs', max: 0.5 },
-      { type: 'day_spending_pct_daily_budget_max', max: 0.85 },
-    ],
+  '2_4_2': {
+    type: 'goal_allocation_total_min',
+    min: 50,
+    goalNames: ['Emergency Fund', 'Fun Money'],
   },
+  // Day 5 (Risk vs. Return): cover one essential, then split capital across a low- and high-risk goal.
   '2_5_1': {
     type: 'expense_count',
-    exact: 3,
-    categoryGroup: 'needs',
+    min: 2,
+    categories: ['Food & Dining', 'Transport'],
   },
   '2_5_2': {
     type: 'all_of',
     conditions: [
-      { type: 'expense_count', exact: 1, categoryGroup: 'wants' },
-      { type: 'travel_destination_any', destinations: ['store'] },
+      { type: 'goal_allocation_min', goalName: 'Emergency Fund', min: 20 },
+      { type: 'goal_allocation_min', goalName: 'Fun Money', min: 20 },
     ],
   },
-  '2_5_3': {
-    type: 'spending_ratio_max',
-    categoryGroup: 'wants',
-    max: 0.3,
-  },
+  // Day 6 (Rebalancing): cover one essential, then rebalance goals to even progress (portfolio parity).
   '2_6_1': {
-    type: 'all_of',
-    conditions: [
-      { type: 'expense_count', exact: 2, categoryGroup: 'needs' },
-      { type: 'expense_count', exact: 2, categoryGroup: 'wants' },
-    ],
+    type: 'expense_count',
+    min: 3,
+    categories: ['Food & Dining', 'Transport', 'Groceries'],
   },
   '2_6_2': {
     type: 'all_of',
     conditions: [
-      { type: 'spending_ratio_range', categoryGroup: 'needs', min: 0.4, max: 0.6 },
-      { type: 'spending_ratio_range', categoryGroup: 'wants', min: 0.2, max: 0.4 },
+      { type: 'goal_allocation_actions_min', min: 2 },
+      { type: 'goal_progress_gap_max', goals: ['Emergency Fund', 'Fun Money'], maxGap: 0.15 },
     ],
   },
-  '2_6_3': {
-    type: 'distinct_destinations_min',
-    min: 3,
+  // Level 3 — Saving (Days 7 - 10)
+  '3_7_1': {
+    type: 'all_of',
+    conditions: [
+      { type: 'expense_count', exact: 1, categoryGroup: 'needs' },
+      { type: 'expense_count', max: 0, categoryGroup: 'wants' },
+    ],
+  },
+  '3_7_2': {
+    type: 'day_spending_pct_weekly_budget_max',
+    max: 0.20,
+  },
+  '3_8_1': {
+    type: 'all_of',
+    conditions: [
+      { type: 'travel_count', min: 1, mode: 'commute' },
+      { type: 'expense_count', min: 1, categories: ['Transport'] },
+    ],
+  },
+  '3_8_2': {
+    type: 'day_spending_pct_weekly_budget_max',
+    max: 0.15,
+  },
+  '3_9_1': {
+    type: 'all_of',
+    conditions: [
+      { type: 'mall_visited' },
+      { type: 'expense_count', exact: 1, categoryGroup: 'needs' },
+    ],
+  },
+  '3_9_2': {
+    type: 'expense_count',
+    max: 0,
+    categoryGroup: 'wants',
+  },
+  '3_10_1': {
+    type: 'level_savings_rate_min',
+    min: 0.3,
+  },
+  '3_10_2': {
+    type: 'all_of',
+    conditions: [
+      { type: 'expense_count', min: 2 },
+      { type: 'spending_ratio_max', categoryGroup: 'wants', max: 0.1 },
+    ],
   },
 };
 
 const DAILY_TASK_SUFFIX = {
+  // Level 1 Suffixes
   '1_1_1': 'exact_2_needs_1_wants',
   '1_1_2': 'school_or_office_travel_and_transport',
   '1_1_3': 'needs_50_wants_30',
@@ -141,18 +172,26 @@ const DAILY_TASK_SUFFIX = {
   '1_3_1': 'four_expenses_logged',
   '1_3_2': 'other_unplanned_expense',
   '1_3_3': 'division_50_30_20_intact',
-  '2_4_1': 'needs_at_home_and_school',
-  '2_4_2': 'other_inflation_expense',
-  '2_4_3': 'needs_50_spend_under_85',
-  '2_5_1': 'exactly_3_needs',
-  '2_5_2': 'one_want_at_store',
-  '2_5_3': 'wants_under_30pct',
-  '2_6_1': 'balanced_2_needs_2_wants',
-  '2_6_2': 'needs_40_60_wants_20_40',
-  '2_6_3': 'three_locations_visited',
+  // Level 2 Suffixes
+  '2_4_1': 'essential_log_food_or_transport',
+  '2_4_2': 'allocate_min_50_inflation_hedge',
+  '2_5_1': 'essential_log_food_or_transport',
+  '2_5_2': 'allocate_low_and_high_risk_goals',
+  '2_6_1': 'essential_log_food_or_transport',
+  '2_6_2': 'rebalance_goals_even_progress',
+  // Level 3 Suffixes
+  '3_7_1': 'one_needs_no_wants',
+  '3_7_2': 'spend_under_20pct_weekly_budget',
+  '3_8_1': 'commute_and_transport_log',
+  '3_8_2': 'spend_under_15pct_weekly_budget',
+  '3_9_1': 'mall_visit_one_needs',
+  '3_9_2': 'no_wants_expenses_today',
+  '3_10_1': 'savings_rate_at_least_30pct',
+  '3_10_2': 'two_expenses_wants_under_10pct',
 };
 
 const DAILY_TASK_REWARD_XP = {
+  // Level 1 XP
   '1_1_1': 20,
   '1_1_2': 20,
   '1_1_3': 20,
@@ -162,15 +201,22 @@ const DAILY_TASK_REWARD_XP = {
   '1_3_1': 30,
   '1_3_2': 30,
   '1_3_3': 35,
+  // Level 2 XP
   '2_4_1': 30,
-  '2_4_2': 35,
-  '2_4_3': 35,
-  '2_5_1': 40,
-  '2_5_2': 40,
-  '2_5_3': 40,
-  '2_6_1': 45,
+  '2_4_2': 40,
+  '2_5_1': 35,
+  '2_5_2': 45,
+  '2_6_1': 35,
   '2_6_2': 50,
-  '2_6_3': 45,
+  // Level 3 XP
+  '3_7_1': 35,
+  '3_7_2': 35,
+  '3_8_1': 40,
+  '3_8_2': 40,
+  '3_9_1': 45,
+  '3_9_2': 45,
+  '3_10_1': 50,
+  '3_10_2': 60,
 };
 
 const buildLevelConfigFromJson = (level) => {
@@ -230,156 +276,7 @@ const buildLevelConfigFromJson = (level) => {
 export const STORY_DAILY_TASKS = {
   1: buildLevelConfigFromJson(1),
   2: buildLevelConfigFromJson(2),
-  3: {
-    levelName: 'Saving',
-    totalDays: 4,
-    days: [
-      {
-        dayNumber: 1,
-        koinDialogue: {
-          student: 'Save-first day. Keep spending super lean and essentials-only.',
-          employee: 'Cash-retention kickoff. Minimal spend, zero impulse categories.',
-        },
-        tasks: [
-          {
-            id: 'L3_D1_T1',
-            conditionKey: 'l3_d1_t1_single_needs_expense_only',
-            requiredAppAction: 'Log exactly 1 expense and make it a Needs category.',
-            validationLogic: {
-              type: 'all_of',
-              conditions: [
-                { type: 'expense_count', exact: 1 },
-                { type: 'expense_count', min: 1, categoryGroup: 'needs' },
-              ],
-            },
-            failMessage: 'Task 1 incomplete: log exactly one Needs expense.',
-            successMessage: 'Task 1 complete: lean essentials spending achieved.',
-            reward: { xp: 35 },
-          },
-          {
-            id: 'L3_D1_T2',
-            conditionKey: 'l3_d1_t2_no_impulse_categories',
-            requiredAppAction: 'Do not log Shopping, Electronics, or Entertainment.',
-            validationLogic: {
-              type: 'expense_count',
-              max: 0,
-              categories: ['Shopping', 'Electronics', 'Entertainment'],
-            },
-            failMessage: 'Task 2 incomplete: impulse categories must stay at zero.',
-            successMessage: 'Task 2 complete: no impulse-category spending logged.',
-            reward: { xp: 35 },
-          },
-        ],
-      },
-      {
-        dayNumber: 2,
-        koinDialogue: {
-          student: 'Commute optimization mission. Pick the cheaper ride and protect your savings.',
-          employee: 'Cost-control day. Use an efficient transport choice and keep the rest tight.',
-        },
-        tasks: [
-          {
-            id: 'L3_D2_T1',
-            conditionKey: 'l3_d2_t1_commute_transport_logged',
-            requiredAppAction: 'Travel once using commute.',
-            validationLogic: {
-              type: 'travel_count',
-              min: 1,
-              mode: 'commute',
-            },
-            failMessage: 'Task 1 incomplete: complete at least one commute travel.',
-            successMessage: 'Task 1 complete: commute travel recorded.',
-            reward: { xp: 40 },
-          },
-          {
-            id: 'L3_D2_T2',
-            conditionKey: 'l3_d2_t2_day_spend_under_15pct_weekly_budget',
-            requiredAppAction: 'Keep today spending at or below 15% of weekly budget.',
-            validationLogic: {
-              type: 'day_spending_pct_weekly_budget_max',
-              max: 0.15,
-            },
-            failMessage: 'Task 2 incomplete: keep today spending <= 15% of weekly budget.',
-            successMessage: 'Task 2 complete: daily spending cap achieved.',
-            reward: { xp: 40 },
-          },
-        ],
-      },
-      {
-        dayNumber: 3,
-        koinDialogue: {
-          student: 'Mall discipline test. Enter temptation zones and still stay intentional.',
-          employee: 'Controlled exposure challenge. Visit spending hotspots without lifestyle leakage.',
-        },
-        tasks: [
-          {
-            id: 'L3_D3_T1',
-            conditionKey: 'l3_d3_t1_mall_visit_and_one_planned_needs_expense',
-            requiredAppAction: 'Visit mall and log exactly one expense in Groceries, Health, or Food & Dining.',
-            validationLogic: {
-              type: 'all_of',
-              conditions: [
-                { type: 'mall_visited' },
-                { type: 'expense_count', exact: 1, categories: ['Groceries', 'Health', 'Food & Dining'] },
-              ],
-            },
-            failMessage: 'Task 1 incomplete: visit mall and log exactly one allowed needs expense.',
-            successMessage: 'Task 1 complete: mall discipline objective achieved.',
-            reward: { xp: 45 },
-          },
-          {
-            id: 'L3_D3_T2',
-            conditionKey: 'l3_d3_t2_no_wants_expenses_today',
-            requiredAppAction: 'Log no Wants-category expenses.',
-            validationLogic: {
-              type: 'expense_count',
-              max: 0,
-              categoryGroup: 'wants',
-            },
-            failMessage: 'Task 2 incomplete: Wants expenses must be zero today.',
-            successMessage: 'Task 2 complete: Wants spending stayed at zero.',
-            reward: { xp: 45 },
-          },
-        ],
-      },
-      {
-        dayNumber: 4,
-        koinDialogue: {
-          student: 'Final showdown. Lock in Super Saver status today.',
-          employee: 'Final audit. Finish with strong savings and clean spending behavior.',
-        },
-        tasks: [
-          {
-            id: 'L3_D4_T1',
-            conditionKey: 'l3_d4_t1_savings_rate_at_least_30pct',
-            requiredAppAction: 'Reach at least 30% level savings rate.',
-            validationLogic: {
-              type: 'level_savings_rate_min',
-              min: 0.3,
-            },
-            failMessage: 'Task 1 incomplete: level savings rate must be at least 30%.',
-            successMessage: 'Task 1 complete: Super Saver threshold reached.',
-            reward: { xp: 50 },
-          },
-          {
-            id: 'L3_D4_T2',
-            conditionKey: 'l3_d4_t2_two_expenses_wants_under_10pct',
-            requiredAppAction: 'Log at least 2 expenses while keeping Wants <= 10% of day spend.',
-            validationLogic: {
-              type: 'all_of',
-              conditions: [
-                { type: 'expense_count', min: 2 },
-                { type: 'spending_ratio_max', categoryGroup: 'wants', max: 0.1 },
-              ],
-            },
-            failMessage: 'Task 2 incomplete: log 2+ expenses and keep Wants <= 10%.',
-            successMessage: 'Task 2 complete: final-day spending discipline achieved.',
-            reward: { xp: 60 },
-          },
-        ],
-      },
-    ],
-  },
+  3: buildLevelConfigFromJson(3),
 };
 
 export const getStoryLevelTasks = (level) => STORY_DAILY_TASKS[level] || null;
