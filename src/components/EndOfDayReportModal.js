@@ -200,6 +200,7 @@ const EndOfDayReportModal = ({
                     safeTasks.map((task, index) => {
                       const done = !!task.completed;
                       const isLast = index === safeTasks.length - 1;
+                      const xp = task.rewardXp || task.reward?.xp || 0;
                       return (
                         <View
                           key={task.id}
@@ -218,6 +219,9 @@ const EndOfDayReportModal = ({
                           >
                             {task.label}
                           </Text>
+                          {xp > 0 && (
+                            <Text style={styles.taskXpText}>+{xp} XP</Text>
+                          )}
                         </View>
                       );
                     })
@@ -452,11 +456,19 @@ const styles = StyleSheet.create({
   taskRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 12,
   },
   taskText: {
     fontSize: 16,
-    flexShrink: 1,
+    flex: 1,
+  },
+  taskXpText: {
+    color: '#ffb68b',
+    fontSize: 14,
+    fontWeight: '700',
+    minWidth: 36,
+    textAlign: 'right',
   },
   taskTextDone: {
     color: '#e5e2e1',
