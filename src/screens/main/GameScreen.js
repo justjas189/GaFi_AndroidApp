@@ -314,7 +314,7 @@ const MAPS = {
         id: 'entertainment_hub',
         name: 'Entertainment Hub',
         icon: '🎮',
-        bounds: { left: 0.35, right: 0.65, top: 0.10, bottom: 0.18 },
+        bounds: { left: 0.35, right: 0.65, top: 0.10, bottom: 0.28 },
         action: 'expense',
         category: 'Entertainment',
       },
@@ -741,7 +741,6 @@ export default function BuildScreen() {
   const [dailyTasksCompleted, setDailyTasksCompleted] = useState(false); // Tracks if all daily tasks are checked
   const [dayReportViewed, setDayReportViewed] = useState(false); // Tracks if day report has been viewed
   const [lastProgressTimestamp, setLastProgressTimestamp] = useState(null); // Last saved progress timestamp
-  const [currentDayStartTime, setCurrentDayStartTime] = useState(null); // ISO timestamp when current in-game day began
   const [showDayReportNotification, setShowDayReportNotification] = useState(false); // UI: color of Day Report Modal icon
   const [hasUnreadReport, setHasUnreadReport] = useState(false);
   const [showLevelCompleteModal, setShowLevelCompleteModal] = useState(false); // Level Complete modal visibility
@@ -913,17 +912,17 @@ export default function BuildScreen() {
       icon: '👩‍💼',
       color: '#8E44AD',
     },
-    ash_ketchum: {
-      name: 'Ash Ketchum',
+    budget_trainer: {
+      name: 'Budget Trainer',
       description: 'Gotta save \'em all! A trainer of budgets',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Ash Ketchum.png'),
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Budget Trainer.png'),
       icon: '🧢',
       color: '#E53935',
     },
-    bruce_lee: {
-      name: 'Bruce Lee',
+    martial_artist: {
+      name: 'Martial Artist',
       description: 'Disciplined finances, disciplined life',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Bruce Lee.png'),
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Martial Artist.png'),
       icon: '🥋',
       color: '#FFC107',
     },
@@ -955,10 +954,10 @@ export default function BuildScreen() {
       icon: '💜',
       color: '#AB47BC',
     },
-    nurse_joy: {
-      name: 'Nurse Joy',
+    head_nurse: {
+      name: 'Head Nurse',
       description: 'Healing your finances back to health',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Nurse Joy.png'),
+      sprite: require('../../../assets/Game_Graphics/Character_Animation/Head Nurse.png'),
       icon: '👩‍⚕️',
       color: '#EC407A',
     },
@@ -1368,7 +1367,9 @@ export default function BuildScreen() {
       .filter((level) => Number.isFinite(level))
       .sort((a, b) => b - a);
 
-    const orderedLevels = levelKeys;
+    const orderedLevels = Number.isFinite(storyLevel) && levelKeys.includes(storyLevel)
+      ? [storyLevel, ...levelKeys.filter((level) => level !== storyLevel)]
+      : levelKeys;
 
     return orderedLevels
       .map((level) => {
@@ -1761,14 +1762,6 @@ export default function BuildScreen() {
     return () => clearTimeout(timer);
   }, [expenses]);
 
-  // ─── Load persisted in-game day start time ────
-  useEffect(() => {
-    if (!user?.id) return;
-    AsyncStorage.getItem(`currentDayStartTime_${user.id}`)
-      .then(val => { if (val) setCurrentDayStartTime(val); })
-      .catch(() => {});
-  }, [user?.id]);
-
   // ─── Hydrate saved game progress from Supabase on mount ────
   useEffect(() => {
     if (!user?.id) return;
@@ -2014,19 +2007,17 @@ export default function BuildScreen() {
   const fetchTodaySpending = async () => {
     if (!user?.id) return; // Guard: don't overwrite state when auth is transiently unavailable
     try {
+      // Build start/end of today as ISO strings for range query
       const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
       const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
 
-      // Use in-game day start if set — prevents same-calendar-day expenses from prior in-game days bleeding in
-      const startBound = currentDayStartTime
-        || new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('expenses')
         .select('amount')
         .eq('user_id', user?.id)
         .eq('app_mode', 'story')
-        .gte('date', startBound)
+        .gte('date', startOfDay)
         .lt('date', endOfDay);
 
       if (data) {
@@ -2156,28 +2147,13 @@ export default function BuildScreen() {
     };
 
     const reportData = buildHistoryReportData(dayItem);
-    // Sync weekly budget remaining with the live header value (weeklyBudget - weeklySpending)
-    reportData.weeklyBudgetRemaining = getRemainingWeeklyBudget();
-
+    
     // Evaluate if this is the final day of the level
     const maxDays = STORY_DAY_COUNTS[storyLevel] || 3;
     const isFinalDay = activeStoryDay >= maxDays;
 
     if (isFinalDay) {
-      // Save final day report — handleStartNextDay is bypassed for the last day,
-      // so we must persist here before transitioning to the level-complete sequence.
-      if (activeSessionId) {
-        try {
-          await gameDatabaseService.saveDayReport({
-            sessionId: activeSessionId,
-            storyLevel,
-            dayNumber: dayItem.dayNumber,
-            report: reportData,
-          });
-        } catch (e) {
-          console.warn('Failed to persist final day report:', e?.message || e);
-        }
-      }
+      // It's the final day, trigger checkLevelCompletion which handles the end of level
       checkLevelCompletion(weeklySpending);
     } else {
       // It's not the final day, show the Day Report Modal
@@ -2215,14 +2191,6 @@ export default function BuildScreen() {
       await AsyncStorage.setItem(`lastProgressTimestamp_${user?.id}`, nowTimestamp);
     } catch (e) {
       console.error('Failed to save last progress timestamp:', e);
-    }
-
-    // Record in-game day boundary — fetchTodaySpending uses this to avoid pulling prior in-game day expenses
-    setCurrentDayStartTime(nowTimestamp);
-    try {
-      await AsyncStorage.setItem(`currentDayStartTime_${user?.id}`, nowTimestamp);
-    } catch (e) {
-      console.error('Failed to save currentDayStartTime:', e);
     }
 
     // Advance the day
@@ -2414,8 +2382,6 @@ export default function BuildScreen() {
       setDailyTaskRuntimeByDay({});
       dailyTaskRuntimeByDayRef.current = {};
       setActiveStoryDay(1);
-      setCurrentDayStartTime(null);
-      AsyncStorage.removeItem(`currentDayStartTime_${user?.id}`).catch(() => {});
       dailyTaskAnnouncedDayRef.current = null;
 
       // Reset category spending tracking
@@ -8325,7 +8291,7 @@ export default function BuildScreen() {
                     setShowCompletionDialogue(true);
                   }}
                 >
-                  <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: 'bold' }}>
+                  <Text style={{ color: '#f8f8fa', fontSize: 16, fontWeight: 'bold' }}>
                     Continue
                   </Text>
                 </TouchableOpacity>
