@@ -1368,9 +1368,7 @@ export default function BuildScreen() {
       .filter((level) => Number.isFinite(level))
       .sort((a, b) => b - a);
 
-    const orderedLevels = Number.isFinite(storyLevel) && levelKeys.includes(storyLevel)
-      ? [storyLevel, ...levelKeys.filter((level) => level !== storyLevel)]
-      : levelKeys;
+    const orderedLevels = levelKeys;
 
     return orderedLevels
       .map((level) => {
@@ -2166,7 +2164,20 @@ export default function BuildScreen() {
     const isFinalDay = activeStoryDay >= maxDays;
 
     if (isFinalDay) {
-      // It's the final day, trigger checkLevelCompletion which handles the end of level
+      // Save final day report — handleStartNextDay is bypassed for the last day,
+      // so we must persist here before transitioning to the level-complete sequence.
+      if (activeSessionId) {
+        try {
+          await gameDatabaseService.saveDayReport({
+            sessionId: activeSessionId,
+            storyLevel,
+            dayNumber: dayItem.dayNumber,
+            report: reportData,
+          });
+        } catch (e) {
+          console.warn('Failed to persist final day report:', e?.message || e);
+        }
+      }
       checkLevelCompletion(weeklySpending);
     } else {
       // It's not the final day, show the Day Report Modal
