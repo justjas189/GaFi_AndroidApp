@@ -12,6 +12,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../../context/AuthContext';
 import { DataContext } from '../../context/DataContext';
@@ -218,7 +219,17 @@ const ProfileScreen = ({ navigation }) => {
         {/* ── Avatar & Name Card ── */}
         <View style={[styles.profileCard, { backgroundColor: theme.colors.card }]}>
           <View style={[styles.avatarCircle, { backgroundColor: theme.colors.primary }]}>
-            <Text style={styles.avatarText}>{getInitials()}</Text>
+            {userInfo?.avatarUrl ? (
+              <Image
+                source={{ uri: userInfo.avatarUrl }}
+                style={styles.avatarImage}
+                contentFit="cover"
+                transition={200}
+                accessibilityLabel="Profile picture"
+              />
+            ) : (
+              <Text style={styles.avatarText}>{getInitials()}</Text>
+            )}
           </View>
           <Text style={[styles.profileName, { color: theme.colors.text }]}>
             {userInfo?.name || 'Set your name'}
@@ -579,6 +590,11 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 30,
     fontWeight: 'bold',
+  },
+  avatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
   },
   profileName: {
     fontSize: 22,

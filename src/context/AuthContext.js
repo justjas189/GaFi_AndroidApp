@@ -13,8 +13,68 @@ import {
   onAuthHelperEvent,
   updateSessionCache,
 } from '../services/AuthSessionHelper';
+import { signInWithGoogle, signOutGoogle } from '../services/GoogleAuthService';
 
 export const AuthContext = createContext();
+
+// ── Shared user-info builders (used by applySession + checkLoginStatus) ──
+// Avatar precedence: stored profile -> Google metadata (avatar_url / picture).
+const resolveAvatar = (user, profileData) =>
+  profileData?.avatar_url ||
+  user?.user_metadata?.avatar_url ||
+  user?.user_metadata?.picture ||
+  null;
+
+const buildUserInfo = (user, profileData) => ({
+  ...user,
+  name:
+    profileData?.full_name ||
+    user.user_metadata?.full_name ||
+    user.user_metadata?.name ||
+    user.email?.split('@')[0] ||
+    'User',
+  username: profileData?.username || user.user_metadata?.username || null,
+  userType: profileData?.user_type || null,
+  avatarUrl: resolveAvatar(user, profileData),
+  email: user.email,
+});
+
+// Self-heal the profiles row from OAuth metadata. OAuth users have no DB
+// insert-trigger, so the row may not exist yet; create it, and backfill
+// avatar_url / username when missing. Fire-and-forget, never blocks auth.
+const syncProfileFromMetadata = async (user, profileData) => {
+  try {
+    const meta = user.user_metadata || {};
+    const googleAvatar = meta.avatar_url || meta.picture || null;
+
+    const patch = {};
+    if (!profileData?.avatar_url && googleAvatar) patch.avatar_url = googleAvatar;
+    if (!profileData?.username && meta.username) patch.username = meta.username;
+
+    if (!profileData) {
+      await supabase.from('profiles').upsert(
+        {
+          id: user.id,
+          email: user.email,
+          full_name: meta.full_name || meta.name || null,
+          ...patch,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'id' }
+      );
+      return;
+    }
+
+    if (Object.keys(patch).length > 0) {
+      await supabase
+        .from('profiles')
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq('id', user.id);
+    }
+  } catch (e) {
+    console.warn('Profile metadata sync failed (non-critical):', e?.message);
+  }
+};
 
 // Custom hook to use the AuthContext
 export const useAuth = () => {
@@ -44,17 +104,11 @@ export const AuthProvider = ({ children }) => {
   const applySession = async (session) => {
     const { data: profileData } = await supabase
       .from('profiles')
-      .select('full_name, username, user_type')
+      .select('full_name, username, user_type, avatar_url')
       .eq('id', session.user.id)
-      .single();
+      .maybeSingle();
 
-    const enhancedUserInfo = {
-      ...session.user,
-      name: profileData?.full_name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
-      username: profileData?.username || null,
-      userType: profileData?.user_type || null,
-      email: session.user.email
-    };
+    const enhancedUserInfo = buildUserInfo(session.user, profileData);
 
     setUserToken(session.access_token);
     setUserInfo(enhancedUserInfo);
@@ -64,6 +118,9 @@ export const AuthProvider = ({ children }) => {
     if (session.refresh_token) {
       await AsyncStorage.setItem('userRefreshToken', session.refresh_token);
     }
+
+    // Create/backfill the profile row from OAuth metadata (non-blocking).
+    syncProfileFromMetadata(session.user, profileData);
 
     // OneSignal push notifications
     try {
@@ -395,21 +452,15 @@ export const AuthProvider = ({ children }) => {
       if (result.error) throw result.error;
 
       if (result.session) {
-        // Get user profile data from database to get the full name, username, and user type
+        // Get user profile data from database to get the full name, username, type and avatar
         const { data: profileData } = await supabase
           .from('profiles')
-          .select('full_name, username, user_type')
+          .select('full_name, username, user_type, avatar_url')
           .eq('id', result.session.user.id)
-          .single();
+          .maybeSingle();
 
-        // Create enhanced user info object with name from profile or metadata
-        const enhancedUserInfo = {
-          ...result.session.user,
-          name: profileData?.full_name || result.session.user.user_metadata?.full_name || result.session.user.email?.split('@')[0] || 'User',
-          username: profileData?.username || null,
-          userType: profileData?.user_type || null,
-          email: result.session.user.email
-        };
+        // Create enhanced user info object with name/avatar from profile or metadata
+        const enhancedUserInfo = buildUserInfo(result.session.user, profileData);
 
         setUserToken(result.session.access_token);
         setUserInfo(enhancedUserInfo);
@@ -428,18 +479,21 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const register = async (name, email, password) => {
+  const register = async (name, email, password, username = null) => {
     try {
       setError(null);
       setIsLoading(true);
 
-      // Attempt to sign up directly - let Supabase handle duplicate email checking
+      // Attempt to sign up directly - let Supabase handle duplicate email checking.
+      // username is stored in user_metadata and synced to profiles on first
+      // authenticated session (see syncProfileFromMetadata).
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
             full_name: name,
+            ...(username ? { username } : {}),
           },
         }
       });
@@ -577,6 +631,36 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const loginWithGoogle = async () => {
+    try {
+      setError(null);
+      setIsLoading(true);
+
+      const result = await signInWithGoogle();
+
+      if (result.cancelled) {
+        return { success: false, cancelled: true };
+      }
+
+      if (!result.success) {
+        setError(result.error);
+        return { success: false, error: result.error };
+      }
+
+      // The SIGNED_IN auth event handles applySession + navigator swap.
+      // New Google users have no `hasOnboarded_<id>` flag, so AppNavigator
+      // routes them to Onboarding automatically.
+      return { success: true, session: result.session };
+    } catch (error) {
+      console.error('Google login error:', error);
+      const message = formatSupabaseError(error);
+      setError(message);
+      return { success: false, error: message };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const logout = async () => {
     try {
       isLoggingOutRef.current = true;
@@ -594,6 +678,8 @@ export const AuthProvider = ({ children }) => {
         } catch (e) {
           console.warn('Supabase signOut error (non-critical):', e.message);
         }
+        // Clear the cached native Google account so the picker re-prompts.
+        await signOutGoogle();
         try {
           const allKeys = await AsyncStorage.getAllKeys();
           const keysToRemove = allKeys.filter(k =>
@@ -786,6 +872,7 @@ export const AuthProvider = ({ children }) => {
     user: userInfo, // Add user property for compatibility
     error,
     login,
+    loginWithGoogle,
     logout,
     register,
     checkLoginStatus,

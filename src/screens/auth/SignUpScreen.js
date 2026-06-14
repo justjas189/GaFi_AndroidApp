@@ -19,6 +19,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { supabase } from '../../config/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ProfileService from '../../services/ProfileService';
+import GoogleSignInButton from '../../components/auth/GoogleSignInButton';
 
 const SignUpScreen = ({ navigation }) => {
   const [name, setName] = useState('');
@@ -32,8 +33,17 @@ const SignUpScreen = ({ navigation }) => {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [checkingUsername, setCheckingUsername] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState(null);
-  const { register, error, isLoading } = useContext(AuthContext);
+  const { register, loginWithGoogle, error, isLoading } = useContext(AuthContext);
   const { colors, spacing, borderRadius, shadows, createThemedStyles } = useTheme();
+
+  const handleGoogleSignUp = async () => {
+    // Google handles sign-up and sign-in identically; the SIGNED_IN auth event
+    // swaps the navigator (new users route to Onboarding automatically).
+    const { success, error, cancelled } = await loginWithGoogle();
+    if (!success && !cancelled) {
+      Alert.alert('Google Sign-In Failed', error || 'Could not sign in with Google. Please try again.');
+    }
+  };
 
   // Check username availability with debounce
   const checkUsernameAvailability = async (usernameToCheck) => {
@@ -352,6 +362,21 @@ const SignUpScreen = ({ navigation }) => {
       fontSize: 16,
       fontWeight: 'bold',
     },
+    dividerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginVertical: theme.spacing.lg,
+    },
+    dividerLine: {
+      flex: 1,
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: theme.colors.border,
+    },
+    dividerText: {
+      color: theme.colors.textSecondary,
+      fontSize: 13,
+      marginHorizontal: theme.spacing.md,
+    },
     footer: {
       flexDirection: 'row',
       justifyContent: 'center',
@@ -386,7 +411,7 @@ const SignUpScreen = ({ navigation }) => {
 
           <View style={styles.header}>
             <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Track your expenses with GaFI</Text>
+            <Text style={styles.subtitle}>Track your expenses with GaFi</Text>
           </View>
 
           <View style={styles.form}>
@@ -533,6 +558,19 @@ const SignUpScreen = ({ navigation }) => {
                 <Text style={styles.signUpButtonText}>Create Account</Text>
               )}
             </TouchableOpacity>
+
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <GoogleSignInButton
+              onPress={handleGoogleSignUp}
+              loading={isLoading}
+              disabled={isLoading}
+              label="Sign up with Google"
+            />
           </View>
 
           <View style={styles.footer}>

@@ -52,7 +52,18 @@ export default {
         }
       ],
       "@react-native-community/datetimepicker",
-      "expo-audio"
+      "expo-audio",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          // Android reads client config from ./google-services.json (set above).
+          // iOS needs the reversed iOS OAuth client id. Pull from env so no
+          // secret is hard-coded; placeholder keeps Android-only builds valid.
+          "iosUrlScheme":
+            process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME ||
+            "com.googleusercontent.apps.placeholder"
+        }
+      ]
     ],
     extra: {
       oneSignalAppId: "2f15e79a-b878-4ac7-a918-9d6d8bc28d60",
