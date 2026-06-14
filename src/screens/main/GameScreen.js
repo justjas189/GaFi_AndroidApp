@@ -741,6 +741,11 @@ export default function BuildScreen() {
   const [dailyTasksCompleted, setDailyTasksCompleted] = useState(false); // Tracks if all daily tasks are checked
   const [dayReportViewed, setDayReportViewed] = useState(false); // Tracks if day report has been viewed
   const [lastProgressTimestamp, setLastProgressTimestamp] = useState(null); // Last saved progress timestamp
+  // Anchor marking when the CURRENT in-game day began. "Today's Spending" counts an
+  // expense only when its created_at >= this value. Persisted (AsyncStorage) so the
+  // boundary survives reloads/resumes; ref mirror lets async fetchers read fresh value.
+  const [currentInGameDayStartTimestamp, setCurrentInGameDayStartTimestamp] = useState(null);
+  const currentInGameDayStartRef = useRef(null);
   const [showDayReportNotification, setShowDayReportNotification] = useState(false); // UI: color of Day Report Modal icon
   const [hasUnreadReport, setHasUnreadReport] = useState(false);
   const [showLevelCompleteModal, setShowLevelCompleteModal] = useState(false); // Level Complete modal visibility
@@ -1754,13 +1759,14 @@ export default function BuildScreen() {
     }
   }, [gameMode, filterStoryModeDestinations, selectedDestination, isStoryModeMapAllowed]);
 
-  // Fetch today's spending — re-runs whenever DataContext expenses change
+  // Fetch today's spending — re-runs on expense changes AND when the in-game day
+  // boundary moves (new day), so the total resets to the new day's window.
   useEffect(() => {
     fetchTodaySpending();
     // Hide instructions after 5 seconds
     const timer = setTimeout(() => setShowInstructions(false), 5000);
     return () => clearTimeout(timer);
-  }, [expenses]);
+  }, [expenses, currentInGameDayStartTimestamp]);
 
   // ─── Hydrate saved game progress from Supabase on mount ────
   useEffect(() => {
@@ -2004,21 +2010,44 @@ export default function BuildScreen() {
     };
   }, [gameMode, activeSessionId, showLevelComplete, storyLevel, dailyTaskCompletion, dayReportViewed, lastProgressTimestamp, getActiveStoryDay, getStoryDayTasks]);
 
+  // Single source of truth for the in-game day boundary. Updates ref (sync reads),
+  // state (UI/effects), and AsyncStorage (survives reload) together.
+  const applyInGameDayStart = useCallback(async (isoTimestamp) => {
+    const ts = isoTimestamp || new Date().toISOString();
+    currentInGameDayStartRef.current = ts;
+    setCurrentInGameDayStartTimestamp(ts);
+    try {
+      if (user?.id) {
+        await AsyncStorage.setItem(`currentInGameDayStart_${user.id}`, ts);
+      }
+    } catch (e) {
+      console.error('Failed to persist in-game day start timestamp:', e);
+    }
+    return ts;
+  }, [user?.id]);
+
   const fetchTodaySpending = async () => {
     if (!user?.id) return; // Guard: don't overwrite state when auth is transiently unavailable
     try {
-      // Build start/end of today as ISO strings for range query
-      const now = new Date();
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
-
-      const { data, error } = await supabase
+      let query = supabase
         .from('expenses')
         .select('amount')
         .eq('user_id', user?.id)
-        .eq('app_mode', 'story')
-        .gte('date', startOfDay)
-        .lt('date', endOfDay);
+        .eq('app_mode', 'story');
+
+      // Scope to the CURRENT in-game day only. Expenses written before this in-game day
+      // started (even if on the same real calendar day) must be excluded.
+      const dayStart = currentInGameDayStartRef.current;
+      if (dayStart) {
+        query = query.gte('created_at', dayStart);
+      } else {
+        // Fallback for sessions started before this boundary existed: real calendar day.
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+        query = query.gte('date', startOfDay);
+      }
+
+      const { data, error } = await query;
 
       if (data) {
         const total = data.reduce((sum, expense) => sum + parseFloat(expense.amount), 0);
@@ -2153,6 +2182,21 @@ export default function BuildScreen() {
     const isFinalDay = activeStoryDay >= maxDays;
 
     if (isFinalDay) {
+      // FINAL-DAY FIX: the last day (3/6/10) never opens the Day Report modal, so it
+      // skips handleStartNextDay where the save lives. Force-persist the report HERE,
+      // and AWAIT it, before checkLevelCompletion resets daily-task state / unmounts.
+      if (activeSessionId) {
+        try {
+          await gameDatabaseService.saveDayReport({
+            sessionId: activeSessionId,
+            storyLevel,
+            dayNumber: dayItem.dayNumber || activeStoryDay,
+            report: reportData,
+          });
+        } catch (e) {
+          console.warn('Failed to persist final day report:', e?.message || e);
+        }
+      }
       // It's the final day, trigger checkLevelCompletion which handles the end of level
       checkLevelCompletion(weeklySpending);
     } else {
@@ -2192,6 +2236,10 @@ export default function BuildScreen() {
     } catch (e) {
       console.error('Failed to save last progress timestamp:', e);
     }
+
+    // New in-game day starts NOW — move the "Today's Spending" boundary so the next
+    // day starts from ₱0 even if it falls on the same real-world calendar day.
+    await applyInGameDayStart(nowTimestamp);
 
     // Advance the day
     setActiveStoryDay((prev) => prev + 1);
@@ -2383,6 +2431,9 @@ export default function BuildScreen() {
       dailyTaskRuntimeByDayRef.current = {};
       setActiveStoryDay(1);
       dailyTaskAnnouncedDayRef.current = null;
+
+      // Anchor Day 1's "Today's Spending" window to the exact start moment.
+      applyInGameDayStart(startDate.toISOString());
 
       // Reset category spending tracking
       setCategorySpending({
@@ -4069,6 +4120,9 @@ export default function BuildScreen() {
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
       padding: 24,
+      // Cap height so the unbounded SectionList can't grow the sheet past the
+      // top of the screen and clip the header under the status bar/notch.
+      maxHeight: '85%',
     },
     historyHeaderRow: {
       flexDirection: 'row',
@@ -5260,6 +5314,20 @@ export default function BuildScreen() {
     setCurrentMapId('dorm');
     dailyTaskAnnouncedDayRef.current = null;
     hydrateDailyTaskState(session.id, session.level);
+
+    // Restore the in-game day boundary so "Today's Spending" stays scoped after a
+    // reload/resume. Fall back to the session start if nothing was persisted yet.
+    (async () => {
+      try {
+        const stored = user?.id
+          ? await AsyncStorage.getItem(`currentInGameDayStart_${user.id}`)
+          : null;
+        await applyInGameDayStart(stored || new Date(session.start_date).toISOString());
+      } catch (e) {
+        await applyInGameDayStart(new Date(session.start_date).toISOString());
+      }
+    })();
+
     console.log(`🔄 Resumed active story session ${session.id} (Level ${session.level})`);
   };
 
@@ -7972,6 +8040,9 @@ export default function BuildScreen() {
               renderSectionHeader={renderHistorySectionHeader}
               showsVerticalScrollIndicator={false}
               stickySectionHeadersEnabled={false}
+              // flexShrink keeps the list scrolling inside the capped sheet so
+              // the fixed header above it stays pinned and on-screen.
+              style={{ flexShrink: 1 }}
               ListEmptyComponent={(
                 <View className="items-center py-8" style={styles.historyEmptyState}>
                   <Text className="text-[#a78b7c] text-sm" style={styles.historyEmptyText}>
@@ -8068,6 +8139,9 @@ export default function BuildScreen() {
       <EndOfDayReportModal
         isVisible={showDayReportModal}
         {...liveDayReportData}
+        // Override with the header's exact source (weeklyBudget - weeklySpending)
+        // so the modal's "Weekly Budget Remaining" never desyncs from the header.
+        weeklyBudgetRemaining={getRemainingWeeklyBudget()}
         onClose={handleCloseDayReport}
         onStartNextDay={handleStartNextDay}
       />
