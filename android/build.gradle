@@ -6,7 +6,7 @@ buildscript {
     mavenCentral()
   }
   dependencies {
-        classpath 'com.google.gms:google-services:4.4.1'
+    classpath 'com.google.gms:google-services:4.4.1'
     classpath('com.android.tools.build:gradle')
     classpath('com.facebook.react:react-native-gradle-plugin')
     classpath('org.jetbrains.kotlin:kotlin-gradle-plugin')
@@ -23,3 +23,24 @@ allprojects {
 
 apply plugin: "expo-root-project"
 apply plugin: "com.facebook.react.rootproject"
+
+// Force a single, consistent NDK across ALL native modules.
+// Some modules (e.g. react-native-worklets-core) pin an older NDK (27.0.x).
+// With a single ndk.dir in local.properties that mismatch triggers AGP CXX1104,
+// so we pin every module to 27.1.12297006. That NDK MUST live at a path WITHOUT
+// spaces (C:\AndroidSDK\ndk) — a space in the NDK path breaks libc++ linking on
+// Windows (undefined __cxa_* / std::__ndk1 symbols at link time).
+subprojects { sub ->
+  def setNdk = {
+    if (sub.hasProperty("android")) {
+      sub.android.ndkVersion = "27.1.12297006"
+    }
+  }
+  // Some subprojects are already evaluated by the Expo/RN root plugins above,
+  // and calling afterEvaluate on an evaluated project throws. Guard for both.
+  if (sub.state.executed) {
+    setNdk()
+  } else {
+    sub.afterEvaluate { setNdk() }
+  }
+}
