@@ -87,9 +87,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.gafi.app'
+    namespace 'com.gafi.app.dev'
     defaultConfig {
-        applicationId 'com.gafi.app'
+        applicationId 'com.gafi.app.dev'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

@@ -1,4 +1,4 @@
-package com.gafi.app
+package com.gafi.app.dev
 
 import android.app.Application
 import android.content.res.Configuration

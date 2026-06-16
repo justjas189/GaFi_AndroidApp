@@ -1,4 +1,4 @@
-package com.gafi.app
+package com.gafi.app.dev
 
 import android.os.Build
 import android.os.Bundle
