@@ -27,7 +27,7 @@ export function configureGoogleSignIn() {
     // Web client id is what Supabase validates the idToken against.
     webClientId: WEB_CLIENT_ID,
     scopes: ['profile', 'email'],
-    offlineAccess: false,
+    offlineAccess: true,
   });
   configured = true;
 }
