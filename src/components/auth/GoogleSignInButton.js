@@ -1,7 +1,8 @@
 // components/auth/GoogleSignInButton.js
 import React from 'react';
-import { Pressable, Text, StyleSheet, ActivityIndicator, View } from 'react-native';
+import { Pressable, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { SvgXml } from 'react-native-svg';
+import { useTheme } from '../../context/ThemeContext';
 
 // Hoisted static asset — official multi-color Google "G" mark.
 const GOOGLE_G_SVG = `
@@ -14,8 +15,19 @@ const GOOGLE_G_SVG = `
 `;
 
 /**
- * Sleek, accessible Google Sign-In button following Google branding guidelines
- * (white surface, neutral border, "G" mark left of the label).
+ * Sleek, accessible, theme-aware Google Sign-In button.
+ *
+ * Structurally a full-width outlined button with the "G" mark left of the
+ * label. Colors are driven entirely by the active theme so the button sits in
+ * the same visual family as the Email/Password inputs:
+ *   - surface background + subtle border (NOT the primary orange)
+ *   - borderRadius matches the inputs (theme.borderRadius.md)
+ *   - label is white in dark mode, near-black in light mode
+ *
+ * NOTE: the theme colors are applied via a plain style array, not Pressable's
+ * `style={({ pressed }) => [...]}` callback form — that callback form silently
+ * dropped the background/border/justify styles under this project's Babel
+ * transform. Press feedback is handled natively via `android_ripple`.
  *
  * @param {() => void} onPress
  * @param {boolean} loading  - shows a spinner and blocks taps
@@ -23,29 +35,39 @@ const GOOGLE_G_SVG = `
  * @param {string}  label    - defaults to "Continue with Google"
  */
 const GoogleSignInButton = ({ onPress, loading = false, disabled = false, label = 'Continue with Google' }) => {
+  const { colors, borderRadius, isDarkMode } = useTheme();
   const isDisabled = disabled || loading;
+  // Pure white on dark, near-black on light — same weight/size as input text.
+  const textColor = isDarkMode ? '#FFFFFF' : '#111111';
 
   return (
     <Pressable
+      // Remount on theme flip: Android's ripple drawable caches its backdrop and
+      // won't re-resolve backgroundColor on a live theme switch without a fresh mount.
+      key={isDarkMode ? 'dark' : 'light'}
       onPress={onPress}
       disabled={isDisabled}
       accessibilityRole="button"
       accessibilityState={{ disabled: isDisabled, busy: loading }}
       accessibilityLabel={label}
-      style={({ pressed }) => [
+      android_ripple={{ color: colors.border }}
+      style={[
         styles.button,
-        pressed && !isDisabled && styles.pressed,
-        isDisabled && styles.disabled,
+        {
+          // Match the inputs: surface fill + subtle border + same corner radius.
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderRadius: borderRadius.md,
+          opacity: isDisabled ? 0.6 : 1,
+        },
       ]}
     >
       {loading ? (
-        <ActivityIndicator color="#1F1F1F" />
+        <ActivityIndicator color={textColor} />
       ) : (
         <>
-          <View style={styles.icon}>
-            <SvgXml xml={GOOGLE_G_SVG} width={20} height={20} />
-          </View>
-          <Text style={styles.label}>{label}</Text>
+          <SvgXml xml={GOOGLE_G_SVG} width={20} height={20} />
+          <Text style={[styles.label, { color: textColor }]}>{label}</Text>
         </>
       )}
     </Pressable>
@@ -54,36 +76,19 @@ const GoogleSignInButton = ({ onPress, loading = false, disabled = false, label 
 
 const styles = StyleSheet.create({
   button: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    height: 52,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#DADCE0',
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    // Subtle lift so the white button reads cleanly on the dark background.
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.18,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  pressed: {
-    backgroundColor: '#F1F3F4',
-  },
-  disabled: {
-    opacity: 0.6,
-  },
-  icon: {
-    marginRight: 12,
+    borderWidth: 1,
   },
   label: {
-    color: '#1F1F1F',
+    marginLeft: 12,
+    // Match the text typed inside the inputs: fontSize 16, default (normal) weight.
     fontSize: 16,
-    fontWeight: '600',
-    letterSpacing: 0.2,
+    fontWeight: '400',
   },
 });
 

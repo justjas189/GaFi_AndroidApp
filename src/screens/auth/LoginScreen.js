@@ -25,7 +25,7 @@ const LoginScreen = ({ navigation }) => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const { login, loginWithGoogle, isLoading } = useAuth();
-  const { colors, createThemedStyles } = useTheme();
+  const { colors, isDarkMode, createThemedStyles } = useTheme();
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -99,6 +99,9 @@ const LoginScreen = ({ navigation }) => {
     scrollContent: {
       flexGrow: 1,
       padding: theme.spacing.lg,
+      // Guarantee the Google button + "Sign Up" footer clear the bottom edge
+      // (and the gesture/nav bar) instead of being cut off.
+      paddingBottom: theme.spacing.xxl,
     },
     header: {
       alignItems: 'center',
@@ -173,17 +176,18 @@ const LoginScreen = ({ navigation }) => {
     dividerRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginVertical: theme.spacing.lg,
+      marginVertical: 24,
     },
     dividerLine: {
       flex: 1,
-      height: StyleSheet.hairlineWidth,
-      backgroundColor: theme.colors.border,
+      height: 1,
+      // Light gray in dark mode, medium gray in light mode.
+      backgroundColor: isDarkMode ? '#444' : '#E0E0E0',
     },
     dividerText: {
-      color: theme.colors.textSecondary,
+      color: isDarkMode ? '#444' : '#E0E0E0',
       fontSize: 13,
-      marginHorizontal: theme.spacing.md,
+      paddingHorizontal: 10,
     },
     footer: {
       flexDirection: 'row',
