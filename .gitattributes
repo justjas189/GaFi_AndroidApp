@@ -1,0 +1,4 @@
+# Keep patch-package diffs LF-only. CRLF breaks the unified-diff context
+# matching, so a Windows checkout with autocrlf would silently fail to apply
+# patches/*.patch on `npm install` (postinstall).
+patches/*.patch text eol=lf

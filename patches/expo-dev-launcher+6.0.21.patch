@@ -1,0 +1,12 @@
+diff --git a/node_modules/expo-dev-launcher/android/src/debug/java/expo/modules/devlauncher/DevLauncherController.kt b/node_modules/expo-dev-launcher/android/src/debug/java/expo/modules/devlauncher/DevLauncherController.kt
+--- a/node_modules/expo-dev-launcher/android/src/debug/java/expo/modules/devlauncher/DevLauncherController.kt
++++ b/node_modules/expo-dev-launcher/android/src/debug/java/expo/modules/devlauncher/DevLauncherController.kt
+@@ -437,7 +437,7 @@
+
+       val testInterceptor = DevLauncherKoinContext.app.koin.get<DevLauncherTestInterceptor>()
+       if (!testInterceptor.allowReinitialization()) {
+-        check(!wasInitialized()) { "DevelopmentClientController was initialized." }
++        if (wasInitialized()) return
+       }
+       DevLauncherKoinContext.app.koin.loadModules(
+         listOf(
