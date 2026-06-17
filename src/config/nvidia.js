@@ -739,45 +739,100 @@ const sanitizeJSONString = (str) => {
   return sanitized.trim();
 };
 
-// Helper function to extract JSON from mixed text responses
+// Best-effort repair for JSON truncated by max_tokens (the model got cut off
+// mid-array). Drops a dangling trailing comma and closes any still-open { and
+// [ brackets. Returns null when nothing is unbalanced (or it can't help, e.g.
+// truncated inside a string literal). Never throws.
+const closeUnbalancedJSON = (str) => {
+  if (!str) return null;
+
+  let depthCurly = 0;
+  let depthSquare = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\') { escaped = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '{') depthCurly++;
+    else if (ch === '}') depthCurly--;
+    else if (ch === '[') depthSquare++;
+    else if (ch === ']') depthSquare--;
+  }
+
+  // If we ended inside a string, or nothing is open, we can't safely repair.
+  if (inString || (depthCurly <= 0 && depthSquare <= 0)) return null;
+
+  let repaired = str.replace(/,\s*$/, ''); // drop a trailing comma
+  repaired += '}'.repeat(Math.max(0, depthCurly));
+  repaired += ']'.repeat(Math.max(0, depthSquare));
+  return repaired;
+};
+
+// Helper function to extract JSON from mixed text responses.
+// LLMs routinely wrap JSON in prose ("Certainly! Here are your tips: [...]")
+// or ```json fences, so a naive JSON.parse throws "Unexpected character: c".
+// This strips all of that and ALWAYS returns a *validated*, parseable JSON
+// string — never throws, falling back to '[]' so callers can't crash.
 const extractJSON = (response) => {
+  if (!response) return '[]';
+
+  let str = typeof response === 'string' ? response : String(response);
+  str = str.trim();
+
+  // 1. Drop any leaked reasoning/thinking blocks before they confuse the regex.
+  str = str
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+    .replace(/<thought>[\s\S]*?<\/thought>/gi, '')
+    .replace(/<scratchpad>[\s\S]*?<\/scratchpad>/gi, '')
+    .trim();
+
+  // 2. Strip markdown code fences (```json ... ``` or ``` ... ```).
+  const fence = str.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fence) str = fence[1].trim();
+
+  // 3. Regex out the JSON body, discarding conversational text before/after it.
+  //    Prefer an array; otherwise take an object and wrap it so callers always
+  //    receive an array. Greedy [\s\S]* spans nested structures and trailing
+  //    "...let me know if you need more!" prose after the final bracket.
+  const arrayMatch = str.match(/\[[\s\S]*\]/);
+  const objectMatch = str.match(/\{[\s\S]*\}/);
+
+  let candidate = null;
+  if (arrayMatch && (!objectMatch || arrayMatch.index <= objectMatch.index)) {
+    candidate = arrayMatch[0];
+  } else if (objectMatch) {
+    candidate = objectMatch[0];
+    if (!candidate.startsWith('[')) candidate = `[${candidate}]`;
+  }
+
+  // No JSON at all (pure refusal / conversational reply) — bail cleanly.
+  if (candidate === null) {
+    DebugUtils.warn('NVIDIA_AI', 'extractJSON found no JSON body in response', {
+      preview: str.substring(0, 120),
+    });
+    return '[]';
+  }
+
+  // 4. Clean comments / control chars / trailing commas, then validate.
+  const sanitized = sanitizeJSONString(candidate);
   try {
-    if (!response) return '[]';
-
-    let str = typeof response === 'string' ? response : String(response);
-    str = str.trim();
-
-    // 1. Strip markdown formatting first
-    const markdownRegex = /```(?:json)?\s*([\s\S]*?)\s*```/i;
-    const markdownMatch = str.match(markdownRegex);
-    if (markdownMatch) {
-      str = markdownMatch[1].trim();
-    }
-
-    // 2. Extract JSON by matching outer brackets if still contains conversational filler
-    const firstBracket = str.indexOf('[');
-    const lastBracket = str.lastIndexOf(']');
-    const firstBrace = str.indexOf('{');
-    const lastBrace = str.lastIndexOf('}');
-
-    if (firstBracket !== -1 && lastBracket !== -1 && (firstBrace === -1 || firstBracket < firstBrace)) {
-      str = str.substring(firstBracket, lastBracket + 1);
-    } else if (firstBrace !== -1 && lastBrace !== -1) {
-      str = str.substring(firstBrace, lastBrace + 1);
-      // Ensure it's wrapped in an array if it's a single object
-      if (!str.startsWith('[')) {
-        str = `[${str}]`;
-      }
-    }
-
-    // 3. Sanitize comments and invalid characters
-    str = sanitizeJSONString(str);
-
-    // Validate by parsing
-    JSON.parse(str);
-
-    return str;
+    JSON.parse(sanitized);
+    return sanitized;
   } catch (error) {
+    // 5. Last-ditch: the JSON may have been truncated by max_tokens — try to
+    //    close the open brackets and re-validate before giving up.
+    const repaired = closeUnbalancedJSON(sanitized);
+    if (repaired) {
+      try {
+        JSON.parse(repaired);
+        DebugUtils.warn('NVIDIA_AI', 'extractJSON recovered truncated JSON');
+        return repaired;
+      } catch (_) { /* fall through to fallback */ }
+    }
     DebugUtils.error('NVIDIA_AI', 'extractJSON parsing failed', error);
     return '[]';
   }

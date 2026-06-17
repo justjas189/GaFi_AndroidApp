@@ -52,15 +52,30 @@ const syncProfileFromMetadata = async (user, profileData) => {
       // RLS INSERT policy (WITH CHECK auth.uid() = id). We deliberately OMIT
       // `email` here: profiles.email is UNIQUE, and re-inserting an email that
       // already exists on another row throws 23505 and surfaces as a 400.
-      const { error } = await supabase.from('profiles').upsert(
-        {
-          id: user.id,
-          full_name: meta.full_name || meta.name || null,
-          avatar_url: googleAvatar, // column added in migration 20260615
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'id' }
-      );
+      // avatar_url lives behind migration 20260615. If the deployed schema is
+      // stale (column missing), PostgREST rejects the whole upsert with a 400
+      // (PGRST204 schema-cache miss / 42703 undefined column). Detect that and
+      // retry without the optional column so the row is still created — the
+      // avatar backfills later once the migration is applied.
+      const fullPayload = {
+        id: user.id,
+        full_name: meta.full_name || meta.name || null,
+        avatar_url: googleAvatar, // column added in migration 20260615
+        updated_at: new Date().toISOString(),
+      };
+
+      let { error } = await supabase
+        .from('profiles')
+        .upsert(fullPayload, { onConflict: 'id' });
+
+      if (error && (error.code === 'PGRST204' || error.code === '42703')) {
+        console.warn('Profile upsert: optional column missing, retrying minimal payload:', error.message);
+        const { avatar_url, ...minimalPayload } = fullPayload;
+        ({ error } = await supabase
+          .from('profiles')
+          .upsert(minimalPayload, { onConflict: 'id' }));
+      }
+
       if (error) {
         // Full PostgREST detail so the exact 400 cause is visible in logs.
         console.warn('Profile insert failed:', error.code, error.message, error.details, error.hint);
@@ -128,9 +143,13 @@ export const AuthProvider = ({ children }) => {
     // ── 2. ENRICH AFTER: profile fetch must not block the auth gate ──
     let profileData = null;
     try {
+      // select('*') is deliberate: naming a column that doesn't yet exist on
+      // the deployed schema makes PostgREST return 400 (42703). '*' only ever
+      // returns the columns that DO exist, so this query survives schema drift.
+      // buildUserInfo reads every field with optional chaining.
       const { data } = await supabase
         .from('profiles')
-        .select('full_name, username, user_type, avatar_url')
+        .select('*')
         .eq('id', session.user.id)
         .maybeSingle();
       profileData = data;
@@ -478,7 +497,7 @@ export const AuthProvider = ({ children }) => {
         // Get user profile data from database to get the full name, username, type and avatar
         const { data: profileData } = await supabase
           .from('profiles')
-          .select('full_name, username, user_type, avatar_url')
+          .select('*') // schema-drift-safe; see applySession note
           .eq('id', result.session.user.id)
           .maybeSingle();
 
@@ -600,7 +619,7 @@ export const AuthProvider = ({ children }) => {
             // Check database profile as fallback
             const { data: profileData, error: profileError } = await supabase
               .from('profiles')
-              .select('full_name, created_at, onboarding_completed')
+              .select('*') // includes onboarding_completed only if the column exists
               .eq('id', user.id)
               .maybeSingle();
 

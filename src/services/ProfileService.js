@@ -23,12 +23,14 @@ class ProfileService {
         // , no setup needed
       }
 
-      // Check if user has a profile with both name and username
+      // Check if user has a profile with both name and username.
+      // select('*') + maybeSingle() tolerates schema drift (no 400 on a
+      // missing column) and a not-yet-created row (no PGRST116 throw).
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('full_name, username')
+        .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (profileError) {
         console.error('Error checking profile:', profileError);
@@ -97,7 +99,7 @@ class ProfileService {
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (profileError) throw profileError;
       return profile;
