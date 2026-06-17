@@ -127,6 +127,11 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+# Vendored Oboe native lib: react-native-audio-api consumes com.google.oboe via prefab,
+# which AGP links but never packages. liboboe.so must ship in the APK or the app crashes
+# on launch (UnsatisfiedLinkError). Force-track past the *.so rule above; see
+# android/app/build.gradle packagingOptions.
+!android/app/src/main/jniLibs/**/liboboe.so
 .Python
 venv/
 ENV/
