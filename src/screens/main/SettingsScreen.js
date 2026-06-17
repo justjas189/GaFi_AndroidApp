@@ -21,6 +21,7 @@ import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
 import { supabase } from '../../config/supabase';
 import { getSessionForMutation } from '../../services/AuthSessionHelper';
+import { IS_DEVELOPMENT } from '../../utils/appEnvironment';
 
 const SettingsScreen = ({ navigation }) => {
   const { logout, userInfo } = useContext(AuthContext);
@@ -162,33 +163,12 @@ const SettingsScreen = ({ navigation }) => {
     );
   };
 
-  const handleHelpSupport = () => {
-    Alert.alert(
-      'Help & Support',
-      'How can we help you?',
-      [
-        {
-          text: 'FAQs',
-          onPress: () => {
-            Alert.alert(
-              'Frequently Asked Questions',
-              '• How do I add an expense?\n  Go to the Expenses tab and tap the + button.\n\n• How do I set my budget?\n  Go to Profile → Budget and set your monthly budget.\n\n• How does the leaderboard work?\n  Save money consistently to earn XP and climb the rankings!\n\n• Is my data secure?\n  Yes! All data is encrypted and stored securely via Supabase.\n\n• How do I add friends?\n  Set a username in your profile, then go to Friends List to search and add friends.'
-            );
-          },
-        },
-        {
-          text: 'Report a Bug',
-          onPress: () => {
-            Linking.openURL(
-              'mailto:malabananbills@gmail.com?subject=GaFI%20Bug%20Report&body=Please%20describe%20the%20issue%20you%20encountered:'
-            ).catch(() => {
-              Alert.alert('Error', 'Could not open email client. Please email malabananbills@gmail.com manually.');
-            });
-          },
-        },
-        { text: 'Close', style: 'cancel' },
-      ]
-    );
+  const handleReportBug = () => {
+    Linking.openURL(
+      'mailto:malabananbills@gmail.com?subject=GaFI%20Bug%20Report&body=Please%20describe%20the%20issue%20you%20encountered:'
+    ).catch(() => {
+      Alert.alert('Error', 'Could not open email client. Please email malabananbills@gmail.com manually.');
+    });
   };
 
   const handleDeleteAccount = async () => {
@@ -313,24 +293,27 @@ const SettingsScreen = ({ navigation }) => {
             <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
-            onPress={() => navigation.navigate('NotificationTest')}
-            activeOpacity={0.7}
-          >
-            <View style={styles.settingItemLeft}>
-              <View style={[styles.settingIconContainer, { backgroundColor: `${theme.colors.secondary}20` }]}>
-                <Ionicons name="flask-outline" size={20} color={theme.colors.secondary} />
+          {/* PRODUCTION GUARD: Test Notifications only exists in the dev variant */}
+          {IS_DEVELOPMENT && (
+            <TouchableOpacity
+              style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
+              onPress={() => navigation.navigate('NotificationTest')}
+              activeOpacity={0.7}
+            >
+              <View style={styles.settingItemLeft}>
+                <View style={[styles.settingIconContainer, { backgroundColor: `${theme.colors.secondary}20` }]}>
+                  <Ionicons name="flask-outline" size={20} color={theme.colors.secondary} />
+                </View>
+                <View style={styles.settingInfo}>
+                  <Text style={[styles.settingText, { color: theme.colors.text }]}>Test Notifications</Text>
+                  <Text style={[styles.settingValue, { color: theme.colors.text }]}>
+                    Dev-only · test notification functionality
+                  </Text>
+                </View>
               </View>
-              <View style={styles.settingInfo}>
-                <Text style={[styles.settingText, { color: theme.colors.text }]}>Test Notifications</Text>
-                <Text style={[styles.settingValue, { color: theme.colors.text }]}>
-                  Test notification functionality
-                </Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
-          </TouchableOpacity>
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ── Features (temporarily hidden) ── */}
@@ -454,19 +437,40 @@ const SettingsScreen = ({ navigation }) => {
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Help & Support</Text>
 
+          {/* FAQs — opens the dedicated FAQScreen so the long list lives there */}
           <TouchableOpacity
             style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
-            onPress={handleHelpSupport}
+            onPress={() => navigation.navigate('FAQ')}
             activeOpacity={0.7}
           >
             <View style={styles.settingItemLeft}>
-              <View style={[styles.settingIconContainer, { backgroundColor: '#5856D620' }]}>
-                <Ionicons name="help-circle-outline" size={20} color="#5856D6" />
+              <View style={[styles.settingIconContainer, { backgroundColor: `${theme.colors.primary}20` }]}>
+                <Ionicons name="help-circle-outline" size={20} color={theme.colors.primary} />
               </View>
               <View style={styles.settingInfo}>
-                <Text style={[styles.settingText, { color: theme.colors.text }]}>Help & FAQs</Text>
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>FAQs</Text>
                 <Text style={[styles.settingValue, { color: theme.colors.text }]}>
-                  Get answers & report issues
+                  Answers to common questions
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
+          </TouchableOpacity>
+
+          {/* Report a Bug */}
+          <TouchableOpacity
+            style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
+            onPress={handleReportBug}
+            activeOpacity={0.7}
+          >
+            <View style={styles.settingItemLeft}>
+              <View style={[styles.settingIconContainer, { backgroundColor: '#FF3B3020' }]}>
+                <Ionicons name="bug-outline" size={20} color="#FF3B30" />
+              </View>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>Report a Bug</Text>
+                <Text style={[styles.settingValue, { color: theme.colors.text }]}>
+                  Email us the issue you hit
                 </Text>
               </View>
             </View>

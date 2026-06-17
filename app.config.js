@@ -68,6 +68,11 @@ export default {
       ]
     ],
     extra: {
+      // Surfaced to the JS runtime via Constants.expoConfig.extra.appVariant.
+      // process.env.APP_VARIANT is only readable here at config-eval time (Node);
+      // it is NOT inlined into the app bundle unless prefixed EXPO_PUBLIC_, so the
+      // production guard for Test tooling reads it from `extra`, not process.env.
+      appVariant: IS_DEV ? "development" : "production",
       oneSignalAppId: "2f15e79a-b878-4ac7-a918-9d6d8bc28d60",
       eas: {
         projectId: "5d45f797-09e9-4b48-b05a-879326f60839",

@@ -5,7 +5,6 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { View, Text, ActivityIndicator } from 'react-native';
@@ -14,13 +13,9 @@ import Constants from 'expo-constants';
 
 // Enhanced Components & Utilities
 import ErrorBoundary from './src/components/ErrorBoundary';
-import GlobalDraggableKoin from './src/components/GlobalDraggableKoin';
 import DebugUtils from './src/utils/DebugUtils';
 import PerformanceManager from './src/utils/PerformanceManager';
 import SecurityManager from './src/utils/SecurityManager';
-
-// NVIDIA API Reset (Temporary fix)
-import { resetCircuitBreaker } from './src/config/nvidia';
 
 // Navigation
 import AuthNavigator from './src/navigation/AuthNavigator';
@@ -33,29 +28,12 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { DataProvider } from './src/context/DataContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { TutorialProvider } from './src/context/TutorialContext';
-import KoinTutorialOverlay from './src/components/KoinTutorialOverlay';
-import AppTourManager from './src/components/AppTourManager';
 
 const Stack = createStackNavigator();
 
-// Only show the Koin bubble when the user is authenticated
-const AuthenticatedBubble = () => {
-  const { userToken, userInfo } = useAuth();
-  if (!userToken || !userInfo) return null;
-  return <GlobalDraggableKoin />;
-};
-
-// Koin tutorial overlay — only shown when tutorial is active
-const AuthenticatedTutorial = () => {
-  const { userToken, userInfo } = useAuth();
-  if (!userToken || !userInfo) return null;
-  return (
-    <>
-      <KoinTutorialOverlay />
-      <AppTourManager />
-    </>
-  );
-};
+// NOTE: Koin bubble + tutorial overlays moved into MainNavigator so they sit
+// inside BottomSheetModalProvider and above the screen stack. They now mount
+// only on the authenticated Main surface (not during Onboarding).
 
 // Simple loading screen component
 const LoadingScreen = ({ message }) => (
@@ -250,15 +228,7 @@ export default function App() {
   const initializeApp = async () => {
     try {
       DebugUtils.log('APP', 'Initializing GaFI application');
-      
-      // Reset NVIDIA API circuit breaker (temporary fix)
-      try {
-        resetCircuitBreaker();
-        DebugUtils.log('APP', 'NVIDIA API circuit breaker reset successfully');
-      } catch (error) {
-        DebugUtils.warn('APP', 'Failed to reset NVIDIA circuit breaker', error);
-      }
-      
+
       // Initialize performance monitoring
       await PerformanceManager.initialize();
       DebugUtils.debug('APP', 'Performance manager initialized');
@@ -286,7 +256,6 @@ export default function App() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
           <ThemeProvider>
-            <BottomSheetModalProvider>
             <ThemedNavigationContainer>
               <AuthProvider>
                 <DataProvider>
@@ -294,14 +263,11 @@ export default function App() {
                     <StatusBar style="auto" />
                     <View style={{ flex: 1 }}>
                       <AppNavigator />
-                      <AuthenticatedTutorial />
-                      <AuthenticatedBubble />
                     </View>
                   </TutorialProvider>
                 </DataProvider>
               </AuthProvider>
             </ThemedNavigationContainer>
-            </BottomSheetModalProvider>
           </ThemeProvider>
         </SafeAreaProvider>
       </GestureHandlerRootView>

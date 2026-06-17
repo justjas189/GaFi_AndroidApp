@@ -21,6 +21,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import notificationService, { PREF_KEYS } from '../../services/OneSignalNotificationService';
+import gameModeNotificationService from '../../services/GameModeNotificationService';
+import { IS_DEVELOPMENT } from '../../utils/appEnvironment';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -91,6 +93,35 @@ const NOTIFICATION_CHANNELS = [
     emoji: '📝',
     testType: 'daily_reminder',
     hasTimePicker: true,
+  },
+  // ── Game-mode channels (routed through GameModeNotificationService) ──────────
+  {
+    id: 'story_mode',
+    mode: true,            // → handled by gameModeNotificationService, not OneSignal
+    modeId: 'story_mode',
+    icon: 'book-outline',
+    activeIcon: 'book',
+    title: 'Story Mode',
+    subtitle: 'Continue Your Journey',
+    description: 'A daily nudge to continue your in-progress Story Mode level and keep your learning streak alive.',
+    color: '#FF6B00',
+    gradientColors: ['#FF6B00', '#FF9F45'],
+    emoji: '📖',
+    testType: 'story_mode',
+  },
+  {
+    id: 'custom_mode',
+    mode: true,
+    modeId: 'custom_mode',
+    icon: 'construct-outline',
+    activeIcon: 'construct',
+    title: 'Custom Mode',
+    subtitle: 'Challenge Reminders',
+    description: 'Reminders tied to your active Custom Mode challenge so you never lose momentum on your own rules.',
+    color: '#00BCD4',
+    gradientColors: ['#00BCD4', '#4DD0E1'],
+    emoji: '🛠️',
+    testType: 'custom_mode',
   },
 ];
 
@@ -245,8 +276,8 @@ const NotificationCard = ({
         />
       )}
 
-      {/* Test Button */}
-      {enabled && (
+      {/* Test Button — PRODUCTION GUARD: stripped unless running the dev variant */}
+      {enabled && IS_DEVELOPMENT && (
         <TouchableOpacity
           style={[styles.testButton, { backgroundColor: `${channel.color}15`, borderColor: `${channel.color}30` }]}
           onPress={onTest}
@@ -280,6 +311,12 @@ const NotificationSettingsScreen = ({ navigation }) => {
   const loadPreferences = async () => {
     try {
       const prefs = await notificationService.getAllPreferences();
+
+      // Merge game-mode preferences from the unified service (story/custom/daily)
+      const modePrefs = await gameModeNotificationService.getAllPreferences();
+      prefs.STORY_MODE = modePrefs.story_mode;
+      prefs.CUSTOM_MODE = modePrefs.custom_mode;
+
       setPreferences(prefs);
     } catch (error) {
       console.error('Failed to load preferences:', error);
@@ -291,6 +328,13 @@ const NotificationSettingsScreen = ({ navigation }) => {
   const handleToggle = useCallback(async (channel, newValue) => {
     // Optimistic UI update
     setPreferences(prev => ({ ...prev, [channel.id.toUpperCase()]: newValue }));
+
+    // Game-mode channels are owned by the unified GameModeNotificationService;
+    // toggling persists the pref AND (un)schedules in one call.
+    if (channel.mode) {
+      await gameModeNotificationService.setPreference(channel.modeId, newValue);
+      return;
+    }
 
     await notificationService.setPreference(channel.prefKey, newValue);
 
@@ -319,7 +363,11 @@ const NotificationSettingsScreen = ({ navigation }) => {
 
   const handleTest = useCallback(async (channel) => {
     try {
-      await notificationService.sendTestNotification(channel.testType);
+      if (channel.mode) {
+        await gameModeNotificationService.sendTestNotification(channel.modeId);
+      } else {
+        await notificationService.sendTestNotification(channel.testType);
+      }
       Alert.alert(
         `${channel.emoji} Test Sent!`,
         `A test "${channel.title}" notification has been fired. Check your notification tray!`

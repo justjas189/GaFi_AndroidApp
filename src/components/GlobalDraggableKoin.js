@@ -23,6 +23,10 @@ const BUBBLE_SIZE = 80; // Increased from 60 to 80 for larger mascot
 const SNAP_MARGIN = 20;
 const HIDE_TIMEOUT = 10000; // Hide bubble after 10 seconds of inactivity
 const EDGE_SNAP_THRESHOLD = 100;
+// A finger "tap" can jitter past the 10px pan-grab threshold, so the PanResponder
+// steals the gesture and TouchableOpacity.onPress never fires (= "tap does nothing").
+// Any release that moved less than this is reclassified as a tap and opens the chat.
+const TAP_MOVE_THRESHOLD = 18;
 
 const GlobalDraggableKoin = () => {
   const { colors } = useTheme();
@@ -42,9 +46,22 @@ const GlobalDraggableKoin = () => {
   const [lastActivity, setLastActivity] = useState(Date.now());
   const [isMinimized, setIsMinimized] = useState(false);
   const [showChatModal, setShowChatModal] = useState(false);
-  
+
+  // Imperative handle to ChatModal — lets the failsafe force-open the sheet
+  // directly (bypassing the visible prop) when parent state is desynced.
+  const chatModalRef = useRef(null);
+  // Ref mirror of showChatModal so the failsafe reads the CURRENT value even
+  // from the PanResponder's first-render closure (panResponder is built once
+  // via useRef, so it captured render-0's stale `showChatModal`).
+  const showChatModalRef = useRef(false);
+
   // Auto-hide timer
   const hideTimerRef = useRef(null);
+
+  // Keep the ref mirror in sync every time the real state changes.
+  useEffect(() => {
+    showChatModalRef.current = showChatModal;
+  }, [showChatModal]);
   
   // Create pan responder for dragging
   const panResponder = useRef(
@@ -76,16 +93,27 @@ const GlobalDraggableKoin = () => {
       ),
       onPanResponderRelease: (evt, gestureState) => {
         setIsDragging(false);
-        
+
         // Reset scale (use JS driver to match pan)
         Animated.spring(scale, {
           toValue: 1,
           useNativeDriver: false,
         }).start();
-        
+
         // Flatten the offset
         pan.flattenOffset();
-        
+
+        // ── Tap rescue ──────────────────────────────────────────────
+        // If the gesture barely moved, the PanResponder grabbed what was
+        // really a tap. Open the chat directly (and DON'T snap, so the
+        // bubble doesn't teleport to the edge on a tap).
+        const movedTotal = Math.abs(gestureState.dx) + Math.abs(gestureState.dy);
+        if (movedTotal < TAP_MOVE_THRESHOLD) {
+          console.log('[Koin] PanResponder release classified as TAP (moved=' + movedTotal.toFixed(1) + 'px) → opening chat');
+          openChat('panResponder');
+          return;
+        }
+
         // Get current position
         const currentX = pan.x._value;
         const currentY = pan.y._value;
@@ -175,15 +203,19 @@ const GlobalDraggableKoin = () => {
     ]).start();
   };
   
-  // Handle bubble tap
-  const handleBubbleTap = () => {
+  // Handle bubble tap → ALWAYS open chat (restore visuals first if minimized).
+  // `source` tells us in Metro which path fired: TouchableOpacity vs PanResponder.
+  const openChat = (source = 'touchable') => {
+    console.log(
+      `[Koin] TAP registered (source=${source}) | isMinimized=${isMinimized} | showChatModal(before)=${showChatModal}`
+    );
+
     if (isMinimized) {
       restoreBubble();
-      return;
     }
-    
+
     setLastActivity(Date.now());
-    
+
     // Quick scale animation for feedback
     Animated.sequence([
       Animated.timing(scale, {
@@ -197,9 +229,23 @@ const GlobalDraggableKoin = () => {
         useNativeDriver: false,
       }),
     ]).start();
-    
+
     // Open chat modal
+    const alreadyOpen = showChatModalRef.current;
+    console.log('[Koin] calling setShowChatModal(true) | alreadyOpen=' + alreadyOpen);
     setShowChatModal(true);
+
+    // ── Failsafe ────────────────────────────────────────────────
+    // If state is ALREADY true (desync: sheet was dismissed without the
+    // parent ever resetting to false) then setShowChatModal(true) is a
+    // true→true no-op → ChatModal's [visible] effect won't re-run → the
+    // sheet stays closed. Command it open directly through the ref.
+    // (With the onDismiss reset in ChatModal this should rarely trigger,
+    //  but it guarantees the bubble always opens the chat.)
+    if (alreadyOpen) {
+      console.log('[Koin] showChatModal already true → forcing present() via ref (failsafe)');
+      requestAnimationFrame(() => chatModalRef.current?.present());
+    }
   };
   
   // Show notification bubble
@@ -266,11 +312,14 @@ const GlobalDraggableKoin = () => {
           </View>
         )}*/}
         
-        {/* Main Draggable Mascot - Just the transparent image */}
+        {/* Main Draggable Mascot - Just the transparent image.
+            High zIndex/elevation + hitSlop so the tap target always wins over
+            anything painted underneath the floating bubble. */}
         <TouchableOpacity
           style={styles.mascotTouchable}
-          onPress={handleBubbleTap}
+          onPress={() => openChat('touchable')}
           activeOpacity={0.8}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           {/* Koin Mascot - Piggy Bank Image */}
           <MascotImage size={80} />
@@ -285,10 +334,13 @@ const GlobalDraggableKoin = () => {
         )}
       </Animated.View>
       
-      {/* Chat Modal - Context-aware overlay */}
-      <ChatModal 
-        visible={showChatModal} 
-        onClose={() => setShowChatModal(false)} 
+      {/* Chat Modal - Context-aware overlay.
+          ref → lets the failsafe force present() when state is desynced.
+          onClose → reset parent state; fired reliably via ChatModal's onDismiss. */}
+      <ChatModal
+        ref={chatModalRef}
+        visible={showChatModal}
+        onClose={() => setShowChatModal(false)}
       />
     </>
   );
@@ -297,14 +349,25 @@ const GlobalDraggableKoin = () => {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    zIndex: 9999,
-    elevation: 9999,
+    // Keep the bubble above ordinary screen content, but NOT at a runaway
+    // value. On Android `elevation` is a window-level z-order signal — 9999
+    // let the 80x80 bubble z-fight the BottomSheetModal's portal layer.
+    // ~20 stays above screens, safely BELOW the sheet (later portal sibling).
+    zIndex: 20,
+    elevation: 20,
+    // NOTE: do NOT set pointerEvents="box-none" here — this view carries the
+    // PanResponder handlers, and box-none would stop it from receiving touches,
+    // breaking both drag AND tap. The view is sized to the 80x80 bubble only, so
+    // it never covers (or swallows touches for) the rest of the screen anyway.
   },
   mascotTouchable: {
     width: BUBBLE_SIZE,
     height: BUBBLE_SIZE,
     justifyContent: 'center',
     alignItems: 'center',
+    // Keep the tap surface on top of anything beneath the floating bubble
+    zIndex: 21,
+    elevation: 21,
   },
   notificationBadge: {
     position: 'absolute',

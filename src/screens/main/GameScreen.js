@@ -397,9 +397,56 @@ export default function BuildScreen() {
     [screenWidth, screenHeight],
   );
 
+  // Helper: resolve where the character should APPEAR when entering a map.
+  // Priority (Issue 2 — continuous travel):
+  //   1. explicit per-origin entryPoints[fromMapId]
+  //   2. floor_change escalator that leads back to fromMapId (mall floors)
+  //   3. the map's travel-exit door (exitSpawnPoint) — single-door maps
+  //   4. default centre spawnPoint
+  // Percentages are relative to the rendered content area, so callers pass
+  // contentSize (NOT screen) dimensions.
+  const resolveEntrySpawn = useCallback(
+    (map, fromMapId, w, h) => {
+      if (!map) return { x: w * 0.5, y: h * 0.5 };
+
+      const perOrigin = fromMapId && map.entryPoints?.[fromMapId];
+      if (perOrigin) return { x: w * perOrigin.x, y: h * perOrigin.y };
+
+      const arrivalEscalator = map.locations?.find(
+        (loc) =>
+          loc.action === 'floor_change' &&
+          loc.targetFloor === fromMapId &&
+          loc.exitSpawnPoint,
+      );
+      if (arrivalEscalator) {
+        return {
+          x: w * arrivalEscalator.exitSpawnPoint.x,
+          y: h * arrivalEscalator.exitSpawnPoint.y,
+        };
+      }
+
+      const travelExit = map.locations?.find(
+        (loc) => loc.action === 'travel' && loc.exitSpawnPoint,
+      );
+      if (travelExit) {
+        return {
+          x: w * travelExit.exitSpawnPoint.x,
+          y: h * travelExit.exitSpawnPoint.y,
+        };
+      }
+
+      return resolveSpawn(map.spawnPoint, w, h);
+    },
+    [resolveSpawn],
+  );
+
   // Current map state
   const [currentMapId, setCurrentMapId] = useState('dorm');
   const currentMap = MAPS[currentMapId];
+  // Set by travel/floor handlers right before they switch currentMapId: tells the
+  // map-change effect to land at the doorway we came through instead of the room
+  // centre. Shape: { mapId, fromMapId }. Consumed + cleared by the effect. (Issue 2)
+  const pendingEntrySpawnRef = useRef(null);
 
   const profileUserType = user?.userType === 'employee' ? 'employee' : 'student';
 
@@ -784,6 +831,11 @@ export default function BuildScreen() {
   // Level 2 (Goal Setting) - Savings goals tracking
   const [savingsGoals, setSavingsGoals] = useState([]);
   const [goalAllocations, setGoalAllocations] = useState({});
+  // Mirror latest allocations into a ref. fetchWeeklySpending runs from an effect
+  // whose closure can be stale; reading the ref guarantees it re-adds the CURRENT
+  // committed allocations and never refunds them on a day transition. (Issue 1)
+  const goalAllocationsRef = useRef(goalAllocations);
+  goalAllocationsRef.current = goalAllocations;
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [showGoalAllocationModal, setShowGoalAllocationModal] = useState(false);
   const [showDailyTasksModal, setShowDailyTasksModal] = useState(false);
@@ -1686,17 +1738,29 @@ export default function BuildScreen() {
       collisionSystem.debugPrintPassabilityMap();
     }
 
-    // Reset character to spawn point when map changes
+    // Position the character on map change. If a travel/floor handler queued an
+    // entry (pendingEntrySpawnRef matching this map), land at the corresponding
+    // doorway so inter-map travel feels continuous. Otherwise (fresh load,
+    // resume, or a programmatic map switch) fall back to the map's default
+    // centre spawn. Previously this ALWAYS reset to centre, clobbering the
+    // doorway spawn the travel handler had just set. (Issue 2)
     const newMap = MAPS[currentMapId];
     if (newMap) {
       const halfChar = getCharSize() / 2;
-      const spawn = resolveSpawn(newMap.spawnPoint, contentSize.width, contentSize.height);
-      const spawnX = spawn.x - halfChar;
-      const spawnY = spawn.y - halfChar;
-      console.log('📍 Resetting character to spawn point:', spawnX, spawnY);
-      setAnimatedPosition(spawnX, spawnY);
+      const entry = pendingEntrySpawnRef.current;
+      const fromMapId =
+        entry && entry.mapId === currentMapId ? entry.fromMapId : null;
+      pendingEntrySpawnRef.current = null;
+
+      const spawn = fromMapId
+        ? resolveEntrySpawn(newMap, fromMapId, contentSize.width, contentSize.height)
+        : resolveSpawn(newMap.spawnPoint, contentSize.width, contentSize.height);
+
+      setAnimatedPosition(spawn.x - halfChar, spawn.y - halfChar);
       commitCharacterPosition(spawn);
-      commitCurrentLocation('Hallway 🚶');
+      commitCurrentLocation(
+        fromMapId ? `${newMap.name} ${newMap.icon}` : 'Hallway 🚶',
+      );
     }
   }, [currentMapId]);
 
@@ -2085,7 +2149,17 @@ export default function BuildScreen() {
         .lte('date', endDateStr);
 
       if (data) {
-        const total = data.reduce((sum, expense) => sum + expense.amount, 0);
+        const expenseTotal = data.reduce((sum, expense) => sum + expense.amount, 0);
+        // Goal allocations are part of weekly "spending" (funds committed to
+        // savings goals) but are NOT stored as expense rows — they live on the
+        // story session. Re-add them here so re-deriving weeklySpending from the
+        // expenses table on a day transition does NOT refund money the player
+        // already allocated on a previous day. (Issue 1)
+        const allocatedTotal = Object.values(goalAllocationsRef.current).reduce(
+          (sum, val) => sum + (Number(val) || 0),
+          0,
+        );
+        const total = expenseTotal + allocatedTotal;
         setWeeklySpending(total);
 
         // Re-derive per-category spending from actual expense data
@@ -2955,25 +3029,17 @@ export default function BuildScreen() {
     const newMap = MAPS[mapId];
     if (!newMap) return;
 
+    const fromMapId = currentMapId; // capture origin BEFORE switching maps
+
     setShowTransportModal(false);
+    // Queue the doorway entry so the map-change effect lands us at the gateway we
+    // came through instead of the room centre. (Issue 2)
+    pendingEntrySpawnRef.current = { mapId, fromMapId };
     setCurrentMapId(mapId);
 
-    // Find the exit location to spawn at
-    const exitLocation = newMap.locations.find(loc => loc.action === 'travel');
-    let spawnX, spawnY;
-
-    if (exitLocation && exitLocation.exitSpawnPoint) {
-      // Spawn at the exit point (percentage-based coordinates)
-      spawnX = contentSize.width * exitLocation.exitSpawnPoint.x;
-      spawnY = contentSize.height * exitLocation.exitSpawnPoint.y;
-    } else {
-      // Fallback to default spawn point
-      const fallback = resolveSpawn(newMap.spawnPoint, contentSize.width, contentSize.height);
-      spawnX = fallback.x;
-      spawnY = fallback.y;
-    }
-
-    const spawn = { x: spawnX, y: spawnY };
+    // Optimistic positioning so the move feels instant; the map-change effect
+    // re-affirms the exact same doorway spawn (no centre snap).
+    const spawn = resolveEntrySpawn(newMap, fromMapId, contentSize.width, contentSize.height);
     commitCharacterPosition(spawn);
     const halfChar = getCharSize() / 2;
     setAnimatedPosition(spawn.x - halfChar, spawn.y - halfChar);
@@ -3029,24 +3095,13 @@ export default function BuildScreen() {
     if (!newMap) return;
 
     const previousMapId = currentMapId;
+    // Queue doorway entry so the map-change effect keeps us at the arrival
+    // escalator instead of snapping to the floor centre. resolveEntrySpawn
+    // matches the floor_change escalator whose targetFloor === previousMapId. (Issue 2)
+    pendingEntrySpawnRef.current = { mapId: floorId, fromMapId: previousMapId };
     setCurrentMapId(floorId);
 
-    // Find the escalator on the destination floor that leads back to where we came from
-    const arrivalEscalator = newMap.locations.find(loc =>
-      loc.action === 'floor_change' && loc.targetFloor === previousMapId
-    );
-
-    let spawnX, spawnY;
-    if (arrivalEscalator && arrivalEscalator.exitSpawnPoint) {
-      spawnX = contentSize.width * arrivalEscalator.exitSpawnPoint.x;
-      spawnY = contentSize.height * arrivalEscalator.exitSpawnPoint.y;
-    } else {
-      const fallback = resolveSpawn(newMap.spawnPoint, contentSize.width, contentSize.height);
-      spawnX = fallback.x;
-      spawnY = fallback.y;
-    }
-
-    const spawn = { x: spawnX, y: spawnY };
+    const spawn = resolveEntrySpawn(newMap, previousMapId, contentSize.width, contentSize.height);
     commitCharacterPosition(spawn);
     const halfChar = getCharSize() / 2;
     setAnimatedPosition(spawn.x - halfChar, spawn.y - halfChar);

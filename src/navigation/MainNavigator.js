@@ -3,8 +3,17 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { ThemeContext } from '../context/ThemeContext';
 import { AudioProvider } from '../context/AudioContext';
+
+// Global overlays — must live INSIDE BottomSheetModalProvider (ChatModal's
+// imperative present() reads BottomSheetModalInternalContext) and render ABOVE
+// the screen stack. MainNavigator only mounts for authenticated + onboarded
+// users, so the old auth gate in App.js is no longer needed here.
+import GlobalDraggableKoin from '../components/GlobalDraggableKoin';
+import KoinTutorialOverlay from '../components/KoinTutorialOverlay';
+import AppTourManager from '../components/AppTourManager';
 
 // Core screens
 import HomeScreen from '../screens/main/HomeScreen';
@@ -14,6 +23,7 @@ import CalendarScreen from '../screens/main/CalendarScreen';
 import NoteScreen from '../screens/main/NoteScreen';
 import AddNoteScreen from '../screens/main/AddNoteScreen';
 import SettingsScreen from '../screens/main/SettingsScreen';
+import FAQScreen from '../screens/main/FAQScreen';
 import LearnScreen from '../screens/main/LearnScreen';
 import GamificationScreen from '../screens/main/GamificationScreen';
 import NotificationSettingsScreen from '../screens/main/NotificationSettingsScreen';
@@ -118,33 +128,42 @@ const TabNavigator = () => {
 const MainNavigator = () => {
   return (
     <AudioProvider>
-    <View style={{ flex: 1 }}>
-      <Stack.Navigator
-        screenOptions={{
-          headerShown: false,
-          presentation: 'modal',
-        }}
-      >
-        <Stack.Screen name="MainTabs" component={TabNavigator} />
-        <Stack.Screen name="ExpenseGraph" component={ExpenseGraphScreen} />
-        <Stack.Screen name="AddNote" component={AddNoteScreen} />
-        <Stack.Screen name="Notes" component={NoteScreen} />
-        <Stack.Screen name="Calendar" component={CalendarScreen} />
-        <Stack.Screen name="Settings" component={SettingsScreen} />
-        <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
-        <Stack.Screen name="NotificationTest" component={NotificationTestScreen} />
-        <Stack.Screen name="Gamification" component={GamificationScreen} />
-        <Stack.Screen name="Achievements" component={AchievementDashboard} />
-        <Stack.Screen name="Budget" component={BudgetManagementScreen} />
-        <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
-        <Stack.Screen name="FriendRequests" component={FriendRequestsScreen} />
-        <Stack.Screen name="FriendsList" component={FriendsListScreen} />
-        <Stack.Screen name="ManageFriends" component={ManageFriendsScreen} />
-        <Stack.Screen name="Home" component={HomeScreen} />
-        <Stack.Screen name="OldLearn" component={LearnScreen} />
-        <Stack.Screen name="CustomModeDashboard" component={CustomModeDashboard} />
-      </Stack.Navigator>
-    </View>
+      <BottomSheetModalProvider>
+        <View style={{ flex: 1 }}>
+          <Stack.Navigator
+            screenOptions={{
+              headerShown: false,
+              presentation: 'modal',
+            }}
+          >
+            <Stack.Screen name="MainTabs" component={TabNavigator} />
+            <Stack.Screen name="ExpenseGraph" component={ExpenseGraphScreen} />
+            <Stack.Screen name="AddNote" component={AddNoteScreen} />
+            <Stack.Screen name="Notes" component={NoteScreen} />
+            <Stack.Screen name="Calendar" component={CalendarScreen} />
+            <Stack.Screen name="Settings" component={SettingsScreen} />
+            <Stack.Screen name="FAQ" component={FAQScreen} />
+            <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
+            <Stack.Screen name="NotificationTest" component={NotificationTestScreen} />
+            <Stack.Screen name="Gamification" component={GamificationScreen} />
+            <Stack.Screen name="Achievements" component={AchievementDashboard} />
+            <Stack.Screen name="Budget" component={BudgetManagementScreen} />
+            <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
+            <Stack.Screen name="FriendRequests" component={FriendRequestsScreen} />
+            <Stack.Screen name="FriendsList" component={FriendsListScreen} />
+            <Stack.Screen name="ManageFriends" component={ManageFriendsScreen} />
+            <Stack.Screen name="Home" component={HomeScreen} />
+            <Stack.Screen name="OldLearn" component={LearnScreen} />
+            <Stack.Screen name="CustomModeDashboard" component={CustomModeDashboard} />
+          </Stack.Navigator>
+
+          {/* Rendered after the navigator → paints over every screen; inside the
+              provider → ChatModal's present() finds its context. */}
+          <KoinTutorialOverlay />
+          <AppTourManager />
+          <GlobalDraggableKoin />
+        </View>
+      </BottomSheetModalProvider>
     </AudioProvider>
   );
 };

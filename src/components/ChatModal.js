@@ -1,5 +1,9 @@
 // Modal Chat Interface for Global MonT Bubble
-// Built on @gorhom/bottom-sheet for reliable layout, gestures, and keyboard handling.
+// Built on React Native's native <Modal>. Native Modal renders in its own
+// platform window ABOVE every react-native-screens native screen, so the sheet
+// can never be swallowed by the Fabric screen z-order (the gorhom invisibility
+// bug). No Portal context boundary either → footer/input live in-tree, so the
+// old module-level ref/listener bridge is gone.
 
 import React, { useState, useEffect, useRef, useContext, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
 import {
@@ -7,22 +11,18 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  Pressable,
   Platform,
   Dimensions,
   ActivityIndicator,
   Keyboard,
+  Modal,
+  FlatList,
+  TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Markdown from 'react-native-markdown-display';
-import BottomSheet, {
-  BottomSheetModal,
-  BottomSheetFlatList,
-  BottomSheetTextInput,
-  BottomSheetBackdrop,
-  BottomSheetFooter,
-  BottomSheetView,
-} from '@gorhom/bottom-sheet';
 import { useTheme } from '../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
 import { DataContext } from '../context/DataContext';
@@ -33,121 +33,68 @@ import MascotImage from './MascotImage';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-// ──────────────────────────────────────────────
-// Module-level bridge — avoids the React Portal context boundary.
-// @gorhom/bottom-sheet renders footerComponent in a Portal that sits
-// OUTSIDE any Provider wrapping <BottomSheetModal>, so Context can't
-// reach the footer. Using plain refs + a tiny listener set instead.
-// ──────────────────────────────────────────────
-
-// Always points to the latest sendMessage callback (updated every render)
-const _sendMessageRef = { current: null };
-
-// Lets ChatFooterComponent subscribe to isTyping changes from ChatModal
-const _isTypingListeners = new Set();
-const _notifyIsTyping = (val) => _isTypingListeners.forEach(fn => fn(val));
-
-// Keyboard height bridge — footer publishes, ChatModal subscribes
-const _keyboardHeightListeners = new Set();
-const _notifyKeyboardHeight = (val) => _keyboardHeightListeners.forEach(fn => fn(val));
-
-// Bottom safe-area inset bridge — ChatModal publishes, footer subscribes
-const _bottomInsetRef = { current: 0 };
+// Sheet covers up to this fraction of the screen when the keyboard is hidden.
+const SHEET_MAX_HEIGHT_RATIO = 0.88;
 
 // ──────────────────────────────────────────────
-// Standalone footer component — defined OUTSIDE ChatModal so its
-// identity (and thus the footerComponent prop) never changes,
-// preventing the unmount/remount that kills TextInput focus.
+// Input bar — defined OUTSIDE ChatModal so its identity never changes (no
+// remount → TextInput keeps focus). Holds its own `inputText` state so typing
+// re-renders only the input row, NOT the message FlatList.
 // ──────────────────────────────────────────────
-const ChatFooterComponent = (props) => {
-  const { colors } = useTheme(); // works — ThemeProvider is above BottomSheetModalProvider
+const ChatInputBar = ({ colors, onSend, isTyping, bottomInset }) => {
   const [inputText, setInputText] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  // Read the safe-area bottom inset published by ChatModal
-  const safeBottomInset = _bottomInsetRef.current;
-
-  // Subscribe to isTyping changes pushed from ChatModal
-  useEffect(() => {
-    const listener = (val) => setIsTyping(val);
-    _isTypingListeners.add(listener);
-    return () => _isTypingListeners.delete(listener);
-  }, []);
-
-  // Track keyboard height for bottomInset + notify ChatModal for FlatList padding
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
-    const showSub = Keyboard.addListener(showEvent, (e) => {
-      const h = e.endCoordinates.height;
-      setKeyboardHeight(h);
-      _notifyKeyboardHeight(h);
-    });
-    const hideSub = Keyboard.addListener(hideEvent, () => {
-      setKeyboardHeight(0);
-      _notifyKeyboardHeight(0);
-    });
-
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
 
   const handleSend = useCallback(() => {
     const trimmed = inputText.trim();
     if (!trimmed || isTyping) return;
-    _sendMessageRef.current?.(trimmed);
+    onSend(trimmed);
     setInputText('');
-  }, [inputText, isTyping]);
+  }, [inputText, isTyping, onSend]);
 
   return (
-    <BottomSheetFooter {...props} bottomInset={keyboardHeight}>
-      <View style={[
-        styles.inputArea,
-        {
-          backgroundColor: colors.background,
-          borderTopColor: colors.border || '#3C3C3C',
-          // Fill the safe-area gap so the tab bar never bleeds through
-          paddingBottom: Math.max(safeBottomInset, Platform.OS === 'ios' ? 32 : 16),
-        }
-      ]}>
-        <View style={[styles.inputContainer, { backgroundColor: colors.card }]}>
-          <BottomSheetTextInput
-            style={[styles.textInput, { color: colors.text }]}
-            placeholder="Ask Koin anything..."
-            placeholderTextColor={colors.textSecondary || colors.text + '60'}
-            value={inputText}
-            onChangeText={setInputText}
-            multiline
-            maxLength={500}
-            returnKeyType="send"
-            blurOnSubmit={false}
-            onSubmitEditing={handleSend}
+    <View style={[
+      styles.inputArea,
+      {
+        backgroundColor: colors.background,
+        borderTopColor: colors.border || '#3C3C3C',
+        // Fill the safe-area gap so the tab bar never bleeds through
+        paddingBottom: Math.max(bottomInset, Platform.OS === 'ios' ? 32 : 16),
+      }
+    ]}>
+      <View style={[styles.inputContainer, { backgroundColor: colors.card }]}>
+        <TextInput
+          style={[styles.textInput, { color: colors.text }]}
+          placeholder="Ask Koin anything..."
+          placeholderTextColor={colors.textSecondary || colors.text + '60'}
+          value={inputText}
+          onChangeText={setInputText}
+          multiline
+          maxLength={500}
+          returnKeyType="send"
+          blurOnSubmit={false}
+          onSubmitEditing={handleSend}
+        />
+
+        <TouchableOpacity
+          style={[
+            styles.sendBtn,
+            { backgroundColor: inputText.trim() ? colors.primary : (colors.border || '#3C3C3C') }
+          ]}
+          onPress={handleSend}
+          disabled={!inputText.trim() || isTyping}
+        >
+          <Ionicons
+            name="arrow-up"
+            size={20}
+            color={inputText.trim() ? '#FFF' : (colors.textSecondary || colors.text + '60')}
           />
-
-          <TouchableOpacity
-            style={[
-              styles.sendBtn,
-              { backgroundColor: inputText.trim() ? colors.primary : (colors.border || '#3C3C3C') }
-            ]}
-            onPress={handleSend}
-            disabled={!inputText.trim() || isTyping}
-          >
-            <Ionicons
-              name="arrow-up"
-              size={20}
-              color={inputText.trim() ? '#FFF' : (colors.textSecondary || colors.text + '60')}
-            />
-          </TouchableOpacity>
-        </View>
-
-        <Text style={[styles.poweredBy, { color: colors.textSecondary || colors.text + '60' }]}>
-          Powered by NVIDIA AI
-        </Text>
+        </TouchableOpacity>
       </View>
-    </BottomSheetFooter>
+
+      <Text style={[styles.poweredBy, { color: colors.textSecondary || colors.text + '60' }]}>
+        Powered by NVIDIA AI
+      </Text>
+    </View>
   );
 };
 
@@ -248,26 +195,26 @@ const ChatModal = forwardRef(({ visible, onClose }, ref) => {
   const { userInfo } = useContext(AuthContext);
   const insets = useSafeAreaInsets();
 
-  // Publish the bottom inset so ChatFooterComponent can read it
-  _bottomInsetRef.current = insets.bottom;
-
-  // Bottom sheet ref
-  const bottomSheetRef = useRef(null);
   const flatListRef = useRef(null);
 
-  // Snap points: 88% of screen height
-  const snapPoints = useMemo(() => ['88%'], []);
-
-  // Keyboard-aware padding for the FlatList so messages stay visible
-  const [kbHeight, setKbHeight] = useState(0);
+  // Keyboard height drives sheet height + bottom offset so the input bar always
+  // clears the keyboard (native Modal doesn't auto-resize for the keyboard).
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   useEffect(() => {
-    const listener = (h) => {
-      setKbHeight(h);
-      // Auto-scroll so the latest message stays visible above the keyboard
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+      // Keep the latest message visible above the keyboard
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 120);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
     };
-    _keyboardHeightListeners.add(listener);
-    return () => _keyboardHeightListeners.delete(listener);
   }, []);
 
   // Chat state
@@ -282,16 +229,27 @@ const ChatModal = forwardRef(({ visible, onClose }, ref) => {
     conversationHistoryRef.current = conversationHistory;
   }, [conversationHistory]);
 
-  // Expose present/dismiss via ref so the parent can call them directly
+  // Imperative handle kept for back-compat with GlobalDraggableKoin's failsafe.
+  // Visibility is now fully controlled by the `visible` prop + native Modal, so
+  // there is no internal present/dismiss state that can desync — present() is a
+  // safe no-op; dismiss() just asks the parent to close.
   useImperativeHandle(ref, () => ({
-    present: () => bottomSheetRef.current?.present(),
-    dismiss: () => bottomSheetRef.current?.dismiss(),
+    present: () => {},
+    dismiss: () => onClose(),
   }));
 
-  // Present / dismiss the sheet when `visible` changes
+  // ── DEBUG: trace every change to the `visible` prop ──────────────────────────
   useEffect(() => {
-    if (visible) {
-      // Detect screen and prepare welcome message before presenting
+    console.log('[ChatModal] visible prop changed →', visible);
+  }, [visible]);
+
+  // Seed the contextual welcome each time the modal opens. The native Modal
+  // shows/hides purely from the `visible` prop, so there is no present() to call.
+  useEffect(() => {
+    if (!visible) return;
+
+    try {
+      // Detect screen and prepare welcome message
       let screenName = 'Home';
       try {
         const navState = navigation.getState();
@@ -315,20 +273,25 @@ const ChatModal = forwardRef(({ visible, onClose }, ref) => {
       const seedHistory = [{ role: 'assistant', content: welcomeMessage }];
       setConversationHistory(seedHistory);
       conversationHistoryRef.current = seedHistory;
-
-      bottomSheetRef.current?.present();
-    } else {
-      bottomSheetRef.current?.dismiss();
+    } catch (err) {
+      // Fallback welcome so the sheet still opens with something on screen
+      console.log('[ChatModal] Welcome build failed, using fallback:', err);
+      setCurrentScreen('Home');
+      setMessages([{
+        id: Date.now().toString(),
+        text: "Hi! I'm Koin, your AI finance buddy. How can I help? 💰",
+        sender: 'koin',
+        timestamp: new Date(),
+        type: 'welcome',
+      }]);
     }
   }, [visible]);
 
-  // When the sheet is dismissed via swipe-down, notify the parent
-  const handleSheetChanges = useCallback((index) => {
-    if (index === -1) {
-      // Sheet was dismissed
-      Keyboard.dismiss();
-      onClose();
-    }
+  // Single close path — dismiss keyboard, then tell the parent to flip visible=false.
+  // Used by backdrop tap, close button, and Android hardware back (onRequestClose).
+  const handleClose = useCallback(() => {
+    Keyboard.dismiss();
+    onClose();
   }, [onClose]);
 
   // ──────────────────────────────────────────────
@@ -610,7 +573,6 @@ YOUR PERSONALITY:
     const userQuestion = messageText;
     setMessages(prev => [...prev, userMessage]);
     setIsTyping(true);
-    _notifyIsTyping(true);
 
     setTimeout(() => {
       flatListRef.current?.scrollToEnd({ animated: true });
@@ -675,15 +637,11 @@ YOUR PERSONALITY:
       }]);
     } finally {
       setIsTyping(false);
-      _notifyIsTyping(false);
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
   }, [isTyping, currentScreen]);
-
-  // Always keep the bridge ref up-to-date so ChatFooterComponent calls the latest version
-  _sendMessageRef.current = sendMessage;
 
   // ──────────────────────────────────────────────
   // Smart fallback when AI fails
@@ -870,36 +828,11 @@ YOUR PERSONALITY:
   }, [isTyping, messages.length, colors, currentScreen]);
 
   // ──────────────────────────────────────────────
-  // Custom backdrop
-  // ──────────────────────────────────────────────
-  const renderBackdrop = useCallback(
-    (props) => (
-      <BottomSheetBackdrop
-        {...props}
-        disappearsOnIndex={-1}
-        appearsOnIndex={0}
-        opacity={0.5}
-        pressBehavior="close"
-      />
-    ),
-    []
-  );
-
-  // ──────────────────────────────────────────────
-  // Context value for the standalone footer component
-  // ──────────────────────────────────────────────
-  const chatInputContextValue = useMemo(() => ({
-    colors,
-    onSendMessage: sendMessage,
-    isTyping,
-  }), [colors, sendMessage, isTyping]);
-
-  // ──────────────────────────────────────────────
   // Sheet content handle (the drag bar + header)
   // ──────────────────────────────────────────────
-  const renderHandle = useCallback(() => (
+  const renderHandle = () => (
     <View style={[styles.handleWrapper, { backgroundColor: colors.background }]}>
-      {/* Drag Handle */}
+      {/* Grab bar (visual only — drag-to-close removed with the native Modal) */}
       <View style={styles.handleBar}>
         <View style={[styles.handle, { backgroundColor: colors.border || '#3C3C3C' }]} />
       </View>
@@ -908,7 +841,7 @@ YOUR PERSONALITY:
       <View style={[styles.header, { borderBottomColor: colors.border || '#3C3C3C' }]}>
         <View style={styles.headerLeft}>
           <View style={[styles.headerAvatar, { backgroundColor: colors.primary + '20' }]}>
-            <MascotImage size={40} />
+            <MascotImage size={70} />
           </View>
           <View style={styles.headerInfo}>
             <Text style={[styles.headerTitle, { color: colors.text }]}>Koin</Text>
@@ -923,62 +856,92 @@ YOUR PERSONALITY:
 
         <TouchableOpacity
           style={[styles.closeBtn, { backgroundColor: colors.card }]}
-          onPress={() => {
-            bottomSheetRef.current?.dismiss();
-          }}
+          onPress={handleClose}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Ionicons name="close" size={22} color={colors.text} />
         </TouchableOpacity>
       </View>
     </View>
-  ), [colors, currentScreen]);
+  );
 
   // ──────────────────────────────────────────────
-  // Render
+  // Render — native Modal sits in its own window above all native screens.
+  // sheetHeight shrinks to fit above the keyboard; marginBottom lifts the
+  // bottom-anchored sheet so the input bar always clears it.
   // ──────────────────────────────────────────────
+  const sheetHeight = Math.min(
+    screenHeight * SHEET_MAX_HEIGHT_RATIO,
+    screenHeight - keyboardHeight - insets.top - 8
+  );
+
   return (
-    <BottomSheetModal
-      ref={bottomSheetRef}
-      index={0}
-      snapPoints={snapPoints}
-      onChange={handleSheetChanges}
-      enablePanDownToClose={true}
-      enableDynamicSizing={false}
-      backdropComponent={renderBackdrop}
-      handleComponent={renderHandle}
-      footerComponent={ChatFooterComponent}
-      keyboardBehavior="interactive"
-      keyboardBlurBehavior="restore"
-      android_keyboardInputMode="adjustPan"
-      backgroundStyle={{ backgroundColor: colors.background }}
-      style={styles.sheetContainer}
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      statusBarTranslucent
+      onRequestClose={handleClose}
     >
-      <BottomSheetFlatList
-        ref={flatListRef}
-        data={messages}
-        renderItem={renderMessage}
-        keyExtractor={item => item.id}
-        contentContainerStyle={[
-          styles.messagesList,
-          // Add extra bottom padding when keyboard is open so messages
-          // aren't hidden behind the footer + keyboard
-          kbHeight > 0 && { paddingBottom: 100 + kbHeight },
-        ]}
-        showsVerticalScrollIndicator={false}
-        ListFooterComponent={renderListFooter}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="interactive"
-      />
-    </BottomSheetModal>
+      <View style={styles.modalRoot}>
+        {/* Dimmed backdrop — tap to close */}
+        <Pressable style={styles.backdrop} onPress={handleClose} />
+
+        {/* Bottom sheet */}
+        <View
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: colors.background,
+              height: sheetHeight,
+              marginBottom: keyboardHeight,
+            },
+          ]}
+        >
+          {renderHandle()}
+
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            renderItem={renderMessage}
+            keyExtractor={item => item.id}
+            style={styles.messagesFlex}
+            contentContainerStyle={styles.messagesList}
+            showsVerticalScrollIndicator={false}
+            ListFooterComponent={renderListFooter}
+            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+          />
+
+          <ChatInputBar
+            colors={colors}
+            onSend={sendMessage}
+            isTyping={isTyping}
+            bottomInset={keyboardHeight > 0 ? 0 : insets.bottom}
+          />
+        </View>
+      </View>
+    </Modal>
   );
 });
 
 const styles = StyleSheet.create({
-  sheetContainer: {
+  modalRoot: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  sheet: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+    overflow: 'hidden',
+  },
+  messagesFlex: {
+    flex: 1,
   },
   handleWrapper: {
     borderTopLeftRadius: 24,
@@ -1044,7 +1007,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
     // Extra bottom padding so messages don't hide behind the fixed footer
-    paddingBottom: 100,
+    paddingBottom: 24,
   },
   messageRow: {
     marginBottom: 16,
@@ -1146,8 +1109,6 @@ const styles = StyleSheet.create({
   inputArea: {
     paddingHorizontal: 16,
     paddingTop: 12,
-    // paddingBottom is now set dynamically in ChatFooterComponent using the
-    // safe-area bottom inset so the background fills the gap completely.
     paddingBottom: 16,
     borderTopWidth: 1,
   },
