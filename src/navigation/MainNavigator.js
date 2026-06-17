@@ -23,6 +23,7 @@ import CalendarScreen from '../screens/main/CalendarScreen';
 import NoteScreen from '../screens/main/NoteScreen';
 import AddNoteScreen from '../screens/main/AddNoteScreen';
 import SettingsScreen from '../screens/main/SettingsScreen';
+import BackgroundMusicScreen from '../screens/main/BackgroundMusicScreen';
 import FAQScreen from '../screens/main/FAQScreen';
 import LearnScreen from '../screens/main/LearnScreen';
 import GamificationScreen from '../screens/main/GamificationScreen';
@@ -142,6 +143,7 @@ const MainNavigator = () => {
             <Stack.Screen name="Notes" component={NoteScreen} />
             <Stack.Screen name="Calendar" component={CalendarScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} />
+            <Stack.Screen name="BackgroundMusic" component={BackgroundMusicScreen} />
             <Stack.Screen name="FAQ" component={FAQScreen} />
             <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
             <Stack.Screen name="NotificationTest" component={NotificationTestScreen} />

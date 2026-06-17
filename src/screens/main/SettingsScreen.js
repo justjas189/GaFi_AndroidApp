@@ -293,6 +293,25 @@ const SettingsScreen = ({ navigation }) => {
             <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
           </TouchableOpacity>
 
+          <TouchableOpacity
+            style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
+            onPress={() => navigation.navigate('BackgroundMusic')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.settingItemLeft}>
+              <View style={[styles.settingIconContainer, { backgroundColor: `${theme.colors.primary}20` }]}>
+                <Ionicons name="musical-notes-outline" size={20} color={theme.colors.primary} />
+              </View>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>Background Music</Text>
+                <Text style={[styles.settingValue, { color: theme.colors.text }]}>
+                  Pick a track & view credits
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
+          </TouchableOpacity>
+
           {/* PRODUCTION GUARD: Test Notifications only exists in the dev variant */}
           {IS_DEVELOPMENT && (
             <TouchableOpacity
