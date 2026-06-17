@@ -292,7 +292,7 @@ class DatabaseManager {
           budget_categories (*)
         `)
         .eq('user_id', userId)
-        .single(),
+        .maybeSingle(), // new users have 0 budget rows; .single() would 406 (PGRST116)
       'getUserBudget',
       { userId }
     );

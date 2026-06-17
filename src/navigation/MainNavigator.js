@@ -4,6 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemeContext } from '../context/ThemeContext';
+import { AudioProvider } from '../context/AudioContext';
 
 // Core screens
 import HomeScreen from '../screens/main/HomeScreen';
@@ -116,6 +117,7 @@ const TabNavigator = () => {
 
 const MainNavigator = () => {
   return (
+    <AudioProvider>
     <View style={{ flex: 1 }}>
       <Stack.Navigator
         screenOptions={{
@@ -143,6 +145,7 @@ const MainNavigator = () => {
         <Stack.Screen name="CustomModeDashboard" component={CustomModeDashboard} />
       </Stack.Navigator>
     </View>
+    </AudioProvider>
   );
 };
 

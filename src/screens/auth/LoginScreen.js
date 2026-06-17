@@ -17,7 +17,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { supabase } from '../../config/supabase';
-import { reset } from '../../navigation/navigationRef';
 import GoogleSignInButton from '../../components/auth/GoogleSignInButton';
 
 const LoginScreen = ({ navigation }) => {
@@ -62,15 +61,13 @@ const LoginScreen = ({ navigation }) => {
       }
 
       if (success && session) {
-        // Small delay to ensure AuthContext state is updated
-        setTimeout(() => {
-          if (needsOnboarding) {
-            reset('Onboarding');
-          } else {
-            reset('Main');
-          }
-        }, 100);
-      } else {
+        // No manual navigation here. AuthContext sets userToken, and App.js's
+        // conditional render swaps Auth -> Onboarding/Main automatically (it
+        // reads hasOnboarded_<id> to pick the target). A manual
+        // reset('Main') races that swap and throws "RESET ... was not handled
+        // by any navigator" — Main isn't mounted yet (or the user is headed to
+        // Onboarding, so Main doesn't exist). Same hands-off pattern as Google.
+      } else if (!needsVerification) {
         Alert.alert('Login Failed', error || 'Please check your credentials and try again.');
       }
     } catch (err) {

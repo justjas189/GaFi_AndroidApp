@@ -230,7 +230,7 @@ export class BudgetDatabaseService {
         .from('budgets')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle(); // 0 rows for new users -> { data: null } instead of 406
 
       if (fetchError && fetchError.code !== 'PGRST116') {
         DebugUtils.log('DB_SERVICE', 'Budget fetch error', { userId, error: fetchError });
@@ -402,7 +402,7 @@ export class BudgetDatabaseService {
         .from('budgets')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle(); // 0 rows for new users -> { data: null } instead of 406
 
       let budget;
       

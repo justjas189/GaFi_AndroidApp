@@ -53,6 +53,8 @@ export default {
       ],
       "@react-native-community/datetimepicker",
       "expo-audio",
+      "react-native-audio-api",
+      "expo-font",
       [
         "@react-native-google-signin/google-signin",
         {

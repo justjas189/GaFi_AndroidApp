@@ -1,7 +1,7 @@
 import React, { useState, useRef, useContext, useEffect, useCallback, useMemo } from 'react';
 import { View, StyleSheet, ImageBackground, Dimensions, TouchableWithoutFeedback, Animated, Modal, Text, TextInput, TouchableOpacity, Alert, ScrollView, SectionList, Easing, Image, useWindowDimensions, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useIsFocused } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
 import { AuthContext } from '../../context/AuthContext';
 import { DataContext } from '../../context/DataContext';
@@ -26,9 +26,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTutorial, TUTORIAL_PHASE } from '../../context/TutorialContext';
 import DailyTaskPopup from '../../components/DailyTaskPopup';
 import EndOfDayReportModal from '../../components/EndOfDayReportModal';
-import useBackgroundMusic from '../../hooks/useBackgroundMusic';
-
-const BGM_SOURCE = require('../../../assets/audio/bgm-placeholder.mp3');
+import { useGameAudio } from '../../context/AudioContext';
 
 const { width: INITIAL_WIDTH, height: INITIAL_HEIGHT } = Dimensions.get('window');
 const CHARACTER_SIZE = 48;
@@ -373,8 +371,19 @@ export default function BuildScreen() {
   const { startGameTutorial: startContextTutorial, markConditionComplete, cancelTutorial, tutorialPhase } = useTutorial();
   const navigation = useNavigation();
 
-  // Background music — plays on focus, pauses on blur / app background.
-  useBackgroundMusic(BGM_SOURCE);
+  // Background music lives in AudioContext (global, survives this unmount).
+  // Here we only drive the "distant room" illusion: full audio when this
+  // screen is focused, muffled (low volume + dropped pitch) when it is not.
+  const isFocused = useIsFocused();
+  const { enterRoom, exitRoom } = useGameAudio();
+
+  useEffect(() => {
+    if (isFocused) {
+      enterRoom();
+    } else {
+      exitRoom();
+    }
+  }, [isFocused, enterRoom, exitRoom]);
 
   // ─── Responsive dimensions ─────────────────────────────────────────
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();

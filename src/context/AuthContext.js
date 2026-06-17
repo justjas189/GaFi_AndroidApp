@@ -47,29 +47,38 @@ const syncProfileFromMetadata = async (user, profileData) => {
     const meta = user.user_metadata || {};
     const googleAvatar = meta.avatar_url || meta.picture || null;
 
-    const patch = {};
-    if (!profileData?.avatar_url && googleAvatar) patch.avatar_url = googleAvatar;
-    if (!profileData?.username && meta.username) patch.username = meta.username;
-
     if (!profileData) {
-      await supabase.from('profiles').upsert(
+      // INSERT path. id is the PK and equals auth.uid(), so the row passes the
+      // RLS INSERT policy (WITH CHECK auth.uid() = id). We deliberately OMIT
+      // `email` here: profiles.email is UNIQUE, and re-inserting an email that
+      // already exists on another row throws 23505 and surfaces as a 400.
+      const { error } = await supabase.from('profiles').upsert(
         {
           id: user.id,
-          email: user.email,
           full_name: meta.full_name || meta.name || null,
-          ...patch,
+          avatar_url: googleAvatar, // column added in migration 20260615
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'id' }
       );
+      if (error) {
+        // Full PostgREST detail so the exact 400 cause is visible in logs.
+        console.warn('Profile insert failed:', error.code, error.message, error.details, error.hint);
+      }
       return;
     }
 
-    if (Object.keys(patch).length > 0) {
-      await supabase
-        .from('profiles')
-        .update({ ...patch, updated_at: new Date().toISOString() })
-        .eq('id', user.id);
+    // UPDATE path — backfill only the avatar when missing.
+    const patch = {};
+    if (!profileData.avatar_url && googleAvatar) patch.avatar_url = googleAvatar;
+    if (Object.keys(patch).length === 0) return;
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ ...patch, updated_at: new Date().toISOString() })
+      .eq('id', user.id);
+    if (error) {
+      console.warn('Profile backfill failed:', error.code, error.message, error.details, error.hint);
     }
   } catch (e) {
     console.warn('Profile metadata sync failed (non-critical):', e?.message);
@@ -102,21 +111,35 @@ export const AuthProvider = ({ children }) => {
 
   // Helper: build enhanced user info from a Supabase session
   const applySession = async (session) => {
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('full_name, username, user_type, avatar_url')
-      .eq('id', session.user.id)
-      .maybeSingle();
-
-    const enhancedUserInfo = buildUserInfo(session.user, profileData);
-
-    setUserToken(session.access_token);
-    setUserInfo(enhancedUserInfo);
+    // ── 1. SESSION FIRST: cache + token before ANY network await ──
+    // Guarantees getSessionForMutation() Layer-1 cache hits the instant a
+    // screen mounts, so services don't throw "User not authenticated" in the
+    // window between the navigator swap and the profile fetch resolving.
     updateSessionCache(session);
+    setUserToken(session.access_token);
     await AsyncStorage.setItem('userToken', session.access_token);
-    await AsyncStorage.setItem('userInfo', JSON.stringify(enhancedUserInfo));
     if (session.refresh_token) {
       await AsyncStorage.setItem('userRefreshToken', session.refresh_token);
+    }
+
+    // Minimal userInfo immediately — `id` is what downstream services need.
+    setUserInfo((prev) => prev ?? buildUserInfo(session.user, null));
+
+    // ── 2. ENRICH AFTER: profile fetch must not block the auth gate ──
+    let profileData = null;
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name, username, user_type, avatar_url')
+        .eq('id', session.user.id)
+        .maybeSingle();
+      profileData = data;
+
+      const enhancedUserInfo = buildUserInfo(session.user, profileData);
+      setUserInfo(enhancedUserInfo);
+      await AsyncStorage.setItem('userInfo', JSON.stringify(enhancedUserInfo));
+    } catch (e) {
+      console.warn('Profile enrich failed (non-critical):', e?.message);
     }
 
     // Create/backfill the profile row from OAuth metadata (non-blocking).

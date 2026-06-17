@@ -125,6 +125,11 @@ android {
         jniLibs {
             def enableLegacyPackaging = findProperty('expo.useLegacyPackaging') ?: 'false'
             useLegacyPackaging enableLegacyPackaging.toBoolean()
+            // Oboe (com.google.oboe:oboe:1.9.3, pulled by react-native-audio-api) ships
+            // liboboe.so ONLY under the AAR's prefab/ tree, which AGP links but never
+            // packages. We vendor it in src/main/jniLibs/<abi>/; pickFirst guards against
+            // a duplicate-merge error if a future AGP/prefab change also emits it.
+            pickFirsts += ['**/liboboe.so']
         }
     }
     androidResources {
