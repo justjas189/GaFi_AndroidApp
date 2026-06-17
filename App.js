@@ -29,6 +29,9 @@ import { DataProvider } from './src/context/DataContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { TutorialProvider } from './src/context/TutorialContext';
 
+// Hooks
+import { useAppFonts } from './src/hooks/useAppFonts';
+
 const Stack = createStackNavigator();
 
 // NOTE: Koin bubble + tutorial overlays moved into MainNavigator so they sit
@@ -202,6 +205,7 @@ const AppNavigator = () => {
 // Root App component with authentication flow
 export default function App() {
   const [isInitialized, setIsInitialized] = useState(false);
+  const { fontsLoaded } = useAppFonts();
 
   useEffect(() => {
     const appId = Constants.expoConfig?.extra?.oneSignalAppId;
@@ -246,7 +250,7 @@ export default function App() {
     }
   };
 
-  if (!isInitialized) {
+  if (!isInitialized || !fontsLoaded) {
     DebugUtils.debug('APP', 'App is still initializing');
     return <LoadingScreen message="Initializing GaFI..." />;
   }

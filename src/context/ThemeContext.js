@@ -2,6 +2,7 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 import { DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { Appearance, StatusBar } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { FONTS, TYPOGRAPHY } from '../theme/typography';
 
 export const ThemeContext = createContext();
 
@@ -53,6 +54,8 @@ const darkTheme = {
       gradient: ['#FF6B00', '#FFB366'],
     }
   },
+  fonts: FONTS,
+  typography: TYPOGRAPHY,
   spacing: {
     xs: 4,
     sm: 8,
@@ -134,6 +137,8 @@ const lightTheme = {
       gradient: ['#FF6B00', '#FF8C42'],
     }
   },
+  fonts: FONTS,
+  typography: TYPOGRAPHY,
   spacing: {
     xs: 4,
     sm: 8,
@@ -284,8 +289,10 @@ export const ThemeProvider = ({ children }) => {
   return (
     <ThemeContext.Provider value={{ 
       // Theme data
-      theme, 
+      theme,
       colors: theme.colors,
+      fonts: theme.fonts,
+      typography: theme.typography,
       spacing: theme.spacing,
       borderRadius: theme.borderRadius,
       shadows: theme.shadows,
@@ -327,6 +334,11 @@ export const useTheme = () => {
 export const useColors = () => {
   const { colors } = useTheme();
   return colors;
+};
+
+export const useTypography = () => {
+  const { fonts, typography } = useTheme();
+  return { fonts, typography };
 };
 
 export const useSpacing = () => {

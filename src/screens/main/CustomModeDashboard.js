@@ -20,6 +20,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemeContext } from '../../context/ThemeContext';
 import { AuthContext } from '../../context/AuthContext';
+import { FONTS } from '../../theme/typography';
 import { DataContext } from '../../context/DataContext';
 import { supabase } from '../../config/supabase';
 import goalNotificationService from '../../services/GoalNotificationService';
@@ -864,7 +865,7 @@ export default function CustomModeDashboard({ navigation }) {
     return (
       <View style={{ marginBottom: 12 }} key={label}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-          <Text style={{ fontSize: 13, fontWeight: '600', color: colors.text }}>{label}</Text>
+          <Text style={{ fontSize: 13, fontFamily: FONTS.bodySemiBold, color: colors.text }}>{label}</Text>
           <Text style={{ fontSize: 12, color: overBudget ? colors.error : colors.textSecondary }}>
             {formatCurrency(spentOrActual)} / {formatCurrency(budgetAmt)}
           </Text>
@@ -937,14 +938,14 @@ export default function CustomModeDashboard({ navigation }) {
     return (
       <View key={item.id} style={[s.goalCard, isComplete && { borderColor: colors.success, borderWidth: 1.5 }, item.is_deleted && { opacity: 0.65 }]}>
         <View style={s.goalHeader}>
-          <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text, flex: 1, marginRight: 8 }} numberOfLines={1}>
+          <Text style={{ fontSize: 15, fontFamily: FONTS.bodySemiBold, color: colors.text, flex: 1, marginRight: 8 }} numberOfLines={1}>
             {item.title}
           </Text>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
             {isComplete && <Ionicons name="checkmark-circle" size={20} color={colors.success} />}
             {item.is_deleted && (
               <View style={{ backgroundColor: colors.error + '18', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
-                <Text style={{ fontSize: 11, fontWeight: '600', color: colors.error }}>Deleted</Text>
+                <Text style={{ fontSize: 11, fontFamily: FONTS.bodySemiBold, color: colors.error }}>Deleted</Text>
               </View>
             )}
             {!item.is_deleted && (
@@ -1042,7 +1043,7 @@ export default function CustomModeDashboard({ navigation }) {
             onPress={() => { setAllocateGoal(item); setShowAllocate(true); }}
           >
             <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
-            <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '600', marginLeft: 4 }}>
+            <Text style={{ fontSize: 13, color: colors.primary, fontFamily: FONTS.bodySemiBold, marginLeft: 4 }}>
               Allocate Funds
             </Text>
           </TouchableOpacity>
@@ -1062,9 +1063,9 @@ export default function CustomModeDashboard({ navigation }) {
             <Ionicons name={meta.icon} size={22} color={meta.color} />
           </View>
           <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>{wallet.name}</Text>
+            <Text style={{ fontSize: 15, fontFamily: FONTS.bodySemiBold, color: colors.text }}>{wallet.name}</Text>
             <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 1 }}>{wallet.location_type}</Text>
-            <Text style={{ fontSize: 16, fontWeight: '800', color: hasBalance ? colors.success : colors.textSecondary, marginTop: 2 }}>
+            <Text style={{ fontSize: 16, fontFamily: FONTS.numberBold, fontVariant: ['tabular-nums'], color: hasBalance ? colors.success : colors.textSecondary, marginTop: 2 }}>
               {formatCurrency(balance)}
             </Text>
           </View>
@@ -1081,7 +1082,7 @@ export default function CustomModeDashboard({ navigation }) {
             }}
           >
             <Ionicons name="add" size={16} color={colors.success} />
-            <Text style={{ fontSize: 12, fontWeight: '600', color: colors.success, marginLeft: 4 }}>Deposit</Text>
+            <Text style={{ fontSize: 12, fontFamily: FONTS.bodySemiBold, color: colors.success, marginLeft: 4 }}>Deposit</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.walletActionBtn, { backgroundColor: colors.error + '15' }, !hasBalance && { opacity: 0.35 }]}
@@ -1095,7 +1096,7 @@ export default function CustomModeDashboard({ navigation }) {
             disabled={!hasBalance}
           >
             <Ionicons name="remove" size={16} color={colors.error} />
-            <Text style={{ fontSize: 12, fontWeight: '600', color: colors.error, marginLeft: 4 }}>Withdraw</Text>
+            <Text style={{ fontSize: 12, fontFamily: FONTS.bodySemiBold, color: colors.error, marginLeft: 4 }}>Withdraw</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.walletActionBtn, { backgroundColor: colors.surface }]}
@@ -1123,8 +1124,8 @@ export default function CustomModeDashboard({ navigation }) {
         </View>
         <View style={{ flex: 1, marginLeft: 10 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={{ fontSize: 13, fontWeight: '600', color: colors.text }}>{walletName}</Text>
-            <Text style={{ fontSize: 14, fontWeight: '700', color: isDeposit ? colors.success : colors.error }}>
+            <Text style={{ fontSize: 13, fontFamily: FONTS.bodySemiBold, color: colors.text }}>{walletName}</Text>
+            <Text style={{ fontSize: 14, fontFamily: FONTS.numberSemiBold, fontVariant: ['tabular-nums'], color: isDeposit ? colors.success : colors.error }}>
               {isDeposit ? '+' : '-'}{formatCurrency(txn.amount)}
             </Text>
           </View>
@@ -1185,7 +1186,7 @@ export default function CustomModeDashboard({ navigation }) {
               <Text style={[s.healthScore, { color: healthInfo.color }]}>{healthScore}</Text>
             </View>
             <View style={{ flex: 1, marginLeft: 16 }}>
-              <Text style={{ fontSize: 18, fontWeight: '700', color: healthInfo.color }}>{healthInfo.label}</Text>
+              <Text style={{ fontSize: 18, fontFamily: FONTS.bodySemiBold, color: healthInfo.color }}>{healthInfo.label}</Text>
               <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
                 Based on your spending vs. your total budget limit.
               </Text>
@@ -1213,9 +1214,9 @@ export default function CustomModeDashboard({ navigation }) {
           <View style={[s.splitBarSegment, { flex: budgetRules.savings, backgroundColor: '#2196F3', borderTopRightRadius: 6, borderBottomRightRadius: 6 }]} />
         </View>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 6, marginBottom: 16 }}>
-          <Text style={{ fontSize: 11, color: '#4CAF50', fontWeight: '600' }}>Needs {budgetRules.needs}%</Text>
-          <Text style={{ fontSize: 11, color: '#FF9800', fontWeight: '600' }}>Wants {budgetRules.wants}%</Text>
-          <Text style={{ fontSize: 11, color: '#2196F3', fontWeight: '600' }}>Savings {budgetRules.savings}%</Text>
+          <Text style={{ fontSize: 11, color: '#4CAF50', fontFamily: FONTS.bodySemiBold, fontVariant: ['tabular-nums'] }}>Needs {budgetRules.needs}%</Text>
+          <Text style={{ fontSize: 11, color: '#FF9800', fontFamily: FONTS.bodySemiBold, fontVariant: ['tabular-nums'] }}>Wants {budgetRules.wants}%</Text>
+          <Text style={{ fontSize: 11, color: '#2196F3', fontFamily: FONTS.bodySemiBold, fontVariant: ['tabular-nums'] }}>Savings {budgetRules.savings}%</Text>
         </View>
 
         {renderBudgetBar('Needs', '#4CAF50', budgetBreakdown.needs.budget, budgetBreakdown.needs.spent)}
@@ -1239,7 +1240,7 @@ export default function CustomModeDashboard({ navigation }) {
               />
             </View>
             <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text }}>
+              <Text style={{ fontSize: 14, fontFamily: FONTS.bodySemiBold, color: colors.text }}>
                 Top: {topCategory.name} — {formatCurrency(topCategory.amount)}
               </Text>
               <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
@@ -1323,7 +1324,7 @@ export default function CustomModeDashboard({ navigation }) {
               size={15}
               color={goalFilter === 'Active' ? colors.primary : goalFilter === 'Achieved' ? colors.success : colors.error}
             />
-            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>{goalFilter}</Text>
+            <Text style={{ fontSize: 13, fontFamily: FONTS.bodySemiBold, color: colors.text }}>{goalFilter}</Text>
             <Ionicons name={showGoalFilterDropdown ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textSecondary} />
           </TouchableOpacity>
           {showGoalFilterDropdown && (
@@ -1362,7 +1363,7 @@ export default function CustomModeDashboard({ navigation }) {
                     size={16}
                     color={f === 'Active' ? colors.primary : f === 'Achieved' ? colors.success : colors.error}
                   />
-                  <Text style={{ fontSize: 13, fontWeight: goalFilter === f ? '700' : '500', color: goalFilter === f ? colors.primary : colors.text }}>{f}</Text>
+                  <Text style={{ fontSize: 13, fontFamily: goalFilter === f ? FONTS.bodyBold : FONTS.bodyMedium, color: goalFilter === f ? colors.primary : colors.text }}>{f}</Text>
                   {goalFilter === f && <Ionicons name="checkmark" size={16} color={colors.primary} style={{ marginLeft: 'auto' }} />}
                 </TouchableOpacity>
               ))}
@@ -1437,7 +1438,7 @@ export default function CustomModeDashboard({ navigation }) {
           /* Empty State: no savings data yet */
           <View style={s.emptyState}>
             <Ionicons name="leaf-outline" size={44} color={colors.primary} />
-            <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text, marginTop: 10, textAlign: 'center' }}>
+            <Text style={{ fontSize: 15, fontFamily: FONTS.bodySemiBold, color: colors.text, marginTop: 10, textAlign: 'center' }}>
               No savings logged yet
             </Text>
             <Text style={{ fontSize: 13, color: colors.textSecondary, marginTop: 6, textAlign: 'center', lineHeight: 19, paddingHorizontal: 12 }}>
@@ -1451,7 +1452,7 @@ export default function CustomModeDashboard({ navigation }) {
                 <Text style={[s.healthScore, { color: rateInfo.color, fontSize: 20 }]}>{savingsRate.toFixed(0)}%</Text>
               </View>
               <View style={{ flex: 1, marginLeft: 16 }}>
-                <Text style={{ fontSize: 18, fontWeight: '700', color: rateInfo.color }}>{rateInfo.label}</Text>
+                <Text style={{ fontSize: 18, fontFamily: FONTS.bodySemiBold, color: rateInfo.color }}>{rateInfo.label}</Text>
                 <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
                   {monthlyBudget > 0
                     ? `You've achieved ${savingsRate.toFixed(1)}% of your savings target (${savingsTarget}% of your ${isEmployee ? 'income' : 'allowance'}).`
@@ -1591,7 +1592,7 @@ export default function CustomModeDashboard({ navigation }) {
                         onPress={() => setExpenseCategory(cat.id)}
                       >
                         <Text style={{ fontSize: 14, marginRight: 4 }}>{cat.icon}</Text>
-                        <Text style={{ fontSize: 12, fontWeight: selected ? 'bold' : 'normal', color: selected ? '#FFF' : colors.text }}>
+                        <Text style={{ fontSize: 12, fontFamily: selected ? FONTS.bodySemiBold : FONTS.bodyRegular, color: selected ? '#FFF' : colors.text }}>
                           {cat.name}
                         </Text>
                       </TouchableOpacity>
@@ -1615,7 +1616,7 @@ export default function CustomModeDashboard({ navigation }) {
                       }}
                       onPress={() => setExpenseAmount(String(amt))}
                     >
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: expenseAmount === String(amt) ? '#FFF' : colors.text }}>
+                      <Text style={{ fontSize: 13, fontFamily: FONTS.numberSemiBold, fontVariant: ['tabular-nums'], color: expenseAmount === String(amt) ? '#FFF' : colors.text }}>
                         ₱{amt}
                       </Text>
                     </TouchableOpacity>
@@ -1647,7 +1648,7 @@ export default function CustomModeDashboard({ navigation }) {
                     <Text style={{ color: colors.textSecondary, fontSize: 12, marginBottom: 2 }}>Budget Status</Text>
                     <Text style={{ color: colors.text, fontSize: 14 }}>
                       Remaining:{' '}
-                      <Text style={{ fontWeight: 'bold', color: remaining >= 0 ? colors.success : colors.error }}>
+                      <Text style={{ fontFamily: FONTS.numberSemiBold, fontVariant: ['tabular-nums'], color: remaining >= 0 ? colors.success : colors.error }}>
                         {formatCurrency(remaining)}
                       </Text>
                     </Text>
@@ -1704,8 +1705,8 @@ export default function CustomModeDashboard({ navigation }) {
               return (
                 <View key={key} style={{ marginBottom: 16 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={{ fontSize: 14, fontWeight: '600', color }}>{label}{isSavings ? ' (min 20%)' : ''}</Text>
-                    <Text style={{ fontSize: 16, fontWeight: '700', color }}>{editRules[key]}%</Text>
+                    <Text style={{ fontSize: 14, fontFamily: FONTS.bodySemiBold, color }}>{label}{isSavings ? ' (min 20%)' : ''}</Text>
+                    <Text style={{ fontSize: 16, fontFamily: FONTS.numberSemiBold, fontVariant: ['tabular-nums'], color }}>{editRules[key]}%</Text>
                   </View>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginTop: 8 }}>
                     {/* Hide minus button when savings is at the 20% floor */}
@@ -1740,7 +1741,7 @@ export default function CustomModeDashboard({ navigation }) {
             })}
 
             <View style={[s.totalIndicator, editRulesTotal !== 100 && { backgroundColor: colors.error + '15' }]}>
-              <Text style={{ fontSize: 14, fontWeight: '700', color: editRulesTotal === 100 ? colors.success : colors.error }}>
+              <Text style={{ fontSize: 14, fontFamily: FONTS.numberSemiBold, fontVariant: ['tabular-nums'], color: editRulesTotal === 100 ? colors.success : colors.error }}>
                 Total: {editRulesTotal}%
               </Text>
               {editRulesTotal !== 100 && (
@@ -1894,7 +1895,7 @@ export default function CustomModeDashboard({ navigation }) {
                       onPress={() => setNewWalletLocationType(name)}
                     >
                       <Ionicons name={meta.icon} size={16} color={selected ? '#FFF' : meta.color} style={{ marginRight: 6 }} />
-                      <Text style={{ fontSize: 13, fontWeight: selected ? '700' : '500', color: selected ? '#FFF' : colors.text }}>
+                      <Text style={{ fontSize: 13, fontFamily: selected ? FONTS.bodyBold : FONTS.bodyMedium, color: selected ? '#FFF' : colors.text }}>
                         {name}
                       </Text>
                     </TouchableOpacity>
@@ -1988,7 +1989,8 @@ const createStyles = (colors) =>
     },
     headerTitle: {
       fontSize: 18,
-      fontWeight: '700',
+      fontFamily: FONTS.headingSemiBold,
+      letterSpacing: -0.2,
       color: colors.text,
     },
     scroll: {
@@ -2024,12 +2026,12 @@ const createStyles = (colors) =>
     },
     tabLabel: {
       fontSize: 13,
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
       color: colors.textSecondary,
     },
     tabLabelActive: {
       color: '#FFF',
-      fontWeight: '700',
+      fontFamily: FONTS.bodyBold,
     },
 
     // ── Summary Card ─────────────────────────────────────────────────
@@ -2049,10 +2051,13 @@ const createStyles = (colors) =>
       textTransform: 'uppercase',
       letterSpacing: 1,
       marginBottom: 4,
+      fontFamily: FONTS.bodyMedium,
     },
     summaryValue: {
       fontSize: 32,
-      fontWeight: '800',
+      fontFamily: FONTS.numberBold,
+      letterSpacing: -0.5,
+      fontVariant: ['tabular-nums'],
       color: colors.text,
     },
     summaryDivider: {
@@ -2077,10 +2082,12 @@ const createStyles = (colors) =>
       fontSize: 11,
       color: colors.textSecondary,
       marginBottom: 2,
+      fontFamily: FONTS.bodyMedium,
     },
     summarySmallValue: {
       fontSize: 13,
-      fontWeight: '700',
+      fontFamily: FONTS.numberSemiBold,
+      fontVariant: ['tabular-nums'],
       color: colors.text,
     },
 
@@ -2102,7 +2109,8 @@ const createStyles = (colors) =>
     },
     sectionTitle: {
       fontSize: 16,
-      fontWeight: '700',
+      fontFamily: FONTS.headingSemiBold,
+      letterSpacing: -0.2,
       color: colors.text,
       marginLeft: 8,
       flex: 1,
@@ -2142,7 +2150,9 @@ const createStyles = (colors) =>
     },
     healthScore: {
       fontSize: 24,
-      fontWeight: '800',
+      fontFamily: FONTS.numberBold,
+      letterSpacing: -0.4,
+      fontVariant: ['tabular-nums'],
     },
 
     // ── Expense Item (Matches ExpenseScreen) ─────────────────────────
@@ -2172,16 +2182,18 @@ const createStyles = (colors) =>
     },
     expenseCategory: {
       fontSize: 15,
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
     },
     expenseNote: {
       fontSize: 13,
       opacity: 0.7,
       marginTop: 2,
+      fontFamily: FONTS.bodyRegular,
     },
     expenseAmount: {
       fontSize: 16,
-      fontWeight: 'bold',
+      fontFamily: FONTS.numberSemiBold,
+      fontVariant: ['tabular-nums'],
     },
 
     // ── Goal Card ────────────────────────────────────────────────────
@@ -2215,7 +2227,7 @@ const createStyles = (colors) =>
     },
     filterChipText: {
       fontSize: 12,
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
       color: colors.textSecondary,
     },
 
@@ -2265,6 +2277,7 @@ const createStyles = (colors) =>
       fontSize: 13,
       color: colors.textSecondary,
       marginTop: 8,
+      fontFamily: FONTS.bodyRegular,
     },
 
     // ── Buttons ──────────────────────────────────────────────────────
@@ -2304,7 +2317,8 @@ const createStyles = (colors) =>
     },
     modalTitle: {
       fontSize: 18,
-      fontWeight: '700',
+      fontFamily: FONTS.headingSemiBold,
+      letterSpacing: -0.2,
       color: colors.text,
       marginBottom: 16,
     },
@@ -2319,7 +2333,7 @@ const createStyles = (colors) =>
     },
     inputLabel: {
       fontSize: 12,
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
       color: colors.textSecondary,
       marginBottom: 6,
       marginTop: 6,
@@ -2333,6 +2347,7 @@ const createStyles = (colors) =>
       color: colors.text,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
+      fontFamily: FONTS.bodyRegular,
     },
     dateInputRow: {
       flexDirection: 'row',
@@ -2348,6 +2363,7 @@ const createStyles = (colors) =>
       paddingVertical: Platform.OS === 'ios' ? 12 : 10,
       fontSize: 15,
       color: colors.text,
+      fontFamily: FONTS.bodyRegular,
     },
     dateIconButton: {
       paddingHorizontal: 10,
@@ -2377,7 +2393,7 @@ const createStyles = (colors) =>
     },
     modalCancelText: {
       fontSize: 14,
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
       color: colors.textSecondary,
     },
     modalConfirmBtn: {
@@ -2390,7 +2406,7 @@ const createStyles = (colors) =>
     },
     modalConfirmText: {
       fontSize: 14,
-      fontWeight: '700',
+      fontFamily: FONTS.bodySemiBold,
       color: '#FFFFFF',
     },
 
@@ -2407,7 +2423,8 @@ const createStyles = (colors) =>
     },
     ruleInput: {
       fontSize: 22,
-      fontWeight: '700',
+      fontFamily: FONTS.numberBold,
+      fontVariant: ['tabular-nums'],
       textAlign: 'center',
       backgroundColor: colors.surface,
       borderRadius: 8,

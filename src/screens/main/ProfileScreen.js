@@ -22,6 +22,11 @@ import LeaderboardService from '../../services/LeaderboardService';
 import MascotImage from '../../components/MascotImage';
 import { getSessionForMutation } from '../../services/AuthSessionHelper';
 
+// Story Mode ships 3 progressive levels; clearing Level 3 ("Super Saver")
+// completes the campaign and unlocks Custom Mode.
+const MAX_LEVEL = 3;
+const GOLD = '#FFD700';
+
 const ProfileScreen = ({ navigation }) => {
   const { userInfo, updateProfile } = useContext(AuthContext);
   const { budget, updateBudget, expenses } = useContext(DataContext);
@@ -196,6 +201,8 @@ const ProfileScreen = ({ navigation }) => {
 
   // ── Render ──
 
+  const isMaxLevel = stats.currentLevel >= MAX_LEVEL;
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {/* Header with settings gear */}
@@ -263,23 +270,47 @@ const ProfileScreen = ({ navigation }) => {
             <View style={styles.statsGrid}>
               <View style={[styles.statCard, { backgroundColor: theme.colors.card }]}>
                 <Ionicons name="calendar-outline" size={22} color="#4CAF50" />
-                <Text style={[styles.statValue, { color: theme.colors.text }]}>
+                <Text style={[styles.statValue, { color: theme.colors.text, fontFamily: theme.fonts.numberSemiBold }]}>
                   {formatDate(stats.memberSince)}
                 </Text>
                 <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Member Since</Text>
               </View>
 
-              <View style={[styles.statCard, { backgroundColor: theme.colors.card }]}>
-                <Ionicons name="star-outline" size={22} color="#FFD700" />
-                <Text style={[styles.statValue, { color: theme.colors.text }]}>
-                  Lvl {stats.currentLevel}
+              <View
+                style={[styles.statCard, { backgroundColor: theme.colors.card }]}
+                accessibilityRole="text"
+                accessibilityLabel={
+                  isMaxLevel
+                    ? 'Story Mode completed — all levels cleared'
+                    : `Current level ${stats.currentLevel}`
+                }
+              >
+                <Ionicons
+                  name={isMaxLevel ? 'star' : 'star-outline'}
+                  size={22}
+                  color={GOLD}
+                />
+                <Text
+                  style={[
+                    styles.statValue,
+                    { color: isMaxLevel ? GOLD : theme.colors.text, fontFamily: theme.fonts.numberSemiBold },
+                  ]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
+                  {isMaxLevel ? 'MAX' : `Lvl ${stats.currentLevel}`}
                 </Text>
-                <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Current Level</Text>
+                <Text
+                  style={[styles.statLabel, { color: theme.colors.textSecondary }]}
+                  numberOfLines={1}
+                >
+                  {isMaxLevel ? 'Story Mode' : 'Current Level'}
+                </Text>
               </View>
 
               <View style={[styles.statCard, { backgroundColor: theme.colors.card }]}>
                 <Ionicons name="cash-outline" size={22} color="#E91E63" />
-                <Text style={[styles.statValue, { color: theme.colors.text }]}>
+                <Text style={[styles.statValue, { color: theme.colors.text, fontFamily: theme.fonts.numberSemiBold }]}>
                   ₱{stats.totalExpenses.toLocaleString()}
                 </Text>
                 <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>This Month</Text>
@@ -659,9 +690,11 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: 18,
-    fontWeight: '700',
     marginTop: 8,
     textAlign: 'center',
+    letterSpacing: -0.2,
+    fontVariant: ['tabular-nums'], // digits hold their column as values change
+    // fontWeight removed — the named family (Inter_600SemiBold) carries the weight
   },
   statLabel: {
     fontSize: 12,

@@ -18,6 +18,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
 import { LineChart } from 'react-native-chart-kit';
+import { FONTS } from '../../theme/typography';
 import { normalizeCategory } from '../../utils/categoryUtils';
 import { getCategoryIcon } from '../../utils/categoryIcons';
 
@@ -1389,11 +1390,13 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontFamily: FONTS.headingBold,
+    letterSpacing: -0.4,
   },
   headerSubtitle: {
     fontSize: 13,
     marginTop: 2,
+    fontFamily: FONTS.bodyRegular,
   },
   detailedButton: {
     flexDirection: 'row',
@@ -1406,7 +1409,7 @@ const styles = StyleSheet.create({
   detailedButtonText: {
     color: '#FFF',
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
   },
   calendarIconButton: {
     width: 36,
@@ -1438,12 +1441,15 @@ const styles = StyleSheet.create({
   },
   summaryAmount: {
     fontSize: 22,
-    fontWeight: 'bold',
+    fontFamily: FONTS.numberBold,
+    letterSpacing: -0.4,
+    fontVariant: ['tabular-nums'],
     marginTop: 8,
   },
   summaryLabel: {
     fontSize: 12,
     marginTop: 4,
+    fontFamily: FONTS.bodyMedium,
   },
 
   // Period Selector
@@ -1462,7 +1468,7 @@ const styles = StyleSheet.create({
   },
   periodTabText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
   },
 
   // Charts
@@ -1474,7 +1480,8 @@ const styles = StyleSheet.create({
   },
   chartTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontFamily: FONTS.headingSemiBold,
+    letterSpacing: -0.2,
     marginBottom: 16,
   },
   chart: {
@@ -1488,6 +1495,7 @@ const styles = StyleSheet.create({
   noDataText: {
     marginTop: 12,
     fontSize: 14,
+    fontFamily: FONTS.bodyRegular,
   },
 
   // Rankings
@@ -1499,7 +1507,8 @@ const styles = StyleSheet.create({
   },
   rankingsTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: FONTS.headingSemiBold,
+    letterSpacing: -0.2,
     marginBottom: 16,
   },
   rankingItem: {
@@ -1522,7 +1531,8 @@ const styles = StyleSheet.create({
   },
   rankNumber: {
     fontSize: 12,
-    fontWeight: 'bold',
+    fontFamily: FONTS.numberSemiBold,
+    fontVariant: ['tabular-nums'],
   },
   categoryDot: {
     width: 10,
@@ -1532,18 +1542,21 @@ const styles = StyleSheet.create({
   },
   rankingName: {
     fontSize: 14,
-    fontWeight: '500',
+    fontFamily: FONTS.bodyMedium,
   },
   rankingRight: {
     alignItems: 'flex-end',
   },
   rankingAmount: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: FONTS.numberSemiBold,
+    fontVariant: ['tabular-nums'],
   },
   rankingPercent: {
     fontSize: 12,
     marginTop: 2,
+    fontFamily: FONTS.bodyRegular,
+    fontVariant: ['tabular-nums'],
   },
 
   // Highlight Card
@@ -1567,15 +1580,18 @@ const styles = StyleSheet.create({
   },
   highlightLabel: {
     fontSize: 12,
+    fontFamily: FONTS.bodyMedium,
   },
   highlightCategory: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontFamily: FONTS.headingSemiBold,
+    letterSpacing: -0.2,
     marginTop: 2,
   },
   highlightAmount: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: FONTS.numberSemiBold,
+    fontVariant: ['tabular-nums'],
     marginTop: 2,
   },
 
@@ -1594,6 +1610,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginRight: 10,
     alignSelf: 'center',
+    fontFamily: FONTS.bodyMedium,
   },
   filterChip: {
     paddingHorizontal: 14,
@@ -1604,7 +1621,7 @@ const styles = StyleSheet.create({
   },
   filterChipText: {
     fontSize: 13,
-    fontWeight: '500',
+    fontFamily: FONTS.bodyMedium,
   },
 
   // Section Headers
@@ -1617,11 +1634,12 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
   },
   sectionTotal: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: FONTS.numberSemiBold,
+    fontVariant: ['tabular-nums'],
   },
 
   // Expense Item
@@ -1652,21 +1670,25 @@ const styles = StyleSheet.create({
   },
   expenseCategory: {
     fontSize: 15,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
   },
   expenseNote: {
     fontSize: 13,
     opacity: 0.7,
     marginTop: 2,
+    fontFamily: FONTS.bodyRegular,
   },
   expenseTime: {
     fontSize: 12,
     opacity: 0.5,
     marginTop: 2,
+    fontFamily: FONTS.bodyRegular,
+    fontVariant: ['tabular-nums'],
   },
   expenseAmount: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontFamily: FONTS.numberSemiBold,
+    fontVariant: ['tabular-nums'],
   },
 
   // List
@@ -1686,12 +1708,14 @@ const styles = StyleSheet.create({
   },
   emptyStateText: {
     fontSize: 18,
-    fontWeight: '600',
+    fontFamily: FONTS.headingSemiBold,
+    letterSpacing: -0.2,
     marginTop: 16,
   },
   emptyStateSubtext: {
     fontSize: 14,
     marginTop: 8,
+    fontFamily: FONTS.bodyRegular,
   },
 
   // FAB
@@ -1721,7 +1745,8 @@ const styles = StyleSheet.create({
   },
   formTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontFamily: FONTS.headingBold,
+    letterSpacing: -0.3,
   },
   backButton: {
     padding: 5,
@@ -1734,7 +1759,7 @@ const styles = StyleSheet.create({
   badgeText: {
     color: '#FFF',
     fontSize: 12,
-    fontWeight: 'bold',
+    fontFamily: FONTS.bodySemiBold,
   },
   dateTimeSection: {
     padding: 20,
@@ -1757,6 +1782,7 @@ const styles = StyleSheet.create({
   dateTimeText: {
     fontSize: 14,
     marginLeft: 8,
+    fontFamily: FONTS.bodyMedium,
   },
   form: {
     padding: 20,
@@ -1767,11 +1793,13 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     marginBottom: 8,
+    fontFamily: FONTS.bodyMedium,
   },
   input: {
     borderRadius: 8,
     padding: 14,
     fontSize: 16,
+    fontFamily: FONTS.bodyRegular,
   },
   categoryContainer: {
     flexDirection: 'row',
@@ -1786,6 +1814,7 @@ const styles = StyleSheet.create({
   },
   categoryButtonText: {
     fontSize: 14,
+    fontFamily: FONTS.bodyMedium,
   },
   descriptionInput: {
     height: 100,
@@ -1803,7 +1832,7 @@ const styles = StyleSheet.create({
   saveButtonText: {
     color: '#FFF',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontFamily: FONTS.bodySemiBold,
   },
   cancelButton: {
     padding: 16,
@@ -1812,6 +1841,7 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     fontSize: 16,
+    fontFamily: FONTS.bodyMedium,
   },
 
   // Period Chips (scrollable)
@@ -1828,7 +1858,7 @@ const styles = StyleSheet.create({
   },
   periodChipText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
   },
 
   // Period Navigation Row
@@ -1848,7 +1878,7 @@ const styles = StyleSheet.create({
   },
   periodNavLabel: {
     fontSize: 15,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
     textAlign: 'center',
   },
 
@@ -1862,7 +1892,7 @@ const styles = StyleSheet.create({
   },
   detailNavLabel: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
     textAlign: 'center',
   },
 
@@ -1880,7 +1910,8 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontFamily: FONTS.headingBold,
+    letterSpacing: -0.3,
     marginBottom: 24,
     textAlign: 'center',
   },
@@ -1891,7 +1922,7 @@ const styles = StyleSheet.create({
   },
   rangeDateLabel: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
     width: 50,
   },
   rangeDateButton: {
@@ -1905,6 +1936,8 @@ const styles = StyleSheet.create({
   },
   rangeDateText: {
     fontSize: 15,
+    fontFamily: FONTS.bodyRegular,
+    fontVariant: ['tabular-nums'],
   },
   rangeButtonRow: {
     flexDirection: 'row',
@@ -1920,7 +1953,7 @@ const styles = StyleSheet.create({
   rangeApplyText: {
     color: '#FFF',
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
   },
   rangeCancelButton: {
     flex: 1,
@@ -1930,7 +1963,7 @@ const styles = StyleSheet.create({
   },
   rangeCancelText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
   },
 
   // Sub-category breakdown
@@ -1956,7 +1989,7 @@ const styles = StyleSheet.create({
   },
   subCategoryName: {
     fontSize: 13,
-    fontWeight: '500',
+    fontFamily: FONTS.bodyMedium,
     flexShrink: 1,
   },
   subCategoryRight: {
@@ -1980,7 +2013,8 @@ const styles = StyleSheet.create({
   },
   subCategoryPercent: {
     fontSize: 13,
-    fontWeight: '600',
+    fontFamily: FONTS.numberSemiBold,
+    fontVariant: ['tabular-nums'],
     width: 45,
     textAlign: 'right',
   },
@@ -1988,12 +2022,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     width: 70,
     textAlign: 'right',
+    fontFamily: FONTS.bodyRegular,
+    fontVariant: ['tabular-nums'],
   },
 
   // Expense sub-category label
   expenseSubCategory: {
     fontSize: 12,
-    fontWeight: '500',
+    fontFamily: FONTS.bodyMedium,
     marginTop: 1,
   },
 });

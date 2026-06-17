@@ -5,6 +5,7 @@ import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { analyzeExpenses, getRecommendations } from '../../config/nvidia';
+import { FONTS } from '../../theme/typography';
 
 const ExpenseGraphScreen = () => {
   const { budget, expenses, getExpensesByDateRange } = useContext(DataContext);
@@ -502,7 +503,8 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 24,
-    fontWeight: '700',
+    fontFamily: FONTS.headingBold,
+    letterSpacing: -0.4,
   },
   analyticsIndicator: {
     paddingHorizontal: 10,
@@ -511,7 +513,7 @@ const styles = StyleSheet.create({
   },
   analyticsIndicatorText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
   },
   scrollContent: {
     paddingBottom: 20,
@@ -537,7 +539,8 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontFamily: FONTS.headingSemiBold,
+    letterSpacing: -0.2,
   },
   monthBadge: {
     paddingHorizontal: 10,
@@ -546,7 +549,7 @@ const styles = StyleSheet.create({
   },
   monthBadgeText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
   },
   weekBadge: {
     paddingHorizontal: 10,
@@ -555,7 +558,7 @@ const styles = StyleSheet.create({
   },
   weekBadgeText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
   },
   primaryStats: {
     flexDirection: 'row',
@@ -568,11 +571,13 @@ const styles = StyleSheet.create({
   primaryStatLabel: {
     fontSize: 14,
     marginBottom: 8,
-    fontWeight: '500',
+    fontFamily: FONTS.bodyMedium,
   },
   primaryStatValue: {
     fontSize: 24,
-    fontWeight: '700',
+    fontFamily: FONTS.numberBold,
+    letterSpacing: -0.5,
+    fontVariant: ['tabular-nums'],
   },
   trendContainer: {
     flexDirection: 'row',
@@ -604,12 +609,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginBottom: 4,
     textAlign: 'center',
-    fontWeight: '500',
+    fontFamily: FONTS.bodyMedium,
   },
   statValue: {
     fontSize: 16,
-    fontWeight: '700',
+    fontFamily: FONTS.numberSemiBold,
     textAlign: 'center',
+    fontVariant: ['tabular-nums'],
   },
   progressContainer: {
     marginTop: 8,
@@ -626,7 +632,7 @@ const styles = StyleSheet.create({
   progressLabel: {
     fontSize: 12,
     textAlign: 'center',
-    fontWeight: '500',
+    fontFamily: FONTS.bodyMedium,
   },
   weeklyContainer: {
     marginTop: 8,
@@ -655,11 +661,12 @@ const styles = StyleSheet.create({
   weeklyStatLabel: {
     fontSize: 14,
     marginBottom: 4,
-    fontWeight: '500',
+    fontFamily: FONTS.bodyMedium,
   },
   weeklyStatValue: {
     fontSize: 18,
-    fontWeight: '700',
+    fontFamily: FONTS.numberSemiBold,
+    fontVariant: ['tabular-nums'],
   },
   insightsHeaderRight: {
     flexDirection: 'row',
@@ -673,7 +680,7 @@ const styles = StyleSheet.create({
   },
   aiPoweredText: {
     fontSize: 10,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
   },
   insightsContainer: {
     gap: 12,
@@ -701,12 +708,14 @@ const styles = StyleSheet.create({
   },
   insightTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: FONTS.headingSemiBold,
+    letterSpacing: -0.2,
     marginBottom: 4,
   },
   insightMessage: {
     fontSize: 14,
     lineHeight: 20,
+    fontFamily: FONTS.bodyRegular,
   },
   noInsightsContainer: {
     alignItems: 'center',
@@ -722,11 +731,12 @@ const styles = StyleSheet.create({
   },
   noInsightsText: {
     fontSize: 16,
-    fontWeight: '500',
+    fontFamily: FONTS.bodyMedium,
     marginBottom: 4,
   },
   noInsightsSubtext: {
     fontSize: 14,
+    fontFamily: FONTS.bodyRegular,
   },
   categoryItem: {
     marginBottom: 20,
@@ -751,7 +761,7 @@ const styles = StyleSheet.create({
   },
   categoryName: {
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
     textTransform: 'capitalize',
   },
   categoryRight: {
@@ -759,12 +769,14 @@ const styles = StyleSheet.create({
   },
   categoryAmount: {
     fontSize: 16,
-    fontWeight: '700',
+    fontFamily: FONTS.numberSemiBold,
+    fontVariant: ['tabular-nums'],
     marginBottom: 2,
   },
   categoryPercentage: {
     fontSize: 12,
-    fontWeight: '500',
+    fontFamily: FONTS.numberSemiBold,
+    fontVariant: ['tabular-nums'],
   },
   positiveValue: {
     color: '#4CAF50',
@@ -790,7 +802,7 @@ const styles = StyleSheet.create({
   },
   monthNavLabel: {
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
     textAlign: 'center',
   },
 });

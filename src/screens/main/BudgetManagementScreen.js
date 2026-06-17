@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { BudgetService } from '../../services/BudgetService';
+import { FONTS } from '../../theme/typography';
 
 const { width } = Dimensions.get('window');
 
@@ -850,6 +851,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
+    fontFamily: FONTS.bodyRegular,
   },
   header: {
     flexDirection: 'row',
@@ -860,7 +862,8 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontFamily: FONTS.headingBold,
+    letterSpacing: -0.4,
   },
   addButton: {
     width: 44,
@@ -880,7 +883,8 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontFamily: FONTS.headingSemiBold,
+    letterSpacing: -0.2,
     marginBottom: 16,
   },
   summaryStats: {
@@ -893,18 +897,21 @@ const styles = StyleSheet.create({
   },
   summaryNumber: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontFamily: FONTS.numberBold,
+    letterSpacing: -0.3,
+    fontVariant: ['tabular-nums'],
   },
   summaryLabel: {
     fontSize: 12,
     marginTop: 4,
+    fontFamily: FONTS.bodyMedium,
   },
   overallProgressContainer: {
     marginTop: 16,
   },
   progressTitle: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
     marginBottom: 8,
   },
   progressBarContainer: {
@@ -920,6 +927,8 @@ const styles = StyleSheet.create({
   progressText: {
     fontSize: 12,
     textAlign: 'center',
+    fontFamily: FONTS.numberSemiBold,
+    fontVariant: ['tabular-nums'],
   },
   alertsCard: {
     padding: 20,
@@ -939,11 +948,12 @@ const styles = StyleSheet.create({
   },
   alertTitle: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
   },
   alertMessage: {
     fontSize: 12,
     marginTop: 2,
+    fontFamily: FONTS.bodyRegular,
   },
   budgetCard: {
     padding: 20,
@@ -955,11 +965,13 @@ const styles = StyleSheet.create({
   },
   budgetName: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontFamily: FONTS.headingSemiBold,
+    letterSpacing: -0.2,
   },
   budgetPeriod: {
     fontSize: 12,
     marginTop: 4,
+    fontFamily: FONTS.bodyRegular,
   },
   budgetAmount: {
     flexDirection: 'row',
@@ -968,11 +980,15 @@ const styles = StyleSheet.create({
   },
   amountSpent: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontFamily: FONTS.numberBold,
+    letterSpacing: -0.5,
+    fontVariant: ['tabular-nums'],
   },
   amountTotal: {
     fontSize: 16,
     marginLeft: 4,
+    fontFamily: FONTS.numberSemiBold,
+    fontVariant: ['tabular-nums'],
   },
   budgetActions: {
     marginTop: 16,
@@ -990,20 +1006,22 @@ const styles = StyleSheet.create({
   actionButtonText: {
     color: 'white',
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
   },
   categoriesContainer: {
     marginTop: 20,
   },
   categoriesTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: FONTS.headingSemiBold,
+    letterSpacing: -0.2,
     marginBottom: 4,
   },
   categoryHint: {
     fontSize: 12,
     marginBottom: 12,
     fontStyle: 'italic',
+    fontFamily: FONTS.bodyRegular,
   },
   categoryItem: {
     flexDirection: 'row',
@@ -1025,7 +1043,7 @@ const styles = StyleSheet.create({
   },
   categoryName: {
     fontSize: 14,
-    fontWeight: '500',
+    fontFamily: FONTS.bodyMedium,
   },
   categoryRight: {
     alignItems: 'flex-end',
@@ -1033,6 +1051,8 @@ const styles = StyleSheet.create({
   categoryAmount: {
     fontSize: 12,
     marginBottom: 4,
+    fontFamily: FONTS.numberSemiBold,
+    fontVariant: ['tabular-nums'],
   },
   categoryProgressContainer: {
     width: 80,
@@ -1051,7 +1071,8 @@ const styles = StyleSheet.create({
   },
   noBudgetsTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontFamily: FONTS.headingSemiBold,
+    letterSpacing: -0.2,
     marginTop: 16,
     marginBottom: 8,
   },
@@ -1059,6 +1080,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 24,
+    fontFamily: FONTS.bodyRegular,
   },
   createButton: {
     paddingHorizontal: 24,
@@ -1068,7 +1090,7 @@ const styles = StyleSheet.create({
   createButtonText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
   },
   modalOverlay: {
     flex: 1,
@@ -1084,7 +1106,8 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontFamily: FONTS.headingSemiBold,
+    letterSpacing: -0.2,
     marginBottom: 20,
     textAlign: 'center',
   },
@@ -1094,6 +1117,7 @@ const styles = StyleSheet.create({
     padding: 16,
     fontSize: 16,
     marginBottom: 16,
+    fontFamily: FONTS.bodyRegular,
   },
   helperText: {
     fontSize: 13,
@@ -1101,10 +1125,11 @@ const styles = StyleSheet.create({
     marginTop: -8,
     fontStyle: 'italic',
     lineHeight: 18,
+    fontFamily: FONTS.bodyRegular,
   },
   colorLabel: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
     marginBottom: 12,
   },
   colorPicker: {
@@ -1135,7 +1160,7 @@ const styles = StyleSheet.create({
   modalButtonText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
   },
   retryButton: {
     paddingHorizontal: 24,
@@ -1146,7 +1171,7 @@ const styles = StyleSheet.create({
   retryButtonText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: FONTS.bodySemiBold,
   },
 });
 

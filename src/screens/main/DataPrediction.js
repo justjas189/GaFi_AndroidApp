@@ -1302,13 +1302,15 @@ const createStyles = (colors, theme) => StyleSheet.create({
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontFamily: theme?.fonts?.headingBold,
+    letterSpacing: -0.3,
     color: colors?.text || '#FFF',
   },
   headerSubtitle: {
     fontSize: 12,
     color: colors?.textSecondary || '#888',
     marginTop: 2,
+    fontFamily: theme?.fonts?.bodyRegular,
   },
   monthToggleContainer: {
     flexDirection: 'row',
@@ -1336,7 +1338,7 @@ const createStyles = (colors, theme) => StyleSheet.create({
   },
   monthToggleText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: theme?.fonts?.bodySemiBold,
     color: colors?.textSecondary || '#888',
   },
   monthToggleTextActive: {
@@ -1382,10 +1384,12 @@ const createStyles = (colors, theme) => StyleSheet.create({
   progressLabelText: {
     fontSize: 12,
     color: colors?.textSecondary || '#888',
+    fontFamily: theme?.fonts?.bodyRegular,
   },
   progressLabelValue: {
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: theme?.fonts?.numberSemiBold,
+    fontVariant: ['tabular-nums'],
     color: colors?.text || '#FFF',
   },
   progressSubtext: {
@@ -1393,6 +1397,7 @@ const createStyles = (colors, theme) => StyleSheet.create({
     color: colors?.textSecondary || '#888',
     textAlign: 'center',
     marginTop: 2,
+    fontFamily: theme?.fonts?.bodyRegular,
   },
   summaryCard: {
     backgroundColor: colors?.card || '#2C2C2C',
@@ -1409,6 +1414,7 @@ const createStyles = (colors, theme) => StyleSheet.create({
   summaryLabel: {
     fontSize: 14,
     color: colors?.textSecondary || '#888',
+    fontFamily: theme?.fonts?.bodyMedium,
   },
   confidenceBadge: {
     paddingHorizontal: 10,
@@ -1417,12 +1423,14 @@ const createStyles = (colors, theme) => StyleSheet.create({
   },
   confidenceText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontFamily: theme?.fonts?.bodySemiBold,
     color: '#FFF',
   },
   predictedAmount: {
     fontSize: 42,
-    fontWeight: 'bold',
+    fontFamily: theme?.fonts?.numberBold,
+    letterSpacing: -1,
+    fontVariant: ['tabular-nums'],
     color: colors?.primary || '#FF6B00',
     marginVertical: 8,
   },
@@ -1433,11 +1441,14 @@ const createStyles = (colors, theme) => StyleSheet.create({
   },
   trendText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: theme?.fonts?.numberSemiBold,
+    fontVariant: ['tabular-nums'],
   },
   averageText: {
     fontSize: 12,
     color: colors?.textSecondary || '#888',
+    fontFamily: theme?.fonts?.bodyRegular,
+    fontVariant: ['tabular-nums'],
   },
   predictionFactors: {
     marginTop: 16,
@@ -1455,10 +1466,11 @@ const createStyles = (colors, theme) => StyleSheet.create({
     fontSize: 13,
     color: colors?.textSecondary || '#888',
     flex: 1,
+    fontFamily: theme?.fonts?.bodyRegular,
   },
   factorValue: {
     fontSize: 13,
-    fontWeight: '600',
+    fontFamily: theme?.fonts?.bodySemiBold,
     color: colors?.text || '#FFF',
   },
   // ===== Accordion styles =====
@@ -1484,7 +1496,8 @@ const createStyles = (colors, theme) => StyleSheet.create({
   },
   accordionTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: theme?.fonts?.headingSemiBold,
+    letterSpacing: -0.2,
     color: colors?.text || '#FFF',
   },
   accordionContent: {
@@ -1502,7 +1515,7 @@ const createStyles = (colors, theme) => StyleSheet.create({
   },
   hBarCategoryName: {
     fontSize: 13,
-    fontWeight: '500',
+    fontFamily: theme?.fonts?.bodyMedium,
     color: colors?.text || '#FFF',
   },
   hBarRow: {
@@ -1524,13 +1537,15 @@ const createStyles = (colors, theme) => StyleSheet.create({
   hBarValue: {
     width: 75,
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: theme?.fonts?.numberSemiBold,
+    fontVariant: ['tabular-nums'],
     color: colors?.text || '#FFF',
     textAlign: 'left',
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: theme?.fonts?.headingSemiBold,
+    letterSpacing: -0.2,
     color: colors?.text || '#FFF',
     marginBottom: 16,
   },
@@ -1542,11 +1557,13 @@ const createStyles = (colors, theme) => StyleSheet.create({
     fontSize: 16,
     color: colors?.text || '#FFF',
     marginTop: 16,
+    fontFamily: theme?.fonts?.bodyMedium,
   },
   noDataSubtext: {
     fontSize: 13,
     color: colors?.textSecondary || '#888',
     marginTop: 4,
+    fontFamily: theme?.fonts?.bodyRegular,
   },
   categorySection: {
     marginBottom: 16,
@@ -1580,7 +1597,7 @@ const createStyles = (colors, theme) => StyleSheet.create({
   },
   categoryName: {
     fontSize: 15,
-    fontWeight: '600',
+    fontFamily: theme?.fonts?.bodySemiBold,
     color: colors?.text || '#FFF',
   },
   categoryStats: {
@@ -1592,29 +1609,37 @@ const createStyles = (colors, theme) => StyleSheet.create({
   categoryPercentage: {
     fontSize: 12,
     color: colors?.textSecondary || '#888',
+    fontFamily: theme?.fonts?.bodyRegular,
+    fontVariant: ['tabular-nums'],
   },
   categoryTrendLabel: {
     fontSize: 11,
-    fontWeight: '600',
+    fontFamily: theme?.fonts?.numberSemiBold,
+    fontVariant: ['tabular-nums'],
   },
   categoryHistoricalAvg: {
     fontSize: 10,
     color: colors?.textSecondary || '#888',
     marginTop: 1,
     fontStyle: 'italic',
+    fontFamily: theme?.fonts?.bodyRegular,
+    fontVariant: ['tabular-nums'],
   },
   categoryRight: {
     alignItems: 'flex-end',
   },
   categoryAmount: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontFamily: theme?.fonts?.numberSemiBold,
+    fontVariant: ['tabular-nums'],
     color: colors?.text || '#FFF',
   },
   categoryPrevious: {
     fontSize: 11,
     color: colors?.textSecondary || '#888',
     marginTop: 2,
+    fontFamily: theme?.fonts?.bodyRegular,
+    fontVariant: ['tabular-nums'],
   },
   insightsSection: {
     marginBottom: 16,
@@ -1639,7 +1664,7 @@ const createStyles = (colors, theme) => StyleSheet.create({
   },
   insightTitle: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: theme?.fonts?.bodySemiBold,
     color: colors?.text || '#FFF',
     marginBottom: 4,
   },
@@ -1647,6 +1672,7 @@ const createStyles = (colors, theme) => StyleSheet.create({
     fontSize: 13,
     color: colors?.textSecondary || '#888',
     lineHeight: 18,
+    fontFamily: theme?.fonts?.bodyRegular,
   },
   historySection: {
     backgroundColor: colors?.card || '#2C2C2C',
@@ -1668,6 +1694,8 @@ const createStyles = (colors, theme) => StyleSheet.create({
     fontSize: 10,
     color: colors?.textSecondary || '#888',
     marginBottom: 4,
+    fontFamily: theme?.fonts?.numberSemiBold,
+    fontVariant: ['tabular-nums'],
   },
   historyBarTrack: {
     width: 24,
@@ -1685,6 +1713,7 @@ const createStyles = (colors, theme) => StyleSheet.create({
     fontSize: 11,
     color: colors?.textSecondary || '#888',
     marginTop: 6,
+    fontFamily: theme?.fonts?.bodyMedium,
   },
   algorithmSection: {
     marginBottom: 16,
@@ -1698,10 +1727,11 @@ const createStyles = (colors, theme) => StyleSheet.create({
     fontSize: 13,
     color: colors?.textSecondary || '#888',
     lineHeight: 20,
+    fontFamily: theme?.fonts?.bodyRegular,
   },
   algorithmHighlight: {
     color: colors?.primary || '#FF6B00',
-    fontWeight: '600',
+    fontFamily: theme?.fonts?.bodySemiBold,
   },
   algorithmDivider: {
     height: 1,
@@ -1717,13 +1747,16 @@ const createStyles = (colors, theme) => StyleSheet.create({
   },
   algorithmStatValue: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontFamily: theme?.fonts?.numberBold,
+    letterSpacing: -0.4,
+    fontVariant: ['tabular-nums'],
     color: colors?.text || '#FFF',
   },
   algorithmStatLabel: {
     fontSize: 11,
     color: colors?.textSecondary || '#888',
     marginTop: 4,
+    fontFamily: theme?.fonts?.bodyMedium,
   },
   // ── Tooltip styles (replaces How We Calculate accordion) ──
   calcTooltipRow: {
@@ -1744,6 +1777,7 @@ const createStyles = (colors, theme) => StyleSheet.create({
   calcInfoLabel: {
     fontSize: 13,
     color: colors?.textSecondary || '#888',
+    fontFamily: theme?.fonts?.bodyMedium,
   },
   tooltipOverlay: {
     flex: 1,
@@ -1761,7 +1795,8 @@ const createStyles = (colors, theme) => StyleSheet.create({
   },
   tooltipTitle: {
     fontSize: 17,
-    fontWeight: '700',
+    fontFamily: theme?.fonts?.headingSemiBold,
+    letterSpacing: -0.2,
     color: colors?.text || '#FFF',
     marginBottom: 10,
   },
@@ -1770,6 +1805,7 @@ const createStyles = (colors, theme) => StyleSheet.create({
     color: colors?.textSecondary || '#888',
     lineHeight: 20,
     marginBottom: 14,
+    fontFamily: theme?.fonts?.bodyRegular,
   },
   tooltipStats: {
     flexDirection: 'row',
@@ -1785,6 +1821,8 @@ const createStyles = (colors, theme) => StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
     overflow: 'hidden',
+    fontFamily: theme?.fonts?.bodyMedium,
+    fontVariant: ['tabular-nums'],
   },
   tooltipClose: {
     alignSelf: 'center',
@@ -1795,7 +1833,7 @@ const createStyles = (colors, theme) => StyleSheet.create({
   },
   tooltipCloseText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: theme?.fonts?.bodySemiBold,
     color: '#FFF',
   },
   // ── Subcategory insights styles ──
@@ -1813,7 +1851,8 @@ const createStyles = (colors, theme) => StyleSheet.create({
   },
   subInsightsTitle: {
     fontSize: 15,
-    fontWeight: '700',
+    fontFamily: theme?.fonts?.headingSemiBold,
+    letterSpacing: -0.2,
     color: colors?.text || '#FFF',
   },
   subInsightRow: {
@@ -1834,24 +1873,27 @@ const createStyles = (colors, theme) => StyleSheet.create({
   },
   subInsightName: {
     fontSize: 13,
-    fontWeight: '600',
+    fontFamily: theme?.fonts?.bodySemiBold,
     color: colors?.text || '#FFF',
   },
   subInsightCat: {
     fontSize: 11,
     color: colors?.textSecondary || '#888',
     marginTop: 1,
+    fontFamily: theme?.fonts?.bodyRegular,
   },
   subInsightTrend: {
     fontSize: 13,
-    fontWeight: '700',
+    fontFamily: theme?.fonts?.numberSemiBold,
+    fontVariant: ['tabular-nums'],
     marginRight: 12,
     minWidth: 48,
     textAlign: 'right',
   },
   subInsightAmount: {
     fontSize: 13,
-    fontWeight: '600',
+    fontFamily: theme?.fonts?.numberSemiBold,
+    fontVariant: ['tabular-nums'],
     color: colors?.text || '#FFF',
     minWidth: 60,
     textAlign: 'right',
