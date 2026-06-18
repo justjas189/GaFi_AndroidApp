@@ -6,7 +6,7 @@ import { supabase } from '../config/supabase';
 import { analyzeExpenses, getRecommendations } from '../config/nvidia';
 import { BudgetDatabaseService } from '../services/BudgetDatabaseService_NEW';
 import { normalizeCategory } from '../utils/categoryUtils';
-import notificationService from '../services/OneSignalNotificationService';
+import notificationService from '../services/NotificationService';
 import goalNotificationService from '../services/GoalNotificationService';
 
 export const DataContext = createContext();

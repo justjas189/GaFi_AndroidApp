@@ -95,7 +95,7 @@ const UserTypeScreen = ({ navigation }) => {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <View style={styles.header}>
         <View style={styles.mascotContainer}>
-          <MascotImage size={80} />
+          <MascotImage size={150} />
         </View>
         <Text style={[styles.title, { color: theme.colors.text }]}>Welcome to GaFI! 👋</Text>
         <Text style={[styles.subtitle, { color: theme.colors.text }]}>
@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   mascotContainer: {
-    marginBottom: 20,
+    marginBottom: -30,
   },
   title: {
     fontFamily: FONTS.headingBold,

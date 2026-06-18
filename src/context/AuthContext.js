@@ -4,7 +4,7 @@ import { Alert, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { supabase, supabaseAdmin, formatSupabaseError } from '../config/supabase';
-import notificationService from '../services/OneSignalNotificationService';
+import { removePushToken } from '../services/PushTokenService';
 import {
   clearSessionCache,
   getRateLimitInfo,
@@ -173,13 +173,8 @@ export const AuthProvider = ({ children }) => {
     // Create/backfill the profile row from OAuth metadata (non-blocking).
     syncProfileFromMetadata(session.user, profileData);
 
-    // OneSignal push notifications
-    try {
-      await notificationService.loginUser(session.user.id, session.user.email);
-      await notificationService.updateActiveUserTag();
-    } catch (e) {
-      console.warn('OneSignal login failed (non-critical):', e.message);
-    }
+    // Push token registration is handled by usePushNotifications, keyed on
+    // userInfo.id, so it runs for both password and Google (OAuth) sign-ins.
   };
 
   const clearUnexpectedSignOutTimer = () => {
@@ -371,11 +366,12 @@ export const AuthProvider = ({ children }) => {
         console.warn(`Auth: SIGNED_OUT event received. Manual logout: ${isManual}`);
 
         if (isManual) {
-          // Unlink device from OneSignal
+          // Stop remote push for this device on the signed-out account.
           try {
-            await notificationService.logoutUser();
+            const pushToken = await AsyncStorage.getItem('expoPushToken');
+            if (pushToken) await removePushToken(pushToken);
           } catch (e) {
-            console.warn('OneSignal logout failed (non-critical):', e.message);
+            console.warn('Push token cleanup failed (non-critical):', e.message);
           }
 
           setUserToken(null);

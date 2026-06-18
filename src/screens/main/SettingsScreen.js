@@ -56,6 +56,22 @@ const SettingsScreen = ({ navigation }) => {
     );
   };
 
+  // ── DEV ONLY · TEMP debug hack — remove before release ──
+  // Preview the Onboarding flow (GetStartedScreen) on demand. The root gate in
+  // App.js routes off the in-memory `hasOnboarded` state, exposed as
+  // global.setHasOnboarded. Flipping it false swaps the root navigator to the
+  // OnboardingNavigator (GetStarted is its first screen) — the REAL screen with
+  // a REAL navigation prop, so the "Get Started" CTA works. We deliberately do
+  // NOT touch AsyncStorage (`hasOnboarded_<id>`) or the DB, so a reload drops
+  // you straight back to Main. Nothing to undo.
+  const handlePreviewOnboarding = () => {
+    if (global.setHasOnboarded) {
+      global.setHasOnboarded(false);
+    } else {
+      Alert.alert('Debug', 'global.setHasOnboarded is not available.');
+    }
+  };
+
   const handleExportData = async () => {
     if (!expenses || expenses.length === 0) {
       Alert.alert('No Data', 'You have no expense data to export yet.');
@@ -328,6 +344,28 @@ const SettingsScreen = ({ navigation }) => {
                   <Text style={[styles.settingText, { color: theme.colors.text }]}>Test Notifications</Text>
                   <Text style={[styles.settingValue, { color: theme.colors.text }]}>
                     Dev-only · test notification functionality
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
+            </TouchableOpacity>
+          )}
+
+          {/* DEV ONLY · TEMP — preview GetStartedScreen via the real router. Remove before release. */}
+          {IS_DEVELOPMENT && (
+            <TouchableOpacity
+              style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
+              onPress={handlePreviewOnboarding}
+              activeOpacity={0.7}
+            >
+              <View style={styles.settingItemLeft}>
+                <View style={[styles.settingIconContainer, { backgroundColor: `${theme.colors.secondary}20` }]}>
+                  <Ionicons name="rocket-outline" size={20} color={theme.colors.secondary} />
+                </View>
+                <View style={styles.settingInfo}>
+                  <Text style={[styles.settingText, { color: theme.colors.text }]}>Preview Onboarding</Text>
+                  <Text style={[styles.settingValue, { color: theme.colors.text }]}>
+                    Dev-only · jump to Get Started (reload to return)
                   </Text>
                 </View>
               </View>

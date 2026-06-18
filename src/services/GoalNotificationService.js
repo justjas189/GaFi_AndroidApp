@@ -20,7 +20,7 @@ import DebugUtils from '../utils/DebugUtils';
 /** AsyncStorage key prefix — full key: `goal_notif_ids_{goalId}` */
 const STORAGE_KEY_PREFIX = 'goal_notif_ids_';
 
-/** User preference key — mirrors the pattern in OneSignalNotificationService */
+/** User preference key — mirrors the pattern in NotificationService */
 const PREF_KEY_GOAL_DEADLINE = 'notif_pref_goal_deadline';
 
 /** Fixed notification hour / minute (00:01 AM device-local time) */

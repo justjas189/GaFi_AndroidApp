@@ -6,13 +6,12 @@ import {
   StyleSheet, 
   TouchableOpacity, 
   ScrollView, 
-  Dimensions,
-  Image 
+  Dimensions 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
-import MascotImage from '../../components/MascotImage';
+import { Image } from 'expo-image';
 import { FONTS } from '../../theme/typography';
 
 const { width } = Dimensions.get('window');
@@ -23,14 +22,6 @@ const ExploreScreen = ({ navigation }) => {
 
   // Define your explore categories/features
   const exploreItems = [
-    // {
-    //   id: '1',
-    //   title: 'Budget',
-    //   subtitle: 'Track your budget',
-    //   icon: 'wallet',
-    //   color: '#4CAF50',
-    //   screen: 'Budget'
-    // },
     {
       id: '2',
       title: 'Leaderboard',
@@ -47,14 +38,6 @@ const ExploreScreen = ({ navigation }) => {
       color: '#FFEB3B',
       screen: 'Achievements'
     },
-    // {
-    //   id: '4',
-    //   title: 'Gamification',
-    //   subtitle: 'Fun challenges',
-    //   icon: 'game-controller',
-    //   color: '#E91E63',
-    //   screen: 'Gamification'
-    // }
     {
       id: '5',
       title: 'Manage Friends',
@@ -94,7 +77,13 @@ const ExploreScreen = ({ navigation }) => {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <MascotImage size={60} style={styles.mascot} />
+          <Image
+            source={require('../../../assets/GaFi_Logo_Mark.png')}
+            style={styles.logo}
+            contentFit="contain"
+            accessibilityRole="image"
+            accessibilityLabel="GaFi logo"
+          />
           <Text style={[styles.title, { color: theme.colors.text }]}>Explore</Text>
           <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
             Discover all features
@@ -128,8 +117,10 @@ const styles = StyleSheet.create({
   headerContent: {
     alignItems: 'center',
   },
-  mascot: {
-    marginBottom: 12,
+  logo: {
+    width: 120,
+    height: 120,
+    marginBottom: 25,
   },
   title: {
     fontFamily: FONTS.headingBold,
@@ -187,7 +178,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
   },
-
 });
 
 export default ExploreScreen;

@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemeContext } from '../../context/ThemeContext';
 import { AuthContext } from '../../context/AuthContext';
 import { FONTS } from '../../theme/typography';
+import AnimatedBar from '../../components/AnimatedBar';
 import { DataContext } from '../../context/DataContext';
 import { supabase } from '../../config/supabase';
 import goalNotificationService from '../../services/GoalNotificationService';
@@ -387,7 +388,14 @@ export default function CustomModeDashboard({ navigation }) {
   // (totalInWallets, monthlyDeposits, monthlyWithdrawals, monthlySaved, savingsTarget declared above)
 
   const savingsTargetAmount = monthlyBudget * (savingsTarget / 100);
-  const savingsRate = savingsTargetAmount > 0 ? (monthlyDeposits / savingsTargetAmount) * 100 : 0;
+  // Progress tracks NET savings kept this month (deposits − withdrawals), not
+  // gross deposits — so a withdrawal actually pulls the bar back down instead
+  // of it staying pinned at 100%. Clamped to [0, 100] so a negative net or an
+  // over-funded month can't invert or overflow the gauge.
+  const savingsRate =
+    savingsTargetAmount > 0
+      ? Math.max(0, Math.min(100, (monthlySaved / savingsTargetAmount) * 100))
+      : 0;
   const rateInfo = getSavingsRateLabel(savingsRate, savingsTarget);
 
   // ── Data fetching ───────────────────────────────────────────────────
@@ -870,14 +878,12 @@ export default function CustomModeDashboard({ navigation }) {
             {formatCurrency(spentOrActual)} / {formatCurrency(budgetAmt)}
           </Text>
         </View>
-        <View style={s.barTrack}>
-          <View
-            style={[
-              s.barFill,
-              { width: `${Math.min(pct, 100)}%`, backgroundColor: overBudget ? colors.error : color },
-            ]}
-          />
-        </View>
+        <AnimatedBar
+          percent={pct}
+          color={overBudget ? colors.error : color}
+          trackStyle={s.barTrack}
+          fillStyle={s.barFill}
+        />
       </View>
     );
   };
@@ -965,11 +971,12 @@ export default function CustomModeDashboard({ navigation }) {
 
         {/* Progress bar with milestones */}
         <View style={{ marginTop: 6 }}>
-          <View style={s.barTrack}>
-            <View
-              style={[s.barFill, { width: `${pct}%`, backgroundColor: isComplete ? colors.success : colors.primary }]}
-            />
-          </View>
+          <AnimatedBar
+            percent={pct}
+            color={isComplete ? colors.success : colors.primary}
+            trackStyle={s.barTrack}
+            fillStyle={s.barFill}
+          />
           <View style={{ position: 'relative', height: 18, marginTop: 4 }}>
             {MILESTONES.map((m) => (
               <View
@@ -1462,11 +1469,12 @@ export default function CustomModeDashboard({ navigation }) {
             </View>
             {/* Rate bar */}
             <View style={{ marginTop: 12 }}>
-              <View style={s.barTrack}>
-                <View
-                  style={[s.barFill, { width: `${Math.min(savingsRate, 100)}%`, backgroundColor: rateInfo.color }]}
-                />
-              </View>
+              <AnimatedBar
+                percent={savingsRate}
+                color={rateInfo.color}
+                trackStyle={s.barTrack}
+                fillStyle={s.barFill}
+              />
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
                 <Text style={{ fontSize: 10, color: colors.textSecondary }}>0%</Text>
                 <Text style={{ fontSize: 10, color: colors.textSecondary }}>Target: {savingsTarget}%</Text>

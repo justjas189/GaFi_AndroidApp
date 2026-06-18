@@ -22,6 +22,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { normalizeCategory } from '../../utils/categoryUtils';
 import PredictionEngine from '../../services/PredictionEngine';
+import AnimatedBar from '../../components/AnimatedBar';
 
 // Category colors for charts - matching GameScreen.js EXPENSE_CATEGORIES (canonical names)
 const CATEGORY_COLORS = {
@@ -957,14 +958,11 @@ const DataPredictionScreen = ({ navigation }) => {
           {/* Current month: spent so far + remaining */}
           {predictions.isCurrentMonth && predictions.spentSoFar > 0 && (
             <View style={styles.currentMonthProgress}>
-              <View style={styles.progressBarTrack}>
-                <View
-                  style={[
-                    styles.progressBarFill,
-                    { width: `${Math.min(100, Math.round((predictions.spentSoFar / (predictions.totalPredicted || 1)) * 100))}%` },
-                  ]}
-                />
-              </View>
+              <AnimatedBar
+                percent={(predictions.spentSoFar / (predictions.totalPredicted || 1)) * 100}
+                trackStyle={styles.progressBarTrack}
+                fillStyle={styles.progressBarFill}
+              />
               <View style={styles.progressLabels}>
                 <View style={styles.progressItem}>
                   <View style={[styles.progressDot, { backgroundColor: colors?.primary || '#FF6B00' }]} />

@@ -1,5 +1,5 @@
 // src/screens/main/NotificationSettingsScreen.js
-// Modern, gamified notification settings with OneSignal integration
+// Modern, gamified notification settings (expo-notifications)
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
@@ -20,7 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import notificationService, { PREF_KEYS } from '../../services/OneSignalNotificationService';
+import notificationService, { PREF_KEYS } from '../../services/NotificationService';
 import gameModeNotificationService from '../../services/GameModeNotificationService';
 import { IS_DEVELOPMENT } from '../../utils/appEnvironment';
 import { FONTS } from '../../theme/typography';
@@ -98,7 +98,7 @@ const NOTIFICATION_CHANNELS = [
   // ── Game-mode channels (routed through GameModeNotificationService) ──────────
   {
     id: 'story_mode',
-    mode: true,            // → handled by gameModeNotificationService, not OneSignal
+    mode: true,            // → handled by gameModeNotificationService
     modeId: 'story_mode',
     icon: 'book-outline',
     activeIcon: 'book',
@@ -357,9 +357,8 @@ const NotificationSettingsScreen = ({ navigation }) => {
       }
     }
 
-    if (channel.id === 'weekly_checkin') {
-      await notificationService.updateActiveUserTag();
-    }
+    // weekly_checkin: preference is persisted above; real delivery is handled
+    // server-side (Expo Push API) using the registered push token.
   }, [preferences]);
 
   const handleTest = useCallback(async (channel) => {
@@ -484,7 +483,7 @@ const NotificationSettingsScreen = ({ navigation }) => {
         <View style={styles.footer}>
           <Ionicons name="information-circle-outline" size={16} color={theme.colors.textSecondary} />
           <Text style={[styles.footerText, { color: theme.colors.textSecondary }]}>
-            Notifications use OneSignal push and local scheduling. You can change your device notification permissions in Settings → App → GaFI.
+            Notifications use push and local scheduling. You can change your device notification permissions in Settings → App → GaFI.
           </Text>
         </View>
       </ScrollView>

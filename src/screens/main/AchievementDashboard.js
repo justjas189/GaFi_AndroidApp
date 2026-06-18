@@ -21,6 +21,7 @@ import { AchievementService } from '../../services/AchievementService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import gameDatabaseService from '../../services/GameDatabaseService';
 import { FONTS } from '../../theme/typography';
+import AnimatedBar from '../../components/AnimatedBar';
 
 const { width } = Dimensions.get('window');
 
@@ -818,17 +819,12 @@ const AchievementDashboard = () => {
           <Text style={[styles.progressLabel, { color: theme.colors.text }]}>
             Overall Progress
           </Text>
-          <View style={styles.progressBarContainer}>
-            <View 
-              style={[
-                styles.progressBar,
-                { 
-                  width: totalAchievements > 0 ? `${(earnedAchievements / totalAchievements) * 100}%` : '0%',
-                  backgroundColor: theme.colors.primary
-                }
-              ]} 
-            />
-          </View>
+          <AnimatedBar
+            percent={totalAchievements > 0 ? (earnedAchievements / totalAchievements) * 100 : 0}
+            color={theme.colors.primary}
+            trackStyle={styles.progressBarContainer}
+            fillStyle={styles.progressBar}
+          />
           <Text style={[styles.progressText, { color: theme.colors.text }]}>
             {totalAchievements > 0 ? ((earnedAchievements / totalAchievements) * 100).toFixed(1) : 0}% Complete
           </Text>
@@ -952,17 +948,12 @@ const AchievementDashboard = () => {
 
         {!progress.earned && (
           <View style={styles.progressSection}>
-            <View style={styles.progressBarContainer}>
-              <View 
-                style={[
-                  styles.progressBar,
-                  { 
-                    width: `${progress.percentage}%`,
-                    backgroundColor: theme.colors.primary
-                  }
-                ]} 
-              />
-            </View>
+            <AnimatedBar
+              percent={progress.percentage}
+              color={theme.colors.primary}
+              trackStyle={styles.progressBarContainer}
+              fillStyle={styles.progressBar}
+            />
             <Text style={[styles.progressText, { color: theme.colors.text }]}>
               {progress.progress} / {achievement.target_value} 
               ({progress.percentage.toFixed(1)}%)
@@ -1065,17 +1056,12 @@ const AchievementDashboard = () => {
               </View>
             ) : (
               <View style={styles.progressSection}>
-                <View style={styles.progressBarContainer}>
-                  <View 
-                    style={[
-                      styles.progressBar,
-                      { 
-                        width: `${progress.percentage}%`,
-                        backgroundColor: theme.colors.primary
-                      }
-                    ]} 
-                  />
-                </View>
+                <AnimatedBar
+                  percent={progress.percentage}
+                  color={theme.colors.primary}
+                  trackStyle={styles.progressBarContainer}
+                  fillStyle={styles.progressBar}
+                />
                 <Text style={[styles.progressText, { color: theme.colors.text }]}>
                   {progress.percentage.toFixed(1)}% Complete
                 </Text>

@@ -1,17 +1,15 @@
-// src/services/OneSignalNotificationService.js
-// Centralized OneSignal notification service for GaFI
-// Handles: Budget alerts, Level-up celebrations, Weekly check-ins, Term resets
+// src/services/NotificationService.js
+// Centralized local-notification service for GaFI (expo-notifications).
+// Handles: Budget alerts, Level-up celebrations, Budget/term resets,
+// Daily expense reminders, and notification preferences.
+//
+// Remote push (server-sent) is handled separately via Expo push tokens —
+// see src/hooks/usePushNotifications.js + src/services/PushTokenService.js.
+// The global foreground notification handler is set once in that hook.
 
-import { OneSignal } from 'react-native-onesignal';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DebugUtils from '../utils/DebugUtils';
-
-// ─── OneSignal App ID & REST API Key ────────────────────────────────────────
-// Both values are loaded from environment variables.
-// Set EXPO_PUBLIC_ONESIGNAL_APP_ID and ONESIGNAL_REST_API_KEY in your .env file.
-const ONESIGNAL_APP_ID = process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID;
-const ONESIGNAL_REST_API_KEY = process.env.ONESIGNAL_REST_API_KEY;
 
 // ─── Notification Preference Keys ───────────────────────────────────────────
 const PREF_KEYS = {
@@ -39,60 +37,9 @@ const COOLDOWNS = {
   level_up: 5 * 60 * 1000,              // 5 minutes
 };
 
-class OneSignalNotificationService {
+class NotificationService {
   constructor() {
     this._lastAlertTimestamps = {};
-    this._initialized = false;
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // INITIALIZATION
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Call after the user authenticates. Links the OneSignal device to the
-   * Supabase user ID so targeted pushes and segments work.
-   */
-  async loginUser(userId, userEmail) {
-    try {
-      if (!userId) {
-        DebugUtils.warn('ONESIGNAL', 'loginUser called without userId');
-        return;
-      }
-
-      // Set the external user ID so OneSignal can target this device
-      OneSignal.login(userId);
-
-      // Tag the user with helpful metadata for dashboard segments
-      OneSignal.User.addTags({
-        user_id: userId,
-        email: userEmail || '',
-        app_version: '1.0.0',
-        platform: 'mobile',
-        active_user: 'true',
-      });
-
-      // Restore saved preferences as OneSignal tags
-      await this._syncPreferenceTags();
-
-      this._initialized = true;
-      DebugUtils.log('ONESIGNAL', 'User logged in to OneSignal', { userId });
-    } catch (error) {
-      DebugUtils.error('ONESIGNAL', 'Failed to login user', error);
-    }
-  }
-
-  /**
-   * Call when the user logs out.
-   */
-  async logoutUser() {
-    try {
-      OneSignal.logout();
-      this._initialized = false;
-      DebugUtils.log('ONESIGNAL', 'User logged out of OneSignal');
-    } catch (error) {
-      DebugUtils.error('ONESIGNAL', 'Failed to logout user', error);
-    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -173,11 +120,7 @@ class OneSignalNotificationService {
         const cooldownKey = `${alert.type}_${alert.category}`;
         if (this._isOnCooldown(cooldownKey)) continue;
 
-        // Add a OneSignal tag so the dashboard can also react
-        OneSignal.User.addTag(alert.type, 'true');
-        OneSignal.User.addTag(`${alert.type}_pct`, String(alert.percentage));
-
-        // Send in-app local notification
+        // Send a local notification
         await this._sendLocalNotification(
           alert.type === 'budget_exceeded' ? '🚨 Budget Exceeded!' :
           alert.type === 'budget_critical' ? '🔴 Budget Critical!' :
@@ -187,43 +130,24 @@ class OneSignalNotificationService {
         );
 
         this._markCooldown(cooldownKey, COOLDOWNS[alert.type] || COOLDOWNS.budget_warning);
-        DebugUtils.log('ONESIGNAL', 'Budget alert fired', alert);
+        DebugUtils.log('NOTIF', 'Budget alert fired', alert);
       }
     } catch (error) {
-      DebugUtils.error('ONESIGNAL', 'Error checking budget thresholds', error);
-    }
-  }
-
-  /**
-   * Clear budget warning tags — call when a budget is reset or the user
-   * starts a new cycle.
-   */
-  async clearBudgetTags() {
-    try {
-      OneSignal.User.removeTags([
-        'budget_warning', 'budget_warning_pct',
-        'budget_critical', 'budget_critical_pct',
-        'budget_exceeded', 'budget_exceeded_pct',
-      ]);
-      DebugUtils.log('ONESIGNAL', 'Budget tags cleared');
-    } catch (error) {
-      DebugUtils.error('ONESIGNAL', 'Failed to clear budget tags', error);
+      DebugUtils.error('NOTIF', 'Error checking budget thresholds', error);
     }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 2. LEVEL UP CELEBRATION
+  // 2. LEVEL UP CELEBRATION  (local notification)
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Send a celebratory push notification when the user reaches a milestone.
-   * Uses OneSignal REST API for targeted delivery to a specific external user.
+   * Fire a celebratory local notification when the user reaches a milestone.
    *
-   * @param {string} userId         – Supabase user ID (used as external_id)
    * @param {string} milestoneType  – 'level_complete' | 'goal_reached' | 'achievement'
    * @param {Object} details        – { levelName?, goalName?, xpEarned?, badgeName? }
    */
-  async sendLevelUpNotification(userId, milestoneType = 'level_complete', details = {}) {
+  async sendLevelUpNotification(milestoneType = 'level_complete', details = {}) {
     try {
       const enabled = await this.getPreference(PREF_KEYS.LEVEL_UP);
       if (enabled === false) return;
@@ -243,63 +167,20 @@ class OneSignalNotificationService {
         message = `You completed "${details.levelName}"! ${details.xpEarned ? `+${details.xpEarned} XP earned. ` : ''}Tap to claim your next challenge!`;
       }
 
-      // Tag the milestone for dashboard segments
-      OneSignal.User.addTags({
-        last_milestone: milestoneType,
-        last_milestone_date: new Date().toISOString(),
-      });
-
-      // ── Send via REST API for targeted push ────────────────────────────
-      await this._sendPushViaREST(userId, heading, message, {
-        type: 'level_up',
-        milestoneType,
-        ...details,
-      });
-
-      // Also fire a local notification as fallback
       await this._sendLocalNotification(heading, message, {
         type: 'level_up',
         milestoneType,
       });
 
       this._markCooldown('level_up', COOLDOWNS.level_up);
-      DebugUtils.log('ONESIGNAL', 'Level up notification sent', { milestoneType, details });
+      DebugUtils.log('NOTIF', 'Level up notification sent', { milestoneType, details });
     } catch (error) {
-      DebugUtils.error('ONESIGNAL', 'Failed to send level up notification', error);
+      DebugUtils.error('NOTIF', 'Failed to send level up notification', error);
     }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 3. KOIN AI WEEKLY CHECK-IN (Tag Management)
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Ensure the user is tagged as "active" so the OneSignal dashboard
-   * recurring segment (every Sunday at 5 PM) includes them.
-   *
-   * Call this periodically (e.g. on app open).
-   */
-  async updateActiveUserTag() {
-    try {
-      const enabled = await this.getPreference(PREF_KEYS.WEEKLY_CHECKIN);
-      if (enabled === false) {
-        OneSignal.User.removeTag('weekly_checkin_opt_in');
-        return;
-      }
-
-      OneSignal.User.addTags({
-        active_user: 'true',
-        weekly_checkin_opt_in: 'true',
-        last_active: new Date().toISOString(),
-      });
-      DebugUtils.log('ONESIGNAL', 'Active user tag updated for weekly check-in');
-    } catch (error) {
-      DebugUtils.error('ONESIGNAL', 'Failed to update active user tag', error);
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // 4. NEW TERM / BUDGET RESET NOTIFICATION
+  // 3. NEW TERM / BUDGET RESET NOTIFICATION
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
@@ -333,9 +214,9 @@ class OneSignalNotificationService {
           nextMonth.setMonth(nextMonth.getMonth() + 1);
         }
 
-        trigger = { 
+        trigger = {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: nextMonth 
+          date: nextMonth
         };
       } else {
         // Weekly: schedule 7 days from the last reset at 8:00 AM
@@ -347,9 +228,9 @@ class OneSignalNotificationService {
           nextWeek.setDate(nextWeek.getDate() + 7);
         }
 
-        trigger = { 
+        trigger = {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: nextWeek 
+          date: nextWeek
         };
       }
 
@@ -368,16 +249,13 @@ class OneSignalNotificationService {
       await AsyncStorage.setItem('budget_reset_notification_id', notificationId);
       await AsyncStorage.setItem('budget_reset_cycle', cycle);
 
-      // Also tag on OneSignal for dashboard-managed resets
-      OneSignal.User.addTag('budget_cycle', cycle);
-
-      DebugUtils.log('ONESIGNAL', 'Budget reset notification scheduled', {
+      DebugUtils.log('NOTIF', 'Budget reset notification scheduled', {
         cycle,
         trigger,
         notificationId,
       });
     } catch (error) {
-      DebugUtils.error('ONESIGNAL', 'Failed to schedule budget reset notification', error);
+      DebugUtils.error('NOTIF', 'Failed to schedule budget reset notification', error);
     }
   }
 
@@ -392,7 +270,7 @@ class OneSignalNotificationService {
         await AsyncStorage.removeItem('budget_reset_notification_id');
       }
     } catch (error) {
-      DebugUtils.error('ONESIGNAL', 'Failed to cancel budget reset notification', error);
+      DebugUtils.error('NOTIF', 'Failed to cancel budget reset notification', error);
     }
   }
 
@@ -417,10 +295,12 @@ class OneSignalNotificationService {
           data: { type: 'daily_reminder' },
           sound: 'default',
         },
+        // SDK 54 requires a typed trigger. DAILY repeats every day at
+        // hour:minute automatically — no `repeats` key (that legacy shape throws).
         trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DAILY,
           hour,
           minute,
-          repeats: true,
         },
       });
 
@@ -428,9 +308,9 @@ class OneSignalNotificationService {
       await AsyncStorage.setItem(PREF_KEYS.DAILY_REMINDER, 'true');
       await AsyncStorage.setItem(PREF_KEYS.DAILY_REMINDER_TIME, JSON.stringify({ hour, minute }));
 
-      DebugUtils.log('ONESIGNAL', 'Daily reminder scheduled', { hour, minute, notificationId });
+      DebugUtils.log('NOTIF', 'Daily reminder scheduled', { hour, minute, notificationId });
     } catch (error) {
-      DebugUtils.error('ONESIGNAL', 'Failed to schedule daily reminder', error);
+      DebugUtils.error('NOTIF', 'Failed to schedule daily reminder', error);
     }
   }
 
@@ -446,7 +326,7 @@ class OneSignalNotificationService {
       }
       await AsyncStorage.setItem(PREF_KEYS.DAILY_REMINDER, 'false');
     } catch (error) {
-      DebugUtils.error('ONESIGNAL', 'Failed to cancel daily reminder', error);
+      DebugUtils.error('NOTIF', 'Failed to cancel daily reminder', error);
     }
   }
 
@@ -469,15 +349,14 @@ class OneSignalNotificationService {
   }
 
   /**
-   * Set a notification preference and sync the corresponding OneSignal tag.
+   * Set a notification preference.
    */
   async setPreference(key, enabled) {
     try {
       await AsyncStorage.setItem(key, enabled ? 'true' : 'false');
-      await this._syncPreferenceTag(key, enabled);
-      DebugUtils.log('ONESIGNAL', 'Preference updated', { key, enabled });
+      DebugUtils.log('NOTIF', 'Preference updated', { key, enabled });
     } catch (error) {
-      DebugUtils.error('ONESIGNAL', 'Failed to set preference', error);
+      DebugUtils.error('NOTIF', 'Failed to set preference', error);
     }
   }
 
@@ -507,19 +386,10 @@ class OneSignalNotificationService {
 
   /**
    * Send a test notification for each type (useful from NotificationTestScreen).
-   * Mirrors GoalNotificationService.sendTestNotification: explicit handler setup,
-   * direct scheduleNotificationAsync call, re-throws so the UI surfaces failures.
+   * Re-throws so the UI surfaces failures.
    */
   async sendTestNotification(type = 'budget_warning') {
     try {
-      Notifications.setNotificationHandler({
-        handleNotification: async () => ({
-          shouldShowAlert: true,
-          shouldPlaySound: true,
-          shouldSetBadge: false,
-        }),
-      });
-
       const testPayloads = {
         budget_warning: {
           title: '⚠️ Budget Warning (Test)',
@@ -569,9 +439,9 @@ class OneSignalNotificationService {
         trigger: null,
       });
 
-      DebugUtils.log('ONESIGNAL', 'Test notification sent', { type });
+      DebugUtils.log('NOTIF', 'Test notification sent', { type });
     } catch (err) {
-      DebugUtils.error('ONESIGNAL', 'sendTestNotification failed', err);
+      DebugUtils.error('NOTIF', 'sendTestNotification failed', err);
       throw err; // Re-throw so NotificationTestScreen can show the real error
     }
   }
@@ -581,19 +451,11 @@ class OneSignalNotificationService {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Send a local notification using expo-notifications.
+   * Send an immediate local notification using expo-notifications.
+   * The global foreground handler is set in usePushNotifications.
    */
   async _sendLocalNotification(title, body, data = {}) {
     try {
-      // Configure the notification handler for foreground
-      Notifications.setNotificationHandler({
-        handleNotification: async () => ({
-          shouldShowAlert: true,
-          shouldPlaySound: true,
-          shouldSetBadge: false,
-        }),
-      });
-
       await Notifications.scheduleNotificationAsync({
         content: {
           title,
@@ -604,75 +466,7 @@ class OneSignalNotificationService {
         trigger: null, // Immediately
       });
     } catch (error) {
-      DebugUtils.error('ONESIGNAL', 'Failed to send local notification', error);
-    }
-  }
-
-  /**
-   * Send a push notification via OneSignal REST API to a specific user.
-   */
-  async _sendPushViaREST(externalUserId, heading, message, data = {}) {
-    try {
-      // Skip REST API call if the key is not configured
-      if (!ONESIGNAL_REST_API_KEY || ONESIGNAL_REST_API_KEY === 'YOUR_ONESIGNAL_REST_API_KEY') {
-        DebugUtils.warn('ONESIGNAL', 'REST API key not configured — skipping push via REST');
-        return;
-      }
-
-      const response = await fetch('https://onesignal.com/api/v1/notifications', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          Authorization: `Basic ${ONESIGNAL_REST_API_KEY}`,
-        },
-        body: JSON.stringify({
-          app_id: ONESIGNAL_APP_ID,
-          include_external_user_ids: [externalUserId],
-          headings: { en: heading },
-          contents: { en: message },
-          data,
-        }),
-      });
-
-      const result = await response.json();
-      DebugUtils.log('ONESIGNAL', 'REST API push result', result);
-    } catch (error) {
-      DebugUtils.error('ONESIGNAL', 'REST API push failed', error);
-    }
-  }
-
-  /**
-   * Sync a single preference as a OneSignal tag.
-   */
-  async _syncPreferenceTag(key, enabled) {
-    const tagMap = {
-      [PREF_KEYS.BUDGET_ALERTS]: 'budget_alerts_opt_in',
-      [PREF_KEYS.LEVEL_UP]: 'level_up_opt_in',
-      [PREF_KEYS.WEEKLY_CHECKIN]: 'weekly_checkin_opt_in',
-      [PREF_KEYS.BUDGET_RESET]: 'budget_reset_opt_in',
-      [PREF_KEYS.DAILY_REMINDER]: 'daily_reminder_opt_in',
-      [PREF_KEYS.GOAL_DEADLINE]: 'goal_deadline_opt_in',
-    };
-
-    const tagName = tagMap[key];
-    if (tagName) {
-      if (enabled) {
-        OneSignal.User.addTag(tagName, 'true');
-      } else {
-        OneSignal.User.removeTag(tagName);
-      }
-    }
-  }
-
-  /**
-   * Sync all stored preferences to OneSignal tags.
-   */
-  async _syncPreferenceTags() {
-    const prefs = await this.getAllPreferences();
-    for (const [name, key] of Object.entries(PREF_KEYS)) {
-      if (name === 'DAILY_REMINDER_TIME') continue;
-      const enabled = prefs[name];
-      await this._syncPreferenceTag(key, enabled);
+      DebugUtils.error('NOTIF', 'Failed to send local notification', error);
     }
   }
 
@@ -703,8 +497,8 @@ class OneSignalNotificationService {
 }
 
 // Export a singleton instance
-export const notificationService = new OneSignalNotificationService();
+export const notificationService = new NotificationService();
 
 // Also export the class and preference keys for use in settings
-export { OneSignalNotificationService, PREF_KEYS, BUDGET_THRESHOLDS };
+export { NotificationService, PREF_KEYS, BUDGET_THRESHOLDS };
 export default notificationService;

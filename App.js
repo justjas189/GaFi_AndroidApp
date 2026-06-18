@@ -8,8 +8,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { View, Text, ActivityIndicator } from 'react-native';
-import { LogLevel, OneSignal } from 'react-native-onesignal';
-import Constants from 'expo-constants';
 
 // Enhanced Components & Utilities
 import ErrorBoundary from './src/components/ErrorBoundary';
@@ -34,6 +32,7 @@ import { TutorialProvider } from './src/context/TutorialContext';
 
 // Hooks
 import { useAppFonts } from './src/hooks/useAppFonts';
+import { usePushNotifications } from './src/hooks/usePushNotifications';
 
 const Stack = createStackNavigator();
 
@@ -87,6 +86,10 @@ const AppNavigator = () => {
   const { isLoading, userToken, userInfo } = useAuth();
   const [hasOnboarded, setHasOnboarded] = useState(null); // Use null to indicate uninitialized state
   const [checkingOnboarding, setCheckingOnboarding] = useState(false);
+
+  // Push notifications: permission, ExpoPushToken, listeners. Persists the
+  // token to Supabase once userInfo.id resolves (see usePushNotifications).
+  usePushNotifications(userInfo?.id);
 
   useEffect(() => {
     // Set a timeout to prevent infinite loading
@@ -240,24 +243,6 @@ export default function App() {
   const { fontsLoaded } = useAppFonts();
 
   useEffect(() => {
-    const appId = Constants.expoConfig?.extra?.oneSignalAppId;
-
-    if (!appId) {
-      console.warn('Missing OneSignal app id in Expo config');
-      initializeApp();
-      return;
-    }
-
-    OneSignal.Debug.setLogLevel(LogLevel.Verbose);
-    OneSignal.initialize(appId);
-
-    // Prompts on iOS and Android 13+ when the OS requires it
-    OneSignal.Notifications.requestPermission(true);
-
-    OneSignal.Notifications.addEventListener('click', (event) => {
-      console.log('OneSignal: notification clicked:', event);
-    });
-
     initializeApp();
   }, []);
 

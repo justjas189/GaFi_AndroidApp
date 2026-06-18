@@ -9,6 +9,7 @@ import { supabase } from '../../config/supabase';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { collisionSystem } from '../../utils/CollisionSystem';
 import { AchievementService } from '../../services/AchievementService';
+import AnimatedBar from '../../components/AnimatedBar';
 import gameDatabaseService from '../../services/GameDatabaseService';
 import { normalizeCategory } from '../../utils/categoryUtils';
 import { getCategoryIcon } from '../../utils/categoryIcons';
@@ -7380,12 +7381,12 @@ export default function BuildScreen() {
               <View style={styles.budgetCompactRow}>
                 <Text style={styles.budgetCompactLabel}>💰 Save {savingsGoalPercent}%</Text>
                 <View style={styles.savingsCompactProgress}>
-                  <View style={styles.savingsCompactBar}>
-                    <View style={[styles.savingsCompactFill, {
-                      width: `${Math.min(100, (currentSavings / savingsGoalPercent) * 100)}%`,
-                      backgroundColor: savingsOk ? '#4CAF50' : '#FF9800'
-                    }]} />
-                  </View>
+                  <AnimatedBar
+                    percent={(currentSavings / savingsGoalPercent) * 100}
+                    color={savingsOk ? '#4CAF50' : '#FF9800'}
+                    trackStyle={styles.savingsCompactBar}
+                    fillStyle={styles.savingsCompactFill}
+                  />
                   <Text style={[styles.budgetCompactPercent, {
                     color: savingsOk ? '#4CAF50' : '#FF9800',
                     marginLeft: 8
@@ -8041,14 +8042,12 @@ export default function BuildScreen() {
                     </View>
 
                     {/* Progress bar */}
-                    <View style={{ height: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4, marginBottom: 8 }}>
-                      <View style={{
-                        height: '100%',
-                        width: `${progress}%`,
-                        backgroundColor: progress >= 100 ? '#4CAF50' : '#3498DB',
-                        borderRadius: 4
-                      }} />
-                    </View>
+                    <AnimatedBar
+                      percent={progress}
+                      color={progress >= 100 ? '#4CAF50' : '#3498DB'}
+                      trackStyle={{ height: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4, marginBottom: 8, overflow: 'hidden' }}
+                      fillStyle={{ height: '100%', borderRadius: 4 }}
+                    />
 
                     {/* Quick allocation buttons */}
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>

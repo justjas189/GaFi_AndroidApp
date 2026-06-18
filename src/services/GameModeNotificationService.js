@@ -277,7 +277,12 @@ class GameModeNotificationService {
 
     const time = context.time || channel.defaultTime;
     if (channel.repeats) {
-      return { hour: time.hour, minute: time.minute, repeats: true };
+      // SDK 54: DAILY trigger repeats every day at hour:minute. No `repeats` key.
+      return {
+        type: Notifications.SchedulableTriggerInputTypes.DAILY,
+        hour: time.hour,
+        minute: time.minute,
+      };
     }
     // Non-repeating fallback: next occurrence of the time
     const date = new Date();

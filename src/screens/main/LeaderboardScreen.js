@@ -17,6 +17,7 @@ import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../config/supabase';
 import { AchievementService } from '../../services/AchievementService';
 import { FONTS } from '../../theme/typography';
+import AnimatedBar from '../../components/AnimatedBar';
 
 const { width } = Dimensions.get('window');
 
@@ -359,14 +360,12 @@ const LeaderboardScreen = ({ navigation }) => {
                   {currentUserStats.totalXP} / {nextRank.minXP} XP
                 </Text>
               </View>
-              <View style={styles.progressBarBg}>
-                <View 
-                  style={[
-                    styles.progressBarFill, 
-                    { width: `${progress}%`, backgroundColor: nextRank.color }
-                  ]} 
-                />
-              </View>
+              <AnimatedBar
+                percent={progress}
+                color={nextRank.color}
+                trackStyle={styles.progressBarBg}
+                fillStyle={styles.progressBarFill}
+              />
             </View>
           )}
 
@@ -423,17 +422,12 @@ const LeaderboardScreen = ({ navigation }) => {
 
               {/* Progress Bar */}
               <View style={styles.storyProgressBarContainer}>
-                <View style={styles.storyProgressBarBg}>
-                  <View 
-                    style={[
-                      styles.storyProgressBarFill, 
-                      { 
-                        width: `${level.progress}%`, 
-                        backgroundColor: level.completed ? colors.success : level.color 
-                      }
-                    ]} 
-                  />
-                </View>
+                <AnimatedBar
+                  percent={level.progress}
+                  color={level.completed ? colors.success : level.color}
+                  trackStyle={styles.storyProgressBarBg}
+                  fillStyle={styles.storyProgressBarFill}
+                />
                 <Text style={[
                   styles.storyProgressPercent,
                   level.completed && { color: colors.success }

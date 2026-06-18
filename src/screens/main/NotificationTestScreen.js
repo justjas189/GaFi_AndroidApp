@@ -1,5 +1,5 @@
 // src/screens/main/NotificationTestScreen.js
-// Test screen to verify all notification types using OneSignal + local notifications
+// Test screen to verify all local notification types (expo-notifications)
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -12,10 +12,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { OneSignal } from 'react-native-onesignal';
+import * as Notifications from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import notificationService from '../../services/OneSignalNotificationService';
+import notificationService from '../../services/NotificationService';
 import { FONTS } from '../../theme/typography';
 
 const TEST_BUTTONS = [
@@ -67,7 +68,7 @@ const NotificationTestScreen = ({ navigation }) => {
   const { theme, isDarkMode } = useTheme();
   const { user } = useAuth();
   const [sending, setSending] = useState(null);
-  const [subscriptionId, setSubscriptionId] = useState(null);
+  const [pushToken, setPushToken] = useState(null);
   const [permissionGranted, setPermissionGranted] = useState(null);
 
   useEffect(() => {
@@ -76,11 +77,11 @@ const NotificationTestScreen = ({ navigation }) => {
 
   const checkStatus = async () => {
     try {
-      const permission = OneSignal.Notifications.hasPermission();
-      setPermissionGranted(permission);
+      const { status } = await Notifications.getPermissionsAsync();
+      setPermissionGranted(status === 'granted');
 
-      const id = OneSignal.User.pushSubscription.getPushSubscriptionId();
-      setSubscriptionId(id || null);
+      const token = await AsyncStorage.getItem('expoPushToken');
+      setPushToken(token || null);
     } catch (error) {
       console.warn('Error checking notification status:', error);
     }
@@ -100,7 +101,7 @@ const NotificationTestScreen = ({ navigation }) => {
 
   const handleRequestPermission = async () => {
     try {
-      OneSignal.Notifications.requestPermission(true);
+      await Notifications.requestPermissionsAsync();
       setTimeout(checkStatus, 1000);
     } catch (error) {
       Alert.alert('Error', 'Failed to request permission');
@@ -237,9 +238,9 @@ const NotificationTestScreen = ({ navigation }) => {
           </View>
 
           <View style={styles.statusRow}>
-            <Text style={styles.statusLabel}>OneSignal ID</Text>
-            <Text style={[styles.statusValue, { color: subscriptionId ? theme.colors.success : theme.colors.warning }]} numberOfLines={1}>
-              {subscriptionId ? `${subscriptionId.substring(0, 16)}…` : '❌ Not registered'}
+            <Text style={styles.statusLabel}>Expo Push Token</Text>
+            <Text style={[styles.statusValue, { color: pushToken ? theme.colors.success : theme.colors.warning }]} numberOfLines={1}>
+              {pushToken ? `${pushToken.substring(0, 20)}…` : '❌ Not registered'}
             </Text>
           </View>
 

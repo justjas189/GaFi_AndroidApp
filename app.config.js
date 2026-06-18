@@ -28,7 +28,7 @@ export default {
         // Background is the icon's dark maroon — orange mark would vanish on #FF6B00.
         // Matches the committed native @color/ic_launcher_background (#150000).
         foregroundImage: "./assets/GaFi_Adaptive_Foreground.png",
-        backgroundColor: "#150000"
+        backgroundColor: "#330606"
       },
       package: IS_DEV ? "com.gafi.app.dev" : "com.gafi.app",
       googleServicesFile: "./google-services.json",
@@ -48,12 +48,6 @@ export default {
           // with `color`. A full-color icon would render as a solid white square.
           "icon": "./assets/GaFi_Notification_Icon.png",
           "color": "#FF6B00"
-        }
-      ],
-      [
-        "onesignal-expo-plugin",
-        {
-          "mode": IS_DEV ? "development" : "production"
         }
       ],
       "@react-native-community/datetimepicker",
@@ -78,31 +72,8 @@ export default {
       // it is NOT inlined into the app bundle unless prefixed EXPO_PUBLIC_, so the
       // production guard for Test tooling reads it from `extra`, not process.env.
       appVariant: IS_DEV ? "development" : "production",
-      oneSignalAppId: "2f15e79a-b878-4ac7-a918-9d6d8bc28d60",
       eas: {
-        projectId: "5d45f797-09e9-4b48-b05a-879326f60839",
-        build: {
-          experimental: {
-            ios: {
-              appExtensions: [
-                {
-                  targetName: "OneSignalNotificationServiceExtension",
-                  // Dynamically update iOS extensions to match the dev bundle
-                  bundleIdentifier: IS_DEV 
-                    ? "com.gafi.app.dev.OneSignalNotificationServiceExtension" 
-                    : "com.gafi.app.OneSignalNotificationServiceExtension",
-                  entitlements: {
-                    "com.apple.security.application-groups": [
-                      IS_DEV 
-                        ? "group.com.gafi.app.dev.onesignal" 
-                        : "group.com.gafi.app.onesignal"
-                    ]
-                  }
-                }
-              ]
-            }
-          }
-        }
+        projectId: "5d45f797-09e9-4b48-b05a-879326f60839"
       }
     },
     sdkVersion: "54.0.0"

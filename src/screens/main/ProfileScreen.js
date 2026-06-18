@@ -20,6 +20,7 @@ import { ThemeContext } from '../../context/ThemeContext';
 import { supabase } from '../../config/supabase';
 import LeaderboardService from '../../services/LeaderboardService';
 import MascotImage from '../../components/MascotImage';
+import AnimatedBar from '../../components/AnimatedBar';
 import { getSessionForMutation } from '../../services/AuthSessionHelper';
 import { FONTS } from '../../theme/typography';
 
@@ -355,22 +356,18 @@ const ProfileScreen = ({ navigation }) => {
                   {Math.min(100, Math.round((stats.totalExpenses / budget.monthly) * 100))}%
                 </Text>
               </View>
-              <View style={[styles.progressBarBg, { backgroundColor: theme.colors.border }]}>
-                <View
-                  style={[
-                    styles.progressBarFill,
-                    {
-                      width: `${Math.min(100, (stats.totalExpenses / budget.monthly) * 100)}%`,
-                      backgroundColor:
-                        stats.totalExpenses / budget.monthly > 0.9
-                          ? theme.colors.error
-                          : stats.totalExpenses / budget.monthly > 0.7
-                          ? theme.colors.warning
-                          : theme.colors.success,
-                    },
-                  ]}
-                />
-              </View>
+              <AnimatedBar
+                percent={(stats.totalExpenses / budget.monthly) * 100}
+                color={
+                  stats.totalExpenses / budget.monthly > 0.9
+                    ? theme.colors.error
+                    : stats.totalExpenses / budget.monthly > 0.7
+                    ? theme.colors.warning
+                    : theme.colors.success
+                }
+                trackStyle={[styles.progressBarBg, { backgroundColor: theme.colors.border }]}
+                fillStyle={styles.progressBarFill}
+              />
               <Text style={[styles.utilizationDetail, { color: theme.colors.textSecondary }]}>
                 ₱{stats.totalExpenses.toLocaleString()} of ₱{budget.monthly.toLocaleString()}
               </Text>

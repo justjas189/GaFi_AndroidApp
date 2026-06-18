@@ -27,7 +27,6 @@ Create `.env` file with:
 EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 EXPO_PUBLIC_NVIDIA_API_KEY=your_nvidia_nim_api_key
-ONESIGNAL_APP_ID=your_onesignal_app_id
 ```
 
 ## Project Architecture
@@ -62,7 +61,7 @@ ONESIGNAL_APP_ID=your_onesignal_app_id
 - Calendar: React Native Calendars
 - Backend: Supabase (PostgreSQL + Auth) + Python/Flask for AI services
 - AI Features: NVIDIA NIM API for financial insights and recommendations
-- Notifications: OneSignal for push notifications
+- Notifications: expo-notifications (local scheduling + Expo push tokens)
 
 **Game Mechanics Implementation:**
 - XP system rewards financial behaviors (logging expenses, budget adherence, goal completion)

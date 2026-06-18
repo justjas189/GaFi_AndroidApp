@@ -221,7 +221,7 @@ const ManageFriendsScreen = ({ navigation }) => {
       <View style={styles.modalOverlay}>
         <View style={[styles.modalContent, { backgroundColor: theme.colors.background }]}>
           <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>🤝 Add Friend</Text>
+            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Add Friend</Text>
             <TouchableOpacity
               onPress={() => {
                 setShowAddFriendModal(false);
