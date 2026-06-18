@@ -58,8 +58,8 @@ const DEFAULT_TRACK_KEY = BGM_TRACKS[0].key;
 const STORAGE_KEY = 'bgmTrackKey';
 
 // Two acoustic presets. Tune to taste.
-const FULL = { gain: 0.70, cutoff: 20000 }; // in the room — filter wide open
-const DISTANT = { gain: 0.50, cutoff: 500 }; // through the wall — highs gone
+const FULL = { gain: 0.85, cutoff: 20000 }; // in the room — filter wide open
+const DISTANT = { gain: 0.65, cutoff: 500 }; // through the wall — highs gone
 const FILTER_Q = 0.7; // ~Butterworth, no resonant peak
 const RAMP_SEC = 0.45; // room-preset fade length
 const CROSSFADE_SEC = 0.6; // track-switch crossfade length

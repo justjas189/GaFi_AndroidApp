@@ -7,7 +7,7 @@ export default {
     owner: "gafi_dev_build",
     version: "1.0.0",
     orientation: "portrait",
-    icon: "./assets/icon.png",
+    icon: "./assets/GaFi_Icon_1024x1024.png",
     userInterfaceStyle: "automatic",
     scheme: "gafi",
     splash: {
@@ -24,8 +24,11 @@ export default {
     },
     android: {
       adaptiveIcon: {
-        foregroundImage: "./assets/adaptive-icon.png",
-        backgroundColor: "#FF6B00"
+        // Transparent, safe-zone-padded GF mark (see assets/GaFi_Adaptive_Foreground.png).
+        // Background is the icon's dark maroon — orange mark would vanish on #FF6B00.
+        // Matches the committed native @color/ic_launcher_background (#150000).
+        foregroundImage: "./assets/GaFi_Adaptive_Foreground.png",
+        backgroundColor: "#150000"
       },
       package: IS_DEV ? "com.gafi.app.dev" : "com.gafi.app",
       googleServicesFile: "./google-services.json",
@@ -41,7 +44,9 @@ export default {
       [
         "expo-notifications",
         {
-          "icon": "./assets/icon.png",
+          // Android status-bar icon must be white-on-transparent; Android tints it
+          // with `color`. A full-color icon would render as a solid white square.
+          "icon": "./assets/GaFi_Notification_Icon.png",
           "color": "#FF6B00"
         }
       ],

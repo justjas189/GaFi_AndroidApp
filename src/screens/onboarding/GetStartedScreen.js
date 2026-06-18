@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemeContext } from '../../context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import MascotImage from '../../components/MascotImage';
+import { Image } from 'expo-image';
 import { FONTS } from '../../theme/typography';
 
 const { width } = Dimensions.get('window');
@@ -56,9 +56,13 @@ const GetStartedScreen = ({ navigation }) => {
       <View style={styles.content}>
         {/* Hero Section */}
         <View style={styles.heroSection}>
-          <View style={[styles.mascotGlow, { backgroundColor: theme.colors.primary + '20' }]}>
-            <MascotImage size={100} />
-          </View>
+          <Image
+            source={require('../../../assets/GaFi_Logo_Mark.png')}
+            style={styles.logo}
+            contentFit="contain"
+            accessibilityRole="image"
+            accessibilityLabel="GaFi logo"
+          />
           <Text style={[styles.title, { color: theme.colors.text }]}>Welcome to GaFI</Text>
           <Text style={[styles.subtitle, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>
             Your gamified finance companion
@@ -116,12 +120,9 @@ const styles = StyleSheet.create({
     marginTop: 40,
     marginBottom: 40,
   },
-  mascotGlow: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    justifyContent: 'center',
-    alignItems: 'center',
+  logo: {
+    width: 120,
+    height: 120,
     marginBottom: 24,
   },
   title: {

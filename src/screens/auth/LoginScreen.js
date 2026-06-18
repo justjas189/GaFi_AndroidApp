@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { supabase } from '../../config/supabase';
@@ -106,13 +107,12 @@ const LoginScreen = ({ navigation }) => {
       marginTop: theme.spacing.xl,
       marginBottom: theme.spacing.xl,
     },
-    logoContainer: {
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      backgroundColor: theme.colors.surface,
-      justifyContent: 'center',
-      alignItems: 'center',
+    logo: {
+      // Transparent, pre-trimmed square mark (GaFi_Logo_Mark.png). contentFit
+      // "contain" keeps full aspect; no mask/crop needed.
+      width: 120,
+      height: 120,
+      alignSelf: 'center',
       marginBottom: theme.spacing.lg,
     },
     title: {
@@ -221,9 +221,13 @@ const LoginScreen = ({ navigation }) => {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.header}>
-            <View style={styles.logoContainer}>
-              <Ionicons name="wallet" size={50} color={colors.primary} />
-            </View>
+            <Image
+              source={require('../../../assets/GaFi_Logo_Mark.png')}
+              style={styles.logo}
+              contentFit="contain"
+              accessibilityRole="image"
+              accessibilityLabel="GaFi logo"
+            />
             <Text style={styles.title}>Welcome Back</Text>
             <Text style={styles.subtitle}>Sign in to continue tracking your expenses</Text>
           </View>
