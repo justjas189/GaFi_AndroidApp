@@ -157,6 +157,15 @@ export const AuthProvider = ({ children }) => {
       const enhancedUserInfo = buildUserInfo(session.user, profileData);
       setUserInfo(enhancedUserInfo);
       await AsyncStorage.setItem('userInfo', JSON.stringify(enhancedUserInfo));
+
+      // Reconcile the onboarding cache from the DB for EVERY session. This is
+      // the single funnel for password AND Google (OAuth) sign-ins. The root
+      // navigator routes off hasOnboarded_<id>; OAuth users never pass through
+      // login(), so without this seed an existing user who already completed
+      // onboarding would be wrongly sent back to the Welcome screen.
+      if (profileData?.onboarding_completed) {
+        await AsyncStorage.setItem(`hasOnboarded_${session.user.id}`, 'true');
+      }
     } catch (e) {
       console.warn('Profile enrich failed (non-critical):', e?.message);
     }
@@ -689,9 +698,11 @@ export const AuthProvider = ({ children }) => {
         return { success: false, error: result.error };
       }
 
-      // The SIGNED_IN auth event handles applySession + navigator swap.
-      // New Google users have no `hasOnboarded_<id>` flag, so AppNavigator
-      // routes them to Onboarding automatically.
+      // The SIGNED_IN auth event handles applySession (which seeds the
+      // hasOnboarded_<id> cache from profiles.onboarding_completed) + the
+      // navigator swap. The root navigator's gate also consults the DB on a
+      // cache miss, so EXISTING Google users land on Main and only genuinely
+      // new ones hit Onboarding.
       return { success: true, session: result.session };
     } catch (error) {
       console.error('Google login error:', error);

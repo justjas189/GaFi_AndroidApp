@@ -23,6 +23,9 @@ import MainNavigator from './src/navigation/MainNavigator';
 import OnboardingNavigator from './src/navigation/OnboardingNavigator';
 import { navigationRef } from './src/navigation/navigationRef';
 
+// Services / config
+import { supabase } from './src/config/supabase';
+
 // Context Providers
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { DataProvider } from './src/context/DataContext';
@@ -126,14 +129,43 @@ const AppNavigator = () => {
         return;
       }
 
+      // Fast path: local cache. Seeded on every authenticated session by
+      // applySession (and by login() / BudgetGoalsScreen) from the DB's
+      // onboarding_completed column.
       const hasOnboardedFlag = await AsyncStorage.getItem(`hasOnboarded_${userInfo.id}`);
-      const isOnboarded = hasOnboardedFlag === 'true';
-      
+      if (hasOnboardedFlag === 'true') {
+        setHasOnboarded(true);
+        DebugUtils.debug('APP', 'Onboarding status: cache hit', { userId: userInfo.id });
+        return;
+      }
+
+      // Cache miss/false → do NOT assume "new user". Google (OAuth) sign-ins
+      // never pass through login(), so an EXISTING user who already finished
+      // onboarding has onboarding_completed=true in the DB but no local flag
+      // yet. Consult the DB as source of truth and self-heal the cache. This
+      // is also race-proof: the navigator waits on this gate (checkingOnboarding
+      // → LoadingScreen) regardless of when applySession's seed lands.
+      // select('*') is schema-drift-safe (naming a missing column 400s).
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userInfo.id)
+        .maybeSingle();
+
+      if (profileError && profileError.code !== 'PGRST116') {
+        DebugUtils.warn('APP', 'Onboarding DB check failed, falling back to local flag', profileError);
+      }
+
+      const isOnboarded = profileData?.onboarding_completed === true;
+      if (isOnboarded) {
+        await AsyncStorage.setItem(`hasOnboarded_${userInfo.id}`, 'true');
+      }
+
       setHasOnboarded(isOnboarded);
-      DebugUtils.debug('APP', 'Onboarding status checked', { 
-        userId: userInfo.id, 
+      DebugUtils.debug('APP', 'Onboarding status checked via DB', {
+        userId: userInfo.id,
         hasOnboarded: isOnboarded,
-        rawFlag: hasOnboardedFlag
+        rawFlag: hasOnboardedFlag,
       });
     } catch (error) {
       DebugUtils.error('APP', 'Error checking onboarding status', error);
