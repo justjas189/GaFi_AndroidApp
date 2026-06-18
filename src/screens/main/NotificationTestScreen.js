@@ -16,6 +16,7 @@ import { OneSignal } from 'react-native-onesignal';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import notificationService from '../../services/OneSignalNotificationService';
+import { FONTS } from '../../theme/typography';
 
 const TEST_BUTTONS = [
   {
@@ -120,8 +121,9 @@ const NotificationTestScreen = ({ navigation }) => {
       paddingBottom: 12,
     },
     headerTitle: {
+      fontFamily: FONTS.headingSemiBold,
       fontSize: 20,
-      fontWeight: '700',
+      letterSpacing: -0.3,
       color: theme.colors.text,
     },
     content: {
@@ -137,8 +139,9 @@ const NotificationTestScreen = ({ navigation }) => {
       borderColor: isDarkMode ? theme.colors.border : '#E8E8E8',
     },
     statusTitle: {
+      fontFamily: FONTS.headingSemiBold,
       fontSize: 16,
-      fontWeight: '700',
+      letterSpacing: -0.2,
       color: theme.colors.text,
       marginBottom: 12,
     },
@@ -149,17 +152,18 @@ const NotificationTestScreen = ({ navigation }) => {
       gap: 8,
     },
     statusLabel: {
+      fontFamily: FONTS.bodyRegular,
       fontSize: 14,
       color: theme.colors.textSecondary,
       flex: 1,
     },
     statusValue: {
+      fontFamily: FONTS.bodySemiBold,
       fontSize: 14,
-      fontWeight: '600',
     },
     sectionTitle: {
+      fontFamily: FONTS.bodySemiBold,
       fontSize: 14,
-      fontWeight: '600',
       color: theme.colors.textSecondary,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
@@ -175,11 +179,12 @@ const NotificationTestScreen = ({ navigation }) => {
       gap: 12,
     },
     testButtonLabel: {
+      fontFamily: FONTS.bodySemiBold,
       fontSize: 15,
-      fontWeight: '600',
       color: theme.colors.text,
     },
     testButtonDesc: {
+      fontFamily: FONTS.bodyRegular,
       fontSize: 12,
       color: theme.colors.textSecondary,
       marginTop: 2,
@@ -192,8 +197,8 @@ const NotificationTestScreen = ({ navigation }) => {
       marginBottom: 20,
     },
     permButtonText: {
+      fontFamily: FONTS.bodySemiBold,
       color: '#FFF',
-      fontWeight: '700',
       fontSize: 15,
     },
     refreshButton: {
@@ -285,7 +290,7 @@ const NotificationTestScreen = ({ navigation }) => {
         {/* Refresh */}
         <TouchableOpacity style={styles.refreshButton} onPress={checkStatus}>
           <Ionicons name="refresh-outline" size={18} color={theme.colors.text} />
-          <Text style={{ color: theme.colors.text, fontWeight: '600' }}>Refresh Status</Text>
+          <Text style={{ color: theme.colors.text, fontFamily: FONTS.bodySemiBold }}>Refresh Status</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

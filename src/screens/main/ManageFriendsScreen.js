@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { FriendService } from '../../services/FriendService';
+import { FONTS } from '../../theme/typography';
 
 const { width } = Dimensions.get('window');
 
@@ -407,8 +408,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: {
+    fontFamily: FONTS.bodyMedium,
     fontSize: 16,
-    fontWeight: '500',
   },
 
   // Header
@@ -421,8 +422,9 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   headerTitle: {
+    fontFamily: FONTS.headingBold,
     fontSize: 22,
-    fontWeight: 'bold',
+    letterSpacing: -0.3,
   },
 
   // Tabs
@@ -447,8 +449,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
   },
   tabText: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 14,
-    fontWeight: '600',
   },
   badge: {
     minWidth: 20,
@@ -460,9 +462,10 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   badgeText: {
+    fontFamily: FONTS.numberBold,
     color: '#fff',
     fontSize: 11,
-    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
   },
 
   // Content
@@ -493,19 +496,20 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   avatarText: {
+    fontFamily: FONTS.headingBold,
     color: '#fff',
     fontSize: 20,
-    fontWeight: 'bold',
   },
   friendInfo: {
     flex: 1,
   },
   friendName: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 16,
-    fontWeight: '600',
     marginBottom: 2,
   },
   friendUsername: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 13,
     marginBottom: 4,
   },
@@ -514,11 +518,14 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   friendLevel: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 13,
-    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   friendSaved: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 13,
+    fontVariant: ['tabular-nums'],
   },
   removeBtn: {
     padding: 4,
@@ -563,12 +570,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   emptyTitle: {
+    fontFamily: FONTS.headingSemiBold,
     fontSize: 20,
-    fontWeight: 'bold',
+    letterSpacing: -0.2,
     marginTop: 16,
     marginBottom: 8,
   },
   emptySubtitle: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
@@ -583,9 +592,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   emptyBtnText: {
+    fontFamily: FONTS.bodySemiBold,
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
   },
 
   // Modal
@@ -612,8 +621,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   modalTitle: {
+    fontFamily: FONTS.headingBold,
     fontSize: 22,
-    fontWeight: 'bold',
+    letterSpacing: -0.3,
   },
   searchBar: {
     flexDirection: 'row',
@@ -627,6 +637,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
+    fontFamily: FONTS.bodyRegular,
     fontSize: 16,
   },
   searchResultsList: {
@@ -647,6 +658,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   searchStatus: {
+    fontFamily: FONTS.bodyRegular,
     textAlign: 'center',
     fontSize: 15,
     paddingVertical: 24,

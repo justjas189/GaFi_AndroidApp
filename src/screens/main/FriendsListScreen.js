@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { FriendService } from '../../services/FriendService';
+import { FONTS } from '../../theme/typography';
 
 const FriendsListScreen = ({ navigation }) => {
   const { theme } = useTheme();
@@ -187,6 +188,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 16,
   },
   header: {
@@ -200,8 +202,9 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   title: {
+    fontFamily: FONTS.headingBold,
     fontSize: 24,
-    fontWeight: 'bold',
+    letterSpacing: -0.4,
     flex: 1,
     textAlign: 'center',
   },
@@ -227,11 +230,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   friendName: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 18,
-    fontWeight: '600',
     marginBottom: 4,
   },
   friendUsername: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     marginBottom: 8,
   },
@@ -240,11 +244,14 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   friendLevel: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 14,
-    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   friendSavings: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
+    fontVariant: ['tabular-nums'],
   },
   removeButton: {
     padding: 8,
@@ -255,12 +262,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   emptyText: {
+    fontFamily: FONTS.headingSemiBold,
     fontSize: 20,
-    fontWeight: '600',
+    letterSpacing: -0.2,
     marginTop: 20,
     marginBottom: 8,
   },
   emptySubtext: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
@@ -272,9 +281,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   addFriendsButtonText: {
+    fontFamily: FONTS.bodySemiBold,
     color: 'white',
     fontSize: 16,
-    fontWeight: '600',
   },
 });
 

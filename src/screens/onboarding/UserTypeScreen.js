@@ -8,6 +8,7 @@ import { supabase } from '../../config/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { ThemeContext } from '../../context/ThemeContext';
 import MascotImage from '../../components/MascotImage';
+import { FONTS } from '../../theme/typography';
 
 const UserTypeScreen = ({ navigation }) => {
   const [selectedType, setSelectedType] = useState(null);
@@ -188,12 +189,14 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   title: {
+    fontFamily: FONTS.headingBold,
     fontSize: 28,
-    fontWeight: 'bold',
+    letterSpacing: -0.4,
     marginBottom: 12,
     textAlign: 'center',
   },
   subtitle: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 16,
     lineHeight: 24,
     textAlign: 'center',
@@ -229,11 +232,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   optionTitle: {
+    fontFamily: FONTS.headingSemiBold,
     fontSize: 20,
-    fontWeight: '600',
+    letterSpacing: -0.2,
     marginBottom: 4,
   },
   optionSubtitle: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     lineHeight: 20,
     opacity: 0.8,
@@ -265,6 +270,7 @@ const styles = StyleSheet.create({
   },
   infoText: {
     flex: 1,
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     color: '#1976D2',
     lineHeight: 20,
@@ -278,8 +284,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   skipButtonText: {
+    fontFamily: FONTS.bodyMedium,
     fontSize: 16,
-    fontWeight: '500',
     opacity: 0.8,
   },
   continueButton: {
@@ -301,8 +307,8 @@ const styles = StyleSheet.create({
     elevation: 0,
   },
   continueButtonText: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 18,
-    fontWeight: '600',
     color: '#FFFFFF',
   },
 });

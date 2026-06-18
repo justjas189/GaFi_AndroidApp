@@ -18,6 +18,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { supabase } from '../../config/supabase';
 import GoogleSignInButton from '../../components/auth/GoogleSignInButton';
+import { FONTS } from '../../theme/typography';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -115,12 +116,14 @@ const LoginScreen = ({ navigation }) => {
       marginBottom: theme.spacing.lg,
     },
     title: {
+      fontFamily: FONTS.headingBold,
       fontSize: 28,
-      fontWeight: 'bold',
+      letterSpacing: -0.4,
       color: theme.colors.text,
       marginBottom: theme.spacing.sm,
     },
     subtitle: {
+      fontFamily: FONTS.bodyRegular,
       fontSize: 16,
       color: theme.colors.textSecondary,
       textAlign: 'center',
@@ -143,6 +146,7 @@ const LoginScreen = ({ navigation }) => {
     },
     input: {
       flex: 1,
+      fontFamily: FONTS.bodyRegular,
       color: theme.colors.text,
       fontSize: 16,
       paddingVertical: theme.spacing.md,
@@ -152,6 +156,7 @@ const LoginScreen = ({ navigation }) => {
       marginBottom: theme.spacing.lg,
     },
     forgotPasswordText: {
+      fontFamily: FONTS.bodyMedium,
       color: theme.colors.primary,
       fontSize: 14,
     },
@@ -166,9 +171,9 @@ const LoginScreen = ({ navigation }) => {
       backgroundColor: theme.colors.disabled,
     },
     loginButtonText: {
+      fontFamily: FONTS.bodySemiBold,
       color: '#FFF',
       fontSize: 16,
-      fontWeight: 'bold',
     },
     dividerRow: {
       flexDirection: 'row',
@@ -182,6 +187,7 @@ const LoginScreen = ({ navigation }) => {
       backgroundColor: isDarkMode ? '#444' : '#E0E0E0',
     },
     dividerText: {
+      fontFamily: FONTS.bodyMedium,
       color: isDarkMode ? '#444' : '#E0E0E0',
       fontSize: 13,
       paddingHorizontal: 10,
@@ -192,13 +198,14 @@ const LoginScreen = ({ navigation }) => {
       marginTop: 'auto',
     },
     footerText: {
+      fontFamily: FONTS.bodyRegular,
       color: theme.colors.textSecondary,
       fontSize: 14,
     },
     signUpText: {
+      fontFamily: FONTS.bodySemiBold,
       color: theme.colors.primary,
       fontSize: 14,
-      fontWeight: 'bold',
     },
   }));
 

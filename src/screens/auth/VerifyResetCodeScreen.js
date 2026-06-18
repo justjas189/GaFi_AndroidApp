@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../../context/AuthContext';
 import { ThemeContext } from '../../context/ThemeContext';
+import { FONTS } from '../../theme/typography';
 
 const VerifyResetCodeScreen = ({ navigation, route }) => {
   const { email } = route.params;
@@ -228,12 +229,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
+    fontFamily: FONTS.headingBold,
     fontSize: 24,
-    fontWeight: 'bold',
+    letterSpacing: -0.4,
     marginBottom: 10,
     textAlign: 'center',
   },
   subtitle: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 16,
     marginBottom: 30,
     textAlign: 'center',
@@ -250,8 +253,9 @@ const styles = StyleSheet.create({
     height: 55,
     borderWidth: 2,
     borderRadius: 12,
+    fontFamily: FONTS.numberBold,
     fontSize: 24,
-    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
     textAlign: 'center',
     marginHorizontal: 5,
   },
@@ -260,6 +264,7 @@ const styles = StyleSheet.create({
   },
   input: {
     height: 50,
+    fontFamily: FONTS.bodyRegular,
     paddingHorizontal: 16,
     borderRadius: 8,
     fontSize: 16,
@@ -271,22 +276,23 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   buttonText: {
+    fontFamily: FONTS.bodySemiBold,
     color: '#FFF',
     fontSize: 16,
-    fontWeight: 'bold',
   },
   strengthContainer: {
     marginBottom: 20,
   },
   strengthTitle: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 14,
-    fontWeight: 'bold',
     marginBottom: 10,
   },
   requirementList: {
     paddingLeft: 10,
   },
   requirement: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     marginBottom: 5,
   },

@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { FriendService } from '../../services/FriendService';
+import { FONTS } from '../../theme/typography';
 
 const FriendRequestsScreen = ({ navigation }) => {
   const { theme } = useTheme();
@@ -171,6 +172,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 16,
   },
   header: {
@@ -184,8 +186,9 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   title: {
+    fontFamily: FONTS.headingBold,
     fontSize: 24,
-    fontWeight: 'bold',
+    letterSpacing: -0.4,
     flex: 1,
   },
   headerSpacer: {
@@ -210,16 +213,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   requestName: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 16,
-    fontWeight: '600',
     marginBottom: 4,
   },
   requestUsername: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     marginBottom: 2,
   },
   requestDate: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 12,
+    fontVariant: ['tabular-nums'],
   },
   requestActions: {
     flexDirection: 'row',
@@ -245,12 +251,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   emptyText: {
+    fontFamily: FONTS.headingSemiBold,
     fontSize: 20,
-    fontWeight: '600',
+    letterSpacing: -0.2,
     marginTop: 20,
     marginBottom: 8,
   },
   emptySubtext: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,

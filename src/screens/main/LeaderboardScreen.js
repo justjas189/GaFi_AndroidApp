@@ -16,6 +16,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../config/supabase';
 import { AchievementService } from '../../services/AchievementService';
+import { FONTS } from '../../theme/typography';
 
 const { width } = Dimensions.get('window');
 
@@ -792,9 +793,9 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     gap: 16,
   },
   loadingText: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 18,
     color: colors.text,
-    fontWeight: '600',
   },
   header: {
     flexDirection: 'row',
@@ -810,8 +811,9 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     gap: 10,
   },
   headerTitle: {
+    fontFamily: FONTS.headingBold,
     fontSize: 26,
-    fontWeight: 'bold',
+    letterSpacing: -0.4,
     color: colors.text,
   },
   headerButtons: {
@@ -849,8 +851,8 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     backgroundColor: colors.surface,
   },
   tabText: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 15,
-    fontWeight: '600',
     color: colors.textSecondary,
   },
   activeTabText: {
@@ -863,15 +865,17 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     borderRadius: 10,
   },
   tabBadgeText: {
+    fontFamily: FONTS.numberBold,
     color: '#FFFFFF',
     fontSize: 12,
-    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
   },
   content: {
     flex: 1,
     paddingHorizontal: 20,
   },
   userStatsCard: {
+    marginTop: 4,
     marginBottom: 20,
     borderRadius: 20,
     overflow: 'hidden',
@@ -908,15 +912,17 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     flex: 1,
   },
   rankTitle: {
+    fontFamily: FONTS.headingBold,
     fontSize: 22,
-    fontWeight: 'bold',
+    letterSpacing: -0.3,
     color: colors.text,
     marginBottom: 4,
   },
   globalRank: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 14,
     color: colors.primary,
-    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   xpContainer: {
     flexDirection: 'row',
@@ -933,25 +939,29 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     gap: 8,
   },
   xpValue: {
+    fontFamily: FONTS.numberBold,
     fontSize: 32,
-    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -0.5,
     color: colors.primary,
   },
   xpLabel: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 18,
     color: colors.textSecondary,
-    fontWeight: '600',
   },
   achievementCount: {
     alignItems: 'center',
   },
   achievementText: {
+    fontFamily: FONTS.numberBold,
     fontSize: 18,
-    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
     color: colors.text,
     marginTop: 4,
   },
   achievementLabel: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 11,
     color: colors.textSecondary,
   },
@@ -964,13 +974,15 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     marginBottom: 8,
   },
   progressLabel: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 14,
     color: colors.text,
-    fontWeight: '600',
   },
   progressXP: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     color: colors.textSecondary,
+    fontVariant: ['tabular-nums'],
   },
   progressBarBg: {
     height: 10,
@@ -994,6 +1006,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   },
   quickStatText: {
     flex: 1,
+    fontFamily: FONTS.bodyMedium,
     fontSize: 14,
     color: colors.text,
   },
@@ -1036,12 +1049,14 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     flex: 1,
   },
   storyLevelName: {
+    fontFamily: FONTS.headingSemiBold,
     fontSize: 16,
-    fontWeight: 'bold',
+    letterSpacing: -0.2,
     color: colors.text,
     marginBottom: 2,
   },
   storyLevelDesc: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 12,
     color: colors.textSecondary,
   },
@@ -1066,13 +1081,15 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     borderRadius: 4,
   },
   storyProgressPercent: {
+    fontFamily: FONTS.numberBold,
     fontSize: 14,
-    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
     color: colors.text,
     minWidth: 45,
     textAlign: 'right',
   },
   storyStatusText: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 12,
     color: colors.textSecondary,
   },
@@ -1086,18 +1103,19 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     borderTopColor: colors.border,
   },
   overallProgressText: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 14,
-    fontWeight: '600',
     color: colors.text,
+    fontVariant: ['tabular-nums'],
   },
   starsContainer: {
     flexDirection: 'row',
     gap: 4,
   },
   playNowText: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 14,
     color: colors.primary,
-    fontWeight: '600',
   },
   // Leaderboard Section
   leaderboardSection: {
@@ -1110,13 +1128,16 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: {
+    fontFamily: FONTS.headingSemiBold,
     fontSize: 18,
-    fontWeight: 'bold',
+    letterSpacing: -0.2,
     color: colors.text,
   },
   sectionSubtitle: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     color: colors.textSecondary,
+    fontVariant: ['tabular-nums'],
   },
   // Podium styles
   podiumContainer: {
@@ -1149,23 +1170,26 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     fontSize: 22,
   },
   podiumName: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 12,
-    fontWeight: '700',
     color: colors.text,
     textAlign: 'center',
     marginBottom: 2,
     maxWidth: 90,
   },
   podiumScore: {
+    fontFamily: FONTS.numberBold,
     fontSize: 11,
-    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
     color: colors.primary,
     marginBottom: 2,
   },
   podiumAchievements: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 10,
     color: colors.textSecondary,
     marginBottom: 6,
+    fontVariant: ['tabular-nums'],
   },
   podiumBar: {
     width: '80%',
@@ -1194,8 +1218,9 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     borderColor: colors.border,
   },
   compactRank: {
+    fontFamily: FONTS.numberBold,
     fontSize: 14,
-    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
     color: colors.textSecondary,
     width: 32,
     textAlign: 'center',
@@ -1212,11 +1237,12 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     flex: 1,
   },
   compactName: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 14,
-    fontWeight: '600',
     color: colors.text,
   },
   compactRankTitle: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 11,
     color: colors.textSecondary,
   },
@@ -1224,13 +1250,16 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     alignItems: 'flex-end',
   },
   compactXP: {
+    fontFamily: FONTS.numberBold,
     fontSize: 13,
-    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
     color: colors.primary,
   },
   compactAch: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 11,
     color: colors.textSecondary,
+    fontVariant: ['tabular-nums'],
   },
   // Expand button
   expandButton: {
@@ -1241,8 +1270,8 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     gap: 6,
   },
   expandButtonText: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 14,
-    fontWeight: '600',
     color: colors.primary,
   },
   leaderboardList: {
@@ -1273,8 +1302,9 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     fontSize: 24,
   },
   rankNumber: {
+    fontFamily: FONTS.numberBold,
     fontSize: 16,
-    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
     color: colors.textSecondary,
   },
   playerInfo: {
@@ -1297,8 +1327,8 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     flex: 1,
   },
   playerName: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 16,
-    fontWeight: '600',
     color: colors.text,
     marginBottom: 2,
   },
@@ -1306,6 +1336,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     color: colors.primary,
   },
   playerRankTitle: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 12,
     color: colors.textSecondary,
   },
@@ -1323,13 +1354,16 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     gap: 4,
   },
   xpBadgeText: {
+    fontFamily: FONTS.numberBold,
     fontSize: 14,
-    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
     color: colors.primary,
   },
   achievementCountSmall: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 12,
     color: colors.textSecondary,
+    fontVariant: ['tabular-nums'],
   },
   emptyState: {
     alignItems: 'center',
@@ -1338,13 +1372,15 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     borderRadius: 16,
   },
   emptyTitle: {
+    fontFamily: FONTS.headingSemiBold,
     fontSize: 20,
-    fontWeight: 'bold',
+    letterSpacing: -0.2,
     color: colors.text,
     marginTop: 16,
     marginBottom: 8,
   },
   emptySubtitle: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     color: colors.textSecondary,
     textAlign: 'center',
@@ -1361,9 +1397,9 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     gap: 8,
   },
   emptyButtonText: {
+    fontFamily: FONTS.bodySemiBold,
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '600',
   },
   rankTiersSection: {
     marginBottom: 20,
@@ -1391,15 +1427,16 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     marginBottom: 8,
   },
   tierTitle: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 12,
-    fontWeight: '600',
     color: colors.text,
     textAlign: 'center',
     marginBottom: 4,
   },
   tierXP: {
+    fontFamily: FONTS.numberSemiBold,
     fontSize: 11,
-    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
   },
   modalOverlay: {
     flex: 1,
@@ -1424,8 +1461,9 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     marginBottom: 20,
   },
   modalTitle: {
+    fontFamily: FONTS.headingBold,
     fontSize: 22,
-    fontWeight: 'bold',
+    letterSpacing: -0.3,
     color: colors.text,
   },
   closeButton: {
@@ -1443,6 +1481,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   },
   searchInput: {
     flex: 1,
+    fontFamily: FONTS.bodyRegular,
     fontSize: 16,
     color: colors.text,
   },
@@ -1450,6 +1489,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     maxHeight: 300,
   },
   searchStatus: {
+    fontFamily: FONTS.bodyRegular,
     textAlign: 'center',
     color: colors.textSecondary,
     fontSize: 16,
@@ -1467,11 +1507,12 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     flex: 1,
   },
   searchUserName: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 16,
-    fontWeight: '600',
     color: colors.text,
   },
   searchUsername: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     color: colors.textSecondary,
     marginTop: 2,

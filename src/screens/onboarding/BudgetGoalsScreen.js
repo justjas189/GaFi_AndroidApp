@@ -8,6 +8,7 @@ import { ThemeContext } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../config/supabase';
 import { getSessionForMutation } from '../../services/AuthSessionHelper';
+import { FONTS } from '../../theme/typography';
 
 const { width } = Dimensions.get('window');
 
@@ -277,11 +278,13 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   title: {
+    fontFamily: FONTS.headingBold,
     fontSize: 28,
-    fontWeight: 'bold',
+    letterSpacing: -0.4,
     marginBottom: 8,
   },
   subtitle: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 16,
     textAlign: 'center',
   },
@@ -297,16 +300,19 @@ const styles = StyleSheet.create({
     height: 72,
   },
   currency: {
+    fontFamily: FONTS.numberSemiBold,
     fontSize: 32,
-    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
     marginRight: 8,
   },
   input: {
     flex: 1,
+    fontFamily: FONTS.numberSemiBold,
     fontSize: 32,
-    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   errorText: {
+    fontFamily: FONTS.bodyRegular,
     color: '#FF3B30',
     fontSize: 13,
     marginTop: 8,
@@ -316,8 +322,8 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   presetsLabel: {
+    fontFamily: FONTS.bodyMedium,
     fontSize: 14,
-    fontWeight: '500',
     marginBottom: 12,
   },
   presetsGrid: {
@@ -333,8 +339,9 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   presetText: {
+    fontFamily: FONTS.numberSemiBold,
     fontSize: 14,
-    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   infoCard: {
     flexDirection: 'row',
@@ -345,6 +352,7 @@ const styles = StyleSheet.create({
   },
   infoText: {
     flex: 1,
+    fontFamily: FONTS.bodyRegular,
     fontSize: 13,
     lineHeight: 20,
   },
@@ -370,9 +378,9 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   buttonText: {
+    fontFamily: FONTS.bodySemiBold,
     color: '#FFFFFF',
     fontSize: 18,
-    fontWeight: '600',
   },
 });
 

@@ -23,6 +23,7 @@ import { useAuth } from '../../context/AuthContext';
 import notificationService, { PREF_KEYS } from '../../services/OneSignalNotificationService';
 import gameModeNotificationService from '../../services/GameModeNotificationService';
 import { IS_DEVELOPMENT } from '../../utils/appEnvironment';
+import { FONTS } from '../../theme/typography';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -242,7 +243,7 @@ const NotificationCard = ({
           <Ionicons name="time-outline" size={18} color={channel.color} />
           <Text style={[styles.timeText, { color: theme.colors.text }]}>
             Remind at{' '}
-            <Text style={{ color: channel.color, fontWeight: '700' }}>
+            <Text style={{ color: channel.color, fontFamily: FONTS.numberSemiBold, fontVariant: ['tabular-nums'] }}>
               {reminderTime
                 ? new Date(0, 0, 0, reminderTime.hour, reminderTime.minute).toLocaleTimeString('en-US', {
                     hour: '2-digit',
@@ -517,11 +518,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
+    fontFamily: FONTS.headingSemiBold,
     fontSize: 20,
-    fontWeight: '700',
     letterSpacing: -0.3,
   },
   headerSubtitle: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 13,
     marginTop: 2,
   },
@@ -545,11 +547,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   heroTitle: {
+    fontFamily: FONTS.headingSemiBold,
     fontSize: 18,
-    fontWeight: '700',
+    letterSpacing: -0.2,
     marginBottom: 4,
   },
   heroDescription: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -609,17 +613,18 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   cardTitle: {
+    fontFamily: FONTS.headingSemiBold,
     fontSize: 16,
-    fontWeight: '700',
     letterSpacing: -0.2,
   },
   cardSubtitle: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 12,
-    fontWeight: '600',
     letterSpacing: 0.3,
     textTransform: 'uppercase',
   },
   cardDescription: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 13,
     lineHeight: 19,
     marginTop: 12,
@@ -638,8 +643,8 @@ const styles = StyleSheet.create({
   },
   timeText: {
     flex: 1,
+    fontFamily: FONTS.bodyMedium,
     fontSize: 14,
-    fontWeight: '500',
   },
 
   // Test Button
@@ -656,8 +661,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   testButtonText: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 13,
-    fontWeight: '600',
   },
 
   // Footer
@@ -670,6 +675,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   footerText: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 12,
     lineHeight: 17,
     flex: 1,

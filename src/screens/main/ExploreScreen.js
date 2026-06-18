@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import MascotImage from '../../components/MascotImage';
+import { FONTS } from '../../theme/typography';
 
 const { width } = Dimensions.get('window');
 const cardWidth = (width - 56) / 2; // 2 columns: 20px padding each side + 16px gap
@@ -131,11 +132,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   title: {
+    fontFamily: FONTS.headingBold,
     fontSize: 28,
-    fontWeight: 'bold',
+    letterSpacing: -0.4,
     marginBottom: 4,
   },
   subtitle: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
   },
   scrollView: {
@@ -173,12 +176,14 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   cardTitle: {
+    fontFamily: FONTS.headingSemiBold,
     fontSize: 16,
-    fontWeight: '600',
+    letterSpacing: -0.2,
     marginBottom: 4,
     textAlign: 'center',
   },
   cardSubtitle: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 12,
     textAlign: 'center',
   },

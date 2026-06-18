@@ -20,6 +20,7 @@ import { supabase } from '../../config/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ProfileService from '../../services/ProfileService';
 import GoogleSignInButton from '../../components/auth/GoogleSignInButton';
+import { FONTS } from '../../theme/typography';
 
 const SignUpScreen = ({ navigation }) => {
   const [name, setName] = useState('');
@@ -283,12 +284,14 @@ const SignUpScreen = ({ navigation }) => {
       marginBottom: theme.spacing.xl,
     },
     title: {
+      fontFamily: FONTS.headingBold,
       fontSize: 28,
-      fontWeight: 'bold',
+      letterSpacing: -0.4,
       color: theme.colors.text,
       marginBottom: theme.spacing.sm,
     },
     subtitle: {
+      fontFamily: FONTS.bodyRegular,
       fontSize: 16,
       color: theme.colors.textSecondary,
     },
@@ -310,6 +313,7 @@ const SignUpScreen = ({ navigation }) => {
     },
     input: {
       flex: 1,
+      fontFamily: FONTS.bodyRegular,
       color: theme.colors.text,
       fontSize: 16,
       paddingVertical: theme.spacing.md,
@@ -318,6 +322,7 @@ const SignUpScreen = ({ navigation }) => {
       borderColor: theme.colors.error,
     },
     errorText: {
+      fontFamily: FONTS.bodyRegular,
       color: theme.colors.error,
       fontSize: 12,
       marginTop: -theme.spacing.xs,
@@ -325,6 +330,7 @@ const SignUpScreen = ({ navigation }) => {
       marginLeft: theme.spacing.xs * 3,
     },
     hintText: {
+      fontFamily: FONTS.bodyRegular,
       fontSize: 12,
       marginTop: -theme.spacing.xs,
       marginBottom: theme.spacing.xs,
@@ -340,6 +346,7 @@ const SignUpScreen = ({ navigation }) => {
       marginBottom: theme.spacing.lg,
     },
     termsText: {
+      fontFamily: FONTS.bodyMedium,
       color: theme.colors.primary,
       fontSize: 14,
       textAlign: 'center',
@@ -358,9 +365,9 @@ const SignUpScreen = ({ navigation }) => {
       backgroundColor: theme.colors.disabled,
     },
     signUpButtonText: {
+      fontFamily: FONTS.bodySemiBold,
       color: '#FFF',
       fontSize: 16,
-      fontWeight: 'bold',
     },
     dividerRow: {
       flexDirection: 'row',
@@ -373,6 +380,7 @@ const SignUpScreen = ({ navigation }) => {
       backgroundColor: theme.colors.border,
     },
     dividerText: {
+      fontFamily: FONTS.bodyMedium,
       color: theme.colors.textSecondary,
       fontSize: 13,
       marginHorizontal: theme.spacing.md,
@@ -384,13 +392,14 @@ const SignUpScreen = ({ navigation }) => {
       marginBottom: theme.spacing.lg,
     },
     footerText: {
+      fontFamily: FONTS.bodyRegular,
       color: theme.colors.textSecondary,
       fontSize: 14,
     },
     loginText: {
+      fontFamily: FONTS.bodySemiBold,
       color: theme.colors.primary,
       fontSize: 14,
-      fontWeight: 'bold',
     },
   }));
 

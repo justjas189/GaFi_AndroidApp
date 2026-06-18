@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ThemeContext } from '../../context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MascotImage from '../../components/MascotImage';
+import { FONTS } from '../../theme/typography';
 
 const { width } = Dimensions.get('window');
 
@@ -124,12 +125,14 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   title: {
+    fontFamily: FONTS.headingBold,
     fontSize: 32,
-    fontWeight: 'bold',
+    letterSpacing: -0.5,
     marginBottom: 8,
     textAlign: 'center',
   },
   subtitle: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 16,
     textAlign: 'center',
   },
@@ -160,12 +163,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   featureTitle: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 14,
-    fontWeight: '600',
     marginBottom: 4,
     textAlign: 'center',
   },
   featureDescription: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 12,
     textAlign: 'center',
     lineHeight: 16,
@@ -189,9 +193,9 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   buttonText: {
+    fontFamily: FONTS.bodySemiBold,
     color: '#FFFFFF',
     fontSize: 18,
-    fontWeight: '600',
   },
 });
 

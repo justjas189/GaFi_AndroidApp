@@ -20,6 +20,7 @@ import { useAuth } from '../../context/AuthContext';
 import { AchievementService } from '../../services/AchievementService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import gameDatabaseService from '../../services/GameDatabaseService';
+import { FONTS } from '../../theme/typography';
 
 const { width } = Dimensions.get('window');
 
@@ -71,25 +72,25 @@ const STORE_ITEMS = {
       isDefault: false,
     },
     {
-      id: 'skin_ash_ketchum',
-      name: 'Ash Ketchum',
+      id: 'skin_budget_trainer',
+      name: 'Budget Trainer',
       description: 'Gotta save \'em all! A trainer of budgets',
       price: 200,
       icon: '🧢',
       color: '#E53935',
       sprite: require('../../../assets/Game_Graphics/Character_Animation/Budget Trainer.png'),
-      characterKey: 'ash_ketchum',
+      characterKey: 'budget_trainer',
       isDefault: false,
     },
     {
-      id: 'skin_bruce_lee',
-      name: 'Bruce Lee',
+      id: 'skin_martial_artist',
+      name: 'Martial Artist',
       description: 'Disciplined finances, disciplined life',
       price: 200,
       icon: '🥋',
       color: '#FFC107',
       sprite: require('../../../assets/Game_Graphics/Character_Animation/Martial Artist.png'),
-      characterKey: 'bruce_lee',
+      characterKey: 'martial_artist',
       isDefault: false,
     },
     {
@@ -137,14 +138,14 @@ const STORE_ITEMS = {
       isDefault: false,
     },
     {
-      id: 'skin_nurse_joy',
-      name: 'Nurse Joy',
+      id: 'skin_head_nurse',
+      name: 'Head Nurse',
       description: 'Healing your finances back to health',
       price: 200,
       icon: '👩‍⚕️',
       color: '#EC407A',
       sprite: require('../../../assets/Game_Graphics/Character_Animation/Head Nurse.png'),
-      characterKey: 'nurse_joy',
+      characterKey: 'head_nurse',
       isDefault: false,
     },
     {
@@ -1432,6 +1433,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 16,
   },
   header: {
@@ -1442,8 +1444,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   title: {
+    fontFamily: FONTS.headingBold,
     fontSize: 24,
-    fontWeight: 'bold',
+    letterSpacing: -0.4,
   },
   levelBadge: {
     paddingHorizontal: 12,
@@ -1451,9 +1454,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   levelText: {
+    fontFamily: FONTS.bodySemiBold,
     color: 'white',
     fontSize: 12,
-    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
   },
   content: {
     flex: 1,
@@ -1465,8 +1469,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   sectionTitle: {
+    fontFamily: FONTS.headingSemiBold,
     fontSize: 18,
-    fontWeight: 'bold',
+    letterSpacing: -0.2,
     marginBottom: 16,
   },
   statsContainer: {
@@ -1478,10 +1483,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statNumber: {
+    fontFamily: FONTS.numberBold,
     fontSize: 24,
-    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
   },
   statLabel: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 12,
     marginTop: 4,
   },
@@ -1489,8 +1496,8 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   progressLabel: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 14,
-    fontWeight: '600',
     marginBottom: 8,
   },
   progressBarContainer: {
@@ -1504,7 +1511,9 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   progressText: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 12,
+    fontVariant: ['tabular-nums'],
     textAlign: 'center',
   },
   filterContainer: {
@@ -1522,8 +1531,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   filterButtonText: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 14,
-    fontWeight: '600',
   },
   achievementCard: {
     padding: 16,
@@ -1549,11 +1558,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   achievementTitle: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 16,
-    fontWeight: 'bold',
     marginBottom: 4,
   },
   achievementDescription: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 12,
     lineHeight: 16,
   },
@@ -1561,15 +1571,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   achievementPoints: {
+    fontFamily: FONTS.numberBold,
     fontSize: 14,
-    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
     marginBottom: 4,
   },
   progressSection: {
     marginTop: 12,
   },
   earnedDate: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 10,
+    fontVariant: ['tabular-nums'],
     marginTop: 8,
     textAlign: 'center',
   },
@@ -1579,10 +1592,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyText: {
+    fontFamily: FONTS.bodyMedium,
     fontSize: 16,
     marginTop: 16,
   },
   emptySubtext: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     marginTop: 8,
     textAlign: 'center',
@@ -1594,9 +1609,9 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   retryButtonText: {
+    fontFamily: FONTS.bodySemiBold,
     color: 'white',
     fontSize: 16,
-    fontWeight: 'bold',
   },
   modalOverlay: {
     flex: 1,
@@ -1622,12 +1637,14 @@ const styles = StyleSheet.create({
     fontSize: 40,
   },
   modalTitle: {
+    fontFamily: FONTS.headingSemiBold,
     fontSize: 20,
-    fontWeight: 'bold',
+    letterSpacing: -0.2,
     marginBottom: 8,
     textAlign: 'center',
   },
   modalDescription: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 20,
@@ -1643,20 +1660,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalStatLabel: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 12,
     marginBottom: 4,
   },
   modalStatValue: {
+    fontFamily: FONTS.numberBold,
     fontSize: 16,
-    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
   },
   earnedBadge: {
     alignItems: 'center',
     marginBottom: 20,
   },
   earnedText: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 16,
-    fontWeight: 'bold',
     marginTop: 8,
   },
   closeButton: {
@@ -1665,9 +1684,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   closeButtonText: {
+    fontFamily: FONTS.bodySemiBold,
     color: 'white',
     fontSize: 16,
-    fontWeight: 'bold',
   },
   // Stats header row with store button
   statsHeaderRow: {
@@ -1685,9 +1704,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   storeButtonText: {
+    fontFamily: FONTS.bodySemiBold,
     color: 'white',
     fontSize: 14,
-    fontWeight: '600',
   },
   // Store Modal Styles
   storeModalOverlay: {
@@ -1714,8 +1733,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   storeTitle: {
+    fontFamily: FONTS.headingBold,
     fontSize: 24,
-    fontWeight: 'bold',
+    letterSpacing: -0.4,
   },
   storeCloseBtn: {
     width: 40,
@@ -1744,15 +1764,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(128,128,128,0.3)',
   },
   xpBalanceLabel: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 12,
     marginTop: 4,
   },
   xpBalanceValue: {
+    fontFamily: FONTS.numberBold,
     fontSize: 20,
-    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
     marginTop: 2,
   },
   xpNote: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 11,
     textAlign: 'center',
     marginTop: 12,
@@ -1763,8 +1786,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   storeSectionTitle: {
+    fontFamily: FONTS.headingSemiBold,
     fontSize: 18,
-    fontWeight: 'bold',
+    letterSpacing: -0.2,
     marginBottom: 12,
     marginTop: 8,
   },
@@ -1800,10 +1824,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   storeItemName: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 16,
-    fontWeight: '600',
   },
   storeItemDesc: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 12,
     marginTop: 4,
   },
@@ -1817,13 +1842,13 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   ownedText: {
+    fontFamily: FONTS.bodySemiBold,
     color: '#4CAF50',
     fontSize: 12,
-    fontWeight: '600',
   },
   freeText: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 14,
-    fontWeight: 'bold',
   },
   priceBadge: {
     flexDirection: 'row',
@@ -1834,14 +1859,16 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   priceText: {
+    fontFamily: FONTS.numberSemiBold,
     fontSize: 13,
-    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   storeComingSoon: {
     alignItems: 'center',
     paddingVertical: 40,
   },
   comingSoonText: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     marginTop: 8,
   },
@@ -1866,11 +1893,13 @@ const styles = StyleSheet.create({
     height: 100,
   },
   purchaseTitle: {
+    fontFamily: FONTS.headingBold,
     fontSize: 22,
-    fontWeight: 'bold',
+    letterSpacing: -0.3,
     marginBottom: 8,
   },
   purchaseDesc: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 20,
@@ -1885,6 +1914,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   purchasePriceLabel: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 12,
     marginBottom: 4,
   },
@@ -1894,12 +1924,15 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   purchasePriceText: {
+    fontFamily: FONTS.numberBold,
     fontSize: 18,
-    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
   },
   notEnoughXP: {
+    fontFamily: FONTS.bodyRegular,
     color: '#FF5252',
     fontSize: 13,
+    fontVariant: ['tabular-nums'],
     marginBottom: 16,
   },
   purchaseButtons: {
@@ -1915,8 +1948,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   purchaseCancelText: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 16,
-    fontWeight: '600',
   },
   purchaseConfirmBtn: {
     flex: 1,
@@ -1925,9 +1958,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   purchaseConfirmText: {
+    fontFamily: FONTS.bodySemiBold,
     color: 'white',
     fontSize: 16,
-    fontWeight: '600',
   },
 });
 

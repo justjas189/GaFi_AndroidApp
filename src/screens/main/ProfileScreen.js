@@ -21,6 +21,7 @@ import { supabase } from '../../config/supabase';
 import LeaderboardService from '../../services/LeaderboardService';
 import MascotImage from '../../components/MascotImage';
 import { getSessionForMutation } from '../../services/AuthSessionHelper';
+import { FONTS } from '../../theme/typography';
 
 // Story Mode ships 3 progressive levels; clearing Level 3 ("Super Saver")
 // completes the campaign and unlocks Custom Mode.
@@ -591,8 +592,8 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   headerTitle: {
+    fontFamily: FONTS.headingBold,
     fontSize: 32,
-    fontWeight: 'bold',
     letterSpacing: -0.5,
   },
 
@@ -618,9 +619,9 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   avatarText: {
+    fontFamily: FONTS.headingBold,
     color: '#fff',
     fontSize: 30,
-    fontWeight: 'bold',
   },
   avatarImage: {
     width: 80,
@@ -628,16 +629,18 @@ const styles = StyleSheet.create({
     borderRadius: 40,
   },
   profileName: {
+    fontFamily: FONTS.headingBold,
     fontSize: 22,
-    fontWeight: '700',
+    letterSpacing: -0.3,
     marginBottom: 4,
   },
   profileUsername: {
+    fontFamily: FONTS.bodyMedium,
     fontSize: 15,
-    fontWeight: '500',
     marginBottom: 4,
   },
   profileEmail: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     marginBottom: 16,
   },
@@ -651,8 +654,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   editProfileBtnText: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 14,
-    fontWeight: '600',
   },
 
   // Sections
@@ -661,8 +664,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
   },
   sectionTitle: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 16,
-    fontWeight: '600',
     marginBottom: 12,
     marginLeft: 4,
     textTransform: 'uppercase',
@@ -697,6 +700,7 @@ const styles = StyleSheet.create({
     // fontWeight removed — the named family (Inter_600SemiBold) carries the weight
   },
   statLabel: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 12,
     marginTop: 4,
     textAlign: 'center',
@@ -729,12 +733,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   budgetLabel: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 13,
     marginBottom: 2,
   },
   budgetAmount: {
+    fontFamily: FONTS.numberBold,
     fontSize: 20,
-    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
   },
 
   // Utilization
@@ -755,11 +761,13 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   utilizationLabel: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 13,
   },
   utilizationPercent: {
+    fontFamily: FONTS.numberBold,
     fontSize: 15,
-    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
   },
   progressBarBg: {
     height: 8,
@@ -771,7 +779,9 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   utilizationDetail: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 12,
+    fontVariant: ['tabular-nums'],
     marginTop: 8,
     textAlign: 'center',
   },
@@ -795,10 +805,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   actionText: {
+    fontFamily: FONTS.bodyMedium,
     fontSize: 15,
-    fontWeight: '500',
   },
   actionSub: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 13,
     marginTop: 1,
   },
@@ -820,8 +831,8 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   modalTitle: {
+    fontFamily: FONTS.headingBold,
     fontSize: 24,
-    fontWeight: 'bold',
     marginBottom: 24,
     textAlign: 'center',
     letterSpacing: -0.3,
@@ -830,8 +841,8 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   label: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 14,
-    fontWeight: '600',
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -841,6 +852,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 16,
     paddingHorizontal: 16,
+    fontFamily: FONTS.bodyRegular,
     fontSize: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
@@ -854,11 +866,13 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.1)',
   },
   currencySymbol: {
+    fontFamily: FONTS.numberSemiBold,
     fontSize: 18,
-    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
     marginRight: 12,
   },
   helpText: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 12,
     opacity: 0.6,
     marginTop: 8,
@@ -883,12 +897,12 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   cancelBtnText: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 16,
-    fontWeight: '600',
   },
   saveBtnText: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 16,
-    fontWeight: '600',
     letterSpacing: 0.2,
   },
 });

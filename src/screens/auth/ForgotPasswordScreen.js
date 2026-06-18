@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../../context/AuthContext';
 import { ThemeContext } from '../../context/ThemeContext';
+import { FONTS } from '../../theme/typography';
 
 const ForgotPasswordScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -100,12 +101,14 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   title: {
+    fontFamily: FONTS.headingBold,
     fontSize: 28,
-    fontWeight: 'bold',
+    letterSpacing: -0.4,
     marginBottom: 10,
     textAlign: 'center',
   },
   subtitle: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 16,
     marginBottom: 30,
     textAlign: 'center',
@@ -114,6 +117,7 @@ const styles = StyleSheet.create({
   },
   input: {
     height: 55,
+    fontFamily: FONTS.bodyRegular,
     paddingHorizontal: 16,
     borderRadius: 12,
     fontSize: 16,
@@ -128,8 +132,8 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   buttonText: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 16,
-    fontWeight: '600',
     color: '#FFFFFF',
   },
 });

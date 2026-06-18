@@ -7,6 +7,7 @@ import { DataContext } from '../../context/DataContext';
 import { ThemeContext } from '../../context/ThemeContext';
 import { getCategoryIcon } from '../../utils/categoryIcons';
 import { normalizeCategory } from '../../utils/categoryUtils';
+import { FONTS } from '../../theme/typography';
 
 const CalendarScreen = ({ navigation }) => {
  
@@ -199,11 +200,13 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   title: {
+    fontFamily: FONTS.headingBold,
     fontSize: 26,
-    fontWeight: 'bold',
+    letterSpacing: -0.4,
     marginBottom: 4,
   },
   subtitle: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     opacity: 0.7,
   },
@@ -248,12 +251,15 @@ const styles = StyleSheet.create({
     minWidth: 0, // Prevents text overflow
   },
   selectedDateTitle: {
+    fontFamily: FONTS.headingSemiBold,
     fontSize: 16,
-    fontWeight: '600',
+    letterSpacing: -0.2,
     marginBottom: 4,
   },
   expenseCount: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
+    fontVariant: ['tabular-nums'],
     opacity: 0.7,
   },
   totalAmount: {
@@ -268,8 +274,9 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   totalAmountText: {
+    fontFamily: FONTS.numberBold,
     fontSize: 16,
-    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
   },
   expensesList: {
     flex: 1,
@@ -307,27 +314,31 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   expenseCategory: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 16,
-    fontWeight: '600',
     marginBottom: 4,
     textTransform: 'capitalize',
   },
   expenseNote: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     opacity: 0.7,
     marginBottom: 4,
     textTransform: 'capitalize',
   },
   expenseTime: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 12,
+    fontVariant: ['tabular-nums'],
     opacity: 0.5,
   },
   expenseRight: {
     alignItems: 'flex-end',
   },
   expenseAmount: {
+    fontFamily: FONTS.numberBold,
     fontSize: 18,
-    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
     marginBottom: 8,
   },
   categoryTag: {
@@ -338,8 +349,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   categoryTagText: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 12,
-    fontWeight: 'bold',
     color: 'white',
   },
   emptyState: {
@@ -360,11 +371,13 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   noExpensesTitle: {
+    fontFamily: FONTS.headingSemiBold,
     fontSize: 20,
-    fontWeight: '600',
+    letterSpacing: -0.2,
     marginBottom: 8,
   },
   noExpensesText: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 16,
     opacity: 0.6,
     textAlign: 'center',

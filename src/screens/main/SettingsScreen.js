@@ -22,6 +22,7 @@ import { ThemeContext } from '../../context/ThemeContext';
 import { supabase } from '../../config/supabase';
 import { getSessionForMutation } from '../../services/AuthSessionHelper';
 import { IS_DEVELOPMENT } from '../../utils/appEnvironment';
+import { FONTS } from '../../theme/typography';
 
 const SettingsScreen = ({ navigation }) => {
   const { logout, userInfo } = useContext(AuthContext);
@@ -579,7 +580,7 @@ const SettingsScreen = ({ navigation }) => {
               This action is permanent and cannot be undone. All your data — expenses, friends, achievements, and progress — will be permanently deleted.
             </Text>
             <Text style={[styles.modalInstruction, { color: theme.colors.text }]}>
-              Type <Text style={{ fontWeight: 'bold', color: theme.colors.error }}>DELETE</Text> to confirm:
+              Type <Text style={{ fontFamily: FONTS.bodyBold, color: theme.colors.error }}>DELETE</Text> to confirm:
             </Text>
             <TextInput
               style={[
@@ -660,13 +661,13 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   title: {
+    fontFamily: FONTS.headingBold,
     fontSize: 24,
-    fontWeight: 'bold',
     letterSpacing: -0.3,
   },
   sectionTitle: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 16,
-    fontWeight: '600',
     marginBottom: 12,
     marginLeft: 4,
     textTransform: 'uppercase',
@@ -705,15 +706,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   settingText: {
+    fontFamily: FONTS.bodyMedium,
     fontSize: 16,
-    fontWeight: '500',
     marginBottom: 2,
   },
   settingLabel: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 13,
     marginBottom: 2,
   },
   settingValue: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     opacity: 0.7,
     lineHeight: 18,
@@ -733,8 +736,8 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   logoutButtonText: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 16,
-    fontWeight: '600',
     letterSpacing: 0.2,
   },
 
@@ -754,8 +757,8 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   deleteAccountButtonText: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 16,
-    fontWeight: '600',
     letterSpacing: 0.2,
   },
 
@@ -776,18 +779,21 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   modalTitle: {
+    fontFamily: FONTS.headingBold,
     fontSize: 22,
-    fontWeight: 'bold',
+    letterSpacing: -0.3,
     textAlign: 'center',
     marginBottom: 12,
   },
   modalDescription: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',
     marginBottom: 20,
   },
   modalInstruction: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 15,
     marginBottom: 10,
     textAlign: 'center',
@@ -797,8 +803,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 16,
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 18,
-    fontWeight: '600',
     textAlign: 'center',
     letterSpacing: 2,
     marginBottom: 24,
@@ -814,8 +820,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalCancelText: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 16,
-    fontWeight: '600',
   },
   modalDeleteBtn: {
     flex: 1,
@@ -824,8 +830,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalDeleteText: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 16,
-    fontWeight: '600',
   },
 });
 

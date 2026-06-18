@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../context/ThemeContext';
+import { FONTS } from '../../theme/typography';
 
 const AccountRecoveryScreen = ({ navigation }) => {
   const { colors, spacing, borderRadius, shadows, createThemedStyles } = useTheme();
@@ -13,13 +14,15 @@ const AccountRecoveryScreen = ({ navigation }) => {
       backgroundColor: theme.colors.background,
     },
     title: {
+      fontFamily: FONTS.headingBold,
       fontSize: 28,
-      fontWeight: 'bold',
+      letterSpacing: -0.4,
       color: theme.colors.text,
       marginBottom: theme.spacing.sm,
       textAlign: 'center',
     },
     subtitle: {
+      fontFamily: FONTS.bodyRegular,
       fontSize: 16,
       color: theme.colors.textSecondary,
       marginBottom: theme.spacing.xl,
@@ -35,14 +38,16 @@ const AccountRecoveryScreen = ({ navigation }) => {
       ...theme.shadows.small,
     },
     stepNumber: {
+      fontFamily: FONTS.numberBold,
       fontSize: 18,
-      fontWeight: 'bold',
+      fontVariant: ['tabular-nums'],
       color: theme.colors.primary,
       marginRight: theme.spacing.md,
       width: 30,
       textAlign: 'center',
     },
     stepText: {
+      fontFamily: FONTS.bodyRegular,
       fontSize: 16,
       color: theme.colors.text,
       flex: 1,
@@ -56,15 +61,16 @@ const AccountRecoveryScreen = ({ navigation }) => {
       ...theme.shadows.small,
     },
     buttonText: {
+      fontFamily: FONTS.bodySemiBold,
       color: '#FFF',
       fontSize: 16,
-      fontWeight: 'bold',
     },
     backButton: {
       alignItems: 'center',
       marginTop: theme.spacing.lg,
     },
     backButtonText: {
+      fontFamily: FONTS.bodyMedium,
       color: theme.colors.primary,
       fontSize: 16,
     },

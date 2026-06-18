@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemeContext } from '../../context/ThemeContext';
+import { FONTS } from '../../theme/typography';
 
 // Enable LayoutAnimation on Android (no-op on the new architecture / iOS)
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -145,11 +146,12 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   title: {
+    fontFamily: FONTS.headingBold,
     fontSize: 24,
-    fontWeight: 'bold',
     letterSpacing: -0.3,
   },
   intro: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     opacity: 0.8,
     marginBottom: 16,
@@ -170,11 +172,12 @@ const styles = StyleSheet.create({
   },
   faqQuestion: {
     flex: 1,
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 15,
-    fontWeight: '600',
     marginRight: 8,
   },
   faqAnswer: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     lineHeight: 20,
     paddingHorizontal: 16,

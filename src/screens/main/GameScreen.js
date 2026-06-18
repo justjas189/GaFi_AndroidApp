@@ -27,6 +27,7 @@ import { useTutorial, TUTORIAL_PHASE } from '../../context/TutorialContext';
 import DailyTaskPopup from '../../components/DailyTaskPopup';
 import EndOfDayReportModal from '../../components/EndOfDayReportModal';
 import { useGameAudio } from '../../context/AudioContext';
+import { FONTS } from '../../theme/typography';
 
 const { width: INITIAL_WIDTH, height: INITIAL_HEIGHT } = Dimensions.get('window');
 const CHARACTER_SIZE = 48;
@@ -3885,7 +3886,7 @@ export default function BuildScreen() {
     giveUpButtonText: {
       color: '#FFF',
       fontSize: Math.round(screenWidth * 0.026),
-      fontWeight: 'bold',
+      fontFamily: FONTS.bodyBold,
     },
     dailyTasksButtonSleep: {
       backgroundColor: '#5c6bc0',
@@ -3901,7 +3902,7 @@ export default function BuildScreen() {
     },
     dailyTasksButtonText: {
       fontSize: Math.round(screenWidth * 0.026),
-      fontWeight: 'bold',
+      fontFamily: FONTS.bodyBold,
     },
     headerLeft: {
       flex: 1,
@@ -3911,7 +3912,8 @@ export default function BuildScreen() {
     },
     headerTitle: {
       fontSize: Math.round(screenWidth * 0.045),
-      fontWeight: 'bold',
+      fontFamily: FONTS.headingBold,
+      letterSpacing: -0.3,
       color: '#fff',
       textAlign: 'center',
     },
@@ -3935,7 +3937,9 @@ export default function BuildScreen() {
     },
     spendingAmount: {
       fontSize: Math.round(screenWidth * 0.045),
-      fontWeight: 'bold',
+      fontFamily: FONTS.numberBold,
+      fontVariant: ['tabular-nums'],
+      letterSpacing: -0.3,
       color: '#FF9800',
       textAlign: 'right',
     },
@@ -3969,7 +3973,7 @@ export default function BuildScreen() {
     locationText: {
       color: '#fff',
       fontSize: Math.round(screenWidth * 0.035),
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
     },
     walkingIndicator: {
       width: Math.round(screenWidth * 0.02),
@@ -4004,12 +4008,13 @@ export default function BuildScreen() {
     storyProgressLabel: {
       color: '#F5DEB3',
       fontSize: Math.round(screenWidth * 0.03),
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
     },
     storyProgressPercent: {
       color: '#4CAF50',
       fontSize: Math.round(screenWidth * 0.03),
-      fontWeight: 'bold',
+      fontFamily: FONTS.numberBold,
+      fontVariant: ['tabular-nums'],
     },
     storyProgressBar: {
       height: 8,
@@ -4040,7 +4045,7 @@ export default function BuildScreen() {
     budgetRuleLabel: {
       color: '#F5DEB3',
       fontSize: Math.round(screenWidth * 0.033),
-      fontWeight: '700',
+      fontFamily: FONTS.bodyBold,
     },
     budgetDaysLeft: {
       color: '#888',
@@ -4071,12 +4076,13 @@ export default function BuildScreen() {
     budgetCategoryName: {
       color: '#AAA',
       fontSize: Math.round(screenWidth * 0.025),
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
       textTransform: 'uppercase',
     },
     budgetCategoryPercent: {
       fontSize: Math.round(screenWidth * 0.045),
-      fontWeight: 'bold',
+      fontFamily: FONTS.numberBold,
+      fontVariant: ['tabular-nums'],
     },
     budgetCategoryLimit: {
       fontSize: Math.round(screenWidth * 0.023),
@@ -4107,7 +4113,7 @@ export default function BuildScreen() {
     budgetCompactLabel: {
       color: '#F5DEB3',
       fontSize: Math.round(screenWidth * 0.03),
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
     },
     budgetCompactStats: {
       flexDirection: 'row',
@@ -4134,7 +4140,8 @@ export default function BuildScreen() {
     },
     budgetCompactPercent: {
       fontSize: Math.round(screenWidth * 0.033),
-      fontWeight: 'bold',
+      fontFamily: FONTS.numberBold,
+      fontVariant: ['tabular-nums'],
     },
     budgetCompactActions: {
       flexDirection: 'row',
@@ -4144,7 +4151,8 @@ export default function BuildScreen() {
     budgetCompactDays: {
       color: '#888',
       fontSize: Math.round(screenWidth * 0.028),
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
+      fontVariant: ['tabular-nums'],
     },
     endWeekBtnCompact: {
       width: Math.round(screenWidth * 0.07),
@@ -4197,7 +4205,8 @@ export default function BuildScreen() {
     historyTitle: {
       color: '#ffb68b',
       fontSize: 18,
-      fontWeight: '600',
+      fontFamily: FONTS.headingSemiBold,
+      letterSpacing: -0.2,
     },
     historyCloseButton: {
       width: 36,
@@ -4214,7 +4223,7 @@ export default function BuildScreen() {
     historySectionTitle: {
       color: '#F5DEB3',
       fontSize: 14,
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
     },
     historyItem: {
       flexDirection: 'row',
@@ -4242,7 +4251,7 @@ export default function BuildScreen() {
     historyItemTitle: {
       color: '#e5e2e1',
       fontSize: 16,
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
     },
     historyItemSubtitle: {
       color: '#a78b7c',
@@ -4280,7 +4289,7 @@ export default function BuildScreen() {
     expenseListCategory: {
       color: '#ffb68b',
       fontSize: 13,
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
     },
     expenseListNote: {
       color: '#e5e2e1',
@@ -4295,7 +4304,8 @@ export default function BuildScreen() {
     expenseListAmount: {
       color: '#ffffff',
       fontSize: 16,
-      fontWeight: '700',
+      fontFamily: FONTS.numberBold,
+      fontVariant: ['tabular-nums'],
     },
     dailyTaskSheetOverlay: {
       flex: 1,
@@ -4333,7 +4343,8 @@ export default function BuildScreen() {
     dailyTaskSheetTitle: {
       color: '#F5DEB3',
       fontSize: Math.round(screenWidth * 0.045),
-      fontWeight: '700',
+      fontFamily: FONTS.headingBold,
+      letterSpacing: -0.3,
     },
     dailyTaskSheetSubtitle: {
       color: '#BFC3D6',
@@ -4344,7 +4355,8 @@ export default function BuildScreen() {
       marginTop: 10,
       color: '#4CAF50',
       fontSize: Math.round(screenWidth * 0.032),
-      fontWeight: '700',
+      fontFamily: FONTS.numberBold,
+      fontVariant: ['tabular-nums'],
     },
     dailyTaskSheetEmpty: {
       color: '#B0B0B0',
@@ -4368,12 +4380,13 @@ export default function BuildScreen() {
     dailyTaskHeaderText: {
       color: '#F5DEB3',
       fontSize: Math.round(screenWidth * 0.03),
-      fontWeight: '700',
+      fontFamily: FONTS.bodyBold,
     },
     dailyTaskProgressText: {
       color: '#4CAF50',
       fontSize: Math.round(screenWidth * 0.03),
-      fontWeight: '700',
+      fontFamily: FONTS.numberBold,
+      fontVariant: ['tabular-nums'],
     },
     dailyTaskDialogue: {
       color: '#D4C4A8',
@@ -4475,7 +4488,7 @@ export default function BuildScreen() {
     allocateButtonText: {
       color: '#FFF',
       fontSize: Math.round(screenWidth * 0.03),
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
     },
     // Goal Allocation Modal Styles
     goalAllocationItem: {
@@ -4492,7 +4505,7 @@ export default function BuildScreen() {
     quickAllocateBtnText: {
       color: '#FFF',
       fontSize: Math.round(screenWidth * 0.028),
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
     },
     imageBackground: {
       flex: 1,
@@ -4584,7 +4597,8 @@ export default function BuildScreen() {
     },
     characterOptionName: {
       fontSize: Math.round(screenWidth * 0.045),
-      fontWeight: 'bold',
+      fontFamily: FONTS.headingSemiBold,
+      letterSpacing: -0.2,
       marginBottom: 4,
     },
     characterOptionDesc: {
@@ -4637,7 +4651,7 @@ export default function BuildScreen() {
     endWeekButtonText: {
       color: '#FFF',
       fontSize: Math.round(screenWidth * 0.035),
-      fontWeight: 'bold',
+      fontFamily: FONTS.bodyBold,
     },
     endWeekButtonInline: {
       marginTop: screenHeight * 0.015,
@@ -4658,7 +4672,7 @@ export default function BuildScreen() {
     endWeekButtonTextInline: {
       color: '#FFF',
       fontSize: Math.round(screenWidth * 0.033),
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
     },
     instructionBanner: {
       position: 'absolute',
@@ -4683,7 +4697,7 @@ export default function BuildScreen() {
     },
     instructionHighlight: {
       color: '#FF9800',
-      fontWeight: 'bold',
+      fontFamily: FONTS.bodyBold,
     },
     modalOverlay: {
       flex: 1,
@@ -4723,7 +4737,8 @@ export default function BuildScreen() {
     },
     modalTitle: {
       fontSize: Math.round(screenWidth * 0.055),
-      fontWeight: 'bold',
+      fontFamily: FONTS.headingBold,
+      letterSpacing: -0.4,
       color: colors.text,
       marginBottom: 4,
     },
@@ -4766,7 +4781,8 @@ export default function BuildScreen() {
     },
     quickAmountText: {
       fontSize: 14,
-      fontWeight: '600',
+      fontFamily: FONTS.numberSemiBold,
+      fontVariant: ['tabular-nums'],
       color: colors.text,
     },
     quickAmountTextActive: {
@@ -4777,7 +4793,7 @@ export default function BuildScreen() {
     },
     inputLabel: {
       fontSize: Math.round(screenWidth * 0.035),
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
       color: colors.text,
       marginBottom: 8,
     },
@@ -4814,7 +4830,7 @@ export default function BuildScreen() {
     },
     buttonText: {
       fontSize: Math.round(screenWidth * 0.04),
-      fontWeight: 'bold',
+      fontFamily: FONTS.bodyBold,
     },
     cancelButtonText: {
       color: colors.text,
@@ -4833,7 +4849,8 @@ export default function BuildScreen() {
     },
     travelTitle: {
       fontSize: Math.round(screenWidth * 0.06),
-      fontWeight: 'bold',
+      fontFamily: FONTS.headingBold,
+      letterSpacing: -0.4,
       color: colors.text,
       marginBottom: screenHeight * 0.01,
     },
@@ -4862,7 +4879,8 @@ export default function BuildScreen() {
     },
     destinationName: {
       fontSize: Math.round(screenWidth * 0.045),
-      fontWeight: 'bold',
+      fontFamily: FONTS.headingSemiBold,
+      letterSpacing: -0.2,
       color: colors.text,
     },
     destinationDesc: {
@@ -4918,7 +4936,7 @@ export default function BuildScreen() {
     },
     achievementUnlockedText: {
       fontSize: Math.round(screenWidth * 0.04),
-      fontWeight: 'bold',
+      fontFamily: FONTS.bodyBold,
       color: '#FFD700',
       marginBottom: screenHeight * 0.02,
       letterSpacing: 2,
@@ -4929,7 +4947,8 @@ export default function BuildScreen() {
     },
     achievementTitle: {
       fontSize: Math.round(screenWidth * 0.06),
-      fontWeight: 'bold',
+      fontFamily: FONTS.headingBold,
+      letterSpacing: -0.4,
       color: '#FFFFFF',
       textAlign: 'center',
       marginBottom: 8,
@@ -4953,7 +4972,8 @@ export default function BuildScreen() {
     },
     achievementPointsText: {
       fontSize: Math.round(screenWidth * 0.045),
-      fontWeight: 'bold',
+      fontFamily: FONTS.numberBold,
+      fontVariant: ['tabular-nums'],
       color: '#FFD700',
     },
     achievementCloseButton: {
@@ -4965,7 +4985,7 @@ export default function BuildScreen() {
     achievementCloseText: {
       color: '#1a1a2e',
       fontSize: Math.round(screenWidth * 0.04),
-      fontWeight: 'bold',
+      fontFamily: FONTS.bodyBold,
     },
     // Map indicator styles
     mapIndicatorContainer: {
@@ -4992,7 +5012,7 @@ export default function BuildScreen() {
     locationMarkerText: {
       color: '#FFF',
       fontSize: Math.round(screenWidth * 0.03),
-      fontWeight: '700',
+      fontFamily: FONTS.bodyBold,
     },
     // Placeholder map background
     placeholderMap: {
@@ -5008,7 +5028,8 @@ export default function BuildScreen() {
     },
     placeholderMapTitle: {
       fontSize: Math.round(screenWidth * 0.06),
-      fontWeight: 'bold',
+      fontFamily: FONTS.headingBold,
+      letterSpacing: -0.4,
       color: '#FFF',
       marginBottom: 8,
     },
@@ -5627,7 +5648,8 @@ export default function BuildScreen() {
     },
     transportTitle: {
       fontSize: Math.round(screenWidth * 0.06),
-      fontWeight: 'bold',
+      fontFamily: FONTS.headingBold,
+      letterSpacing: -0.4,
       color: colors.text,
       marginBottom: screenHeight * 0.01,
     },
@@ -5661,7 +5683,8 @@ export default function BuildScreen() {
     },
     modeName: {
       fontSize: Math.round(screenWidth * 0.045),
-      fontWeight: 'bold',
+      fontFamily: FONTS.headingSemiBold,
+      letterSpacing: -0.2,
       color: colors.text,
     },
     modeDesc: {
@@ -5697,7 +5720,8 @@ export default function BuildScreen() {
     },
     selectedModeName: {
       fontSize: Math.round(screenWidth * 0.05),
-      fontWeight: 'bold',
+      fontFamily: FONTS.headingSemiBold,
+      letterSpacing: -0.3,
       color: colors.text,
     },
     inputLabel: {
@@ -5717,14 +5741,18 @@ export default function BuildScreen() {
     },
     currencySymbol: {
       fontSize: Math.round(screenWidth * 0.07),
-      fontWeight: 'bold',
+      fontFamily: FONTS.numberBold,
+      fontVariant: ['tabular-nums'],
+      letterSpacing: -0.3,
       color: '#FF9800',
       marginRight: screenWidth * 0.02,
     },
     amountInput: {
       flex: 1,
       fontSize: Math.round(screenWidth * 0.08),
-      fontWeight: 'bold',
+      fontFamily: FONTS.numberBold,
+      fontVariant: ['tabular-nums'],
+      letterSpacing: -0.5,
       color: colors.text,
       paddingVertical: screenHeight * 0.015,
     },
@@ -5748,7 +5776,8 @@ export default function BuildScreen() {
     },
     quickAmountText: {
       fontSize: 14,
-      fontWeight: '600',
+      fontFamily: FONTS.numberSemiBold,
+      fontVariant: ['tabular-nums'],
       color: colors.text,
     },
     quickAmountTextActive: {
@@ -5769,12 +5798,12 @@ export default function BuildScreen() {
     },
     confirmButtonText: {
       fontSize: Math.round(screenWidth * 0.045),
-      fontWeight: 'bold',
+      fontFamily: FONTS.bodyBold,
       color: '#FFF',
     },
     fuelQuestion: {
       fontSize: Math.round(screenWidth * 0.04),
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
       color: colors.text,
       textAlign: 'center',
       marginVertical: 8,
@@ -5806,7 +5835,7 @@ export default function BuildScreen() {
     },
     fuelOptionTextActive: {
       color: '#FFF',
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
     },
     fuelAmountSection: {
       marginTop: screenHeight * 0.02,
@@ -5858,7 +5887,8 @@ export default function BuildScreen() {
     },
     title: {
       fontSize: Math.round(screenWidth * 0.08),
-      fontWeight: 'bold',
+      fontFamily: FONTS.headingBold,
+      letterSpacing: -0.5,
       color: '#F5DEB3',
       textShadowColor: '#000',
       textShadowOffset: { width: 2, height: 2 },
@@ -5913,7 +5943,8 @@ export default function BuildScreen() {
     },
     levelName: {
       fontSize: Math.round(screenWidth * 0.04),
-      fontWeight: 'bold',
+      fontFamily: FONTS.headingSemiBold,
+      letterSpacing: -0.2,
       color: '#F5DEB3',
       textShadowColor: '#000',
       textShadowOffset: { width: 1, height: 1 },
@@ -5935,7 +5966,7 @@ export default function BuildScreen() {
     goalText: {
       fontSize: Math.round(screenWidth * 0.028),
       color: '#4CAF50',
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
     },
     lockedText: {
       color: '#666',
@@ -6187,7 +6218,7 @@ export default function BuildScreen() {
     },
     levelBadgeText: {
       fontSize: Math.round(screenWidth * 0.035),
-      fontWeight: 'bold',
+      fontFamily: FONTS.bodyBold,
       color: '#F5DEB3',
       textShadowColor: '#000',
       textShadowOffset: { width: 1, height: 1 },
@@ -6223,7 +6254,7 @@ export default function BuildScreen() {
       fontSize: Math.round(screenWidth * 0.043),
       color: '#F5DEB3',
       lineHeight: Math.round(screenWidth * 0.065),
-      fontWeight: '500',
+      fontFamily: FONTS.bodyMedium,
       textShadowColor: '#000',
       textShadowOffset: { width: 1, height: 1 },
       textShadowRadius: 0,
@@ -6277,7 +6308,7 @@ export default function BuildScreen() {
     tapHint: {
       fontSize: Math.round(screenWidth * 0.03),
       color: '#F5DEB3',
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
     },
     startButton: {
       flexDirection: 'row',
@@ -6302,7 +6333,7 @@ export default function BuildScreen() {
     },
     startButtonText: {
       fontSize: Math.round(screenWidth * 0.045),
-      fontWeight: 'bold',
+      fontFamily: FONTS.bodyBold,
       color: '#1a1a2e',
     },
   });
@@ -6487,7 +6518,7 @@ export default function BuildScreen() {
     },
     celebrationText: {
       fontSize: Math.round(screenWidth * 0.04),
-      fontWeight: 'bold',
+      fontFamily: FONTS.bodyBold,
       color: '#FFD700',
       textShadowColor: '#000',
       textShadowOffset: { width: 1, height: 1 },
@@ -6522,7 +6553,7 @@ export default function BuildScreen() {
       fontSize: Math.round(screenWidth * 0.043),
       color: '#FFD700',
       lineHeight: Math.round(screenWidth * 0.065),
-      fontWeight: '500',
+      fontFamily: FONTS.bodyMedium,
       textShadowColor: '#000',
       textShadowOffset: { width: 1, height: 1 },
       textShadowRadius: 0,
@@ -6576,7 +6607,7 @@ export default function BuildScreen() {
     tapHint: {
       fontSize: Math.round(screenWidth * 0.03),
       color: '#FFD700',
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
     },
     finishButton: {
       flexDirection: 'row',
@@ -6601,7 +6632,7 @@ export default function BuildScreen() {
     },
     finishButtonText: {
       fontSize: Math.round(screenWidth * 0.045),
-      fontWeight: 'bold',
+      fontFamily: FONTS.bodyBold,
       color: '#1a1a2e',
     },
   });
@@ -6768,7 +6799,7 @@ export default function BuildScreen() {
     menuButtonText: {
       flex: 1,
       fontSize: Math.round(screenWidth * 0.045),
-      fontWeight: 'bold',
+      fontFamily: FONTS.bodyBold,
       color: '#F5DEB3',
       textShadowColor: '#000',
       textShadowOffset: { width: 1, height: 1 },
@@ -6797,7 +6828,8 @@ export default function BuildScreen() {
     },
     sectionTitle: {
       fontSize: Math.round(screenWidth * 0.045),
-      fontWeight: 'bold',
+      fontFamily: FONTS.headingSemiBold,
+      letterSpacing: -0.2,
       marginBottom: 8,
     },
     sectionText: {
@@ -6837,7 +6869,8 @@ export default function BuildScreen() {
     },
     tutorialTitle: {
       fontSize: Math.round(screenWidth * 0.036),
-      fontWeight: 'bold',
+      fontFamily: FONTS.headingSemiBold,
+      letterSpacing: -0.2,
       color: '#FF9800',
     },
     tutorialMessage: {
@@ -6875,7 +6908,7 @@ export default function BuildScreen() {
     },
     tutorialBadgeText: {
       fontSize: Math.round(screenWidth * 0.027),
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
       color: '#FFB74D',
     },
     // Bottom row: centered instruction text that wraps cleanly.
@@ -6929,7 +6962,7 @@ export default function BuildScreen() {
     },
     btnNextText: {
       fontSize: Math.round(screenWidth * 0.028),
-      fontWeight: 'bold',
+      fontFamily: FONTS.bodyBold,
       color: '#FFF',
     },
     // Legacy styles (kept for reference)
@@ -6976,7 +7009,8 @@ export default function BuildScreen() {
     },
     speechTitle: {
       fontSize: Math.round(screenWidth * 0.05),
-      fontWeight: 'bold',
+      fontFamily: FONTS.headingSemiBold,
+      letterSpacing: -0.3,
       color: '#2C3E50',
       textAlign: 'center',
       marginBottom: screenHeight * 0.015,
@@ -7024,7 +7058,7 @@ export default function BuildScreen() {
     },
     backButtonText: {
       fontSize: Math.round(screenWidth * 0.038),
-      fontWeight: '600',
+      fontFamily: FONTS.bodySemiBold,
       color: '#666',
     },
     nextButton: {
@@ -7040,7 +7074,7 @@ export default function BuildScreen() {
     },
     nextButtonText: {
       fontSize: Math.round(screenWidth * 0.04),
-      fontWeight: 'bold',
+      fontFamily: FONTS.bodyBold,
       color: '#FFF',
     },
     skipButton: {
@@ -7508,7 +7542,7 @@ export default function BuildScreen() {
               }}
               onPress={() => setShowClosetModal(false)}
             >
-              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' }}>Done</Text>
+              <Text style={{ color: '#FFFFFF', fontSize: 16, fontFamily: FONTS.bodyBold }}>Done</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -7536,7 +7570,7 @@ export default function BuildScreen() {
             {/* Tutorial guidance banner inside notebook modal */}
             {tutorialActive && gameMode === 'tutorial' && (
               <View style={{ backgroundColor: '#FFF3E0', borderRadius: 10, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#FF9800' }}>
-                <Text style={{ fontSize: 13, color: '#E65100', textAlign: 'center', fontWeight: '600' }}>
+                <Text style={{ fontSize: 13, color: '#E65100', textAlign: 'center', fontFamily: FONTS.bodySemiBold }}>
                   🎓 Practice logging! Enter any amount and tap Log. This won't be saved to your records.
                 </Text>
               </View>
@@ -7571,7 +7605,7 @@ export default function BuildScreen() {
                         <Text style={{ fontSize: 16, marginRight: 6 }}>{cat.icon}</Text>
                         <Text style={{
                           fontSize: 13,
-                          fontWeight: isSelected ? 'bold' : 'normal',
+                          fontFamily: isSelected ? FONTS.bodyBold : FONTS.bodyRegular,
                           color: isSelected ? '#FFF' : colors.text,
                         }}>
                           {cat.name}
@@ -7673,7 +7707,7 @@ export default function BuildScreen() {
                           <Text style={{
                             fontSize: 14,
                             color: notebookSubCategory === sub ? (EXPENSE_CATEGORIES.find(c => c.id === notebookCategory)?.color || '#4CAF50') : colors.text,
-                            fontWeight: notebookSubCategory === sub ? 'bold' : 'normal',
+                            fontFamily: notebookSubCategory === sub ? FONTS.bodyBold : FONTS.bodyRegular,
                           }}>
                             {sub}
                           </Text>
@@ -7712,7 +7746,7 @@ export default function BuildScreen() {
                     📊 Budget Status
                   </Text>
                   <Text style={{ color: colors.text, fontSize: 14 }}>
-                    Remaining: <Text style={{ fontWeight: 'bold', color: '#4CAF50' }}>
+                    Remaining: <Text style={{ fontFamily: FONTS.numberBold, fontVariant: ['tabular-nums'], color: '#4CAF50' }}>
                       ₱{getRemainingWeeklyBudget().toFixed(0)}
                     </Text>
                   </Text>
@@ -7779,7 +7813,7 @@ export default function BuildScreen() {
                   disabled={isSubmitting}
                 >
                   <Ionicons name="checkmark-circle" size={22} color="#4CAF50" style={{ marginRight: 8 }} />
-                  <Text style={{ color: '#4CAF50', fontSize: 15, fontWeight: '600' }}>
+                  <Text style={{ color: '#4CAF50', fontSize: 15, fontFamily: FONTS.bodySemiBold }}>
                     No Spend Today
                   </Text>
                 </TouchableOpacity>
@@ -7999,7 +8033,7 @@ export default function BuildScreen() {
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
                       <Text style={{ fontSize: 24, marginRight: 12 }}>{goal.icon}</Text>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ color: colors.text, fontWeight: '600', fontSize: 14 }}>{goal.name}</Text>
+                        <Text style={{ color: colors.text, fontFamily: FONTS.bodySemiBold, fontSize: 14 }}>{goal.name}</Text>
                         <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
                           ₱{allocated.toFixed(0)} / ₱{goal.target} ({progress.toFixed(0)}%)
                         </Text>
@@ -8063,7 +8097,7 @@ export default function BuildScreen() {
               }}
               onPress={() => setShowGoalAllocationModal(false)}
             >
-              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' }}>Done</Text>
+              <Text style={{ color: '#FFFFFF', fontSize: 16, fontFamily: FONTS.bodyBold }}>Done</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -8328,7 +8362,7 @@ export default function BuildScreen() {
                     <Text style={{ color: colors.text, fontSize: 14, textAlign: 'center' }}>
                       Progress: {levelResults.goalProgress}% of target
                     </Text>
-                    <Text style={{ color: parseFloat(levelResults.goalProgress) >= (levelResults.minProgress || 80) ? '#4CAF50' : '#FF4444', fontSize: 14, textAlign: 'center', fontWeight: 'bold' }}>
+                    <Text style={{ color: parseFloat(levelResults.goalProgress) >= (levelResults.minProgress || 80) ? '#4CAF50' : '#FF4444', fontSize: 14, textAlign: 'center', fontFamily: FONTS.bodyBold }}>
                       {parseFloat(levelResults.goalProgress) >= (levelResults.minProgress || 80) ? '✓ Goal reached!' : `✗ Need ${levelResults.minProgress || 80}% to pass`}
                     </Text>
                   </View>
@@ -8342,7 +8376,7 @@ export default function BuildScreen() {
                     <Text style={{ color: colors.text, fontSize: 14, textAlign: 'center' }}>
                       You saved ₱{levelResults.amountSaved.toFixed(2)}
                     </Text>
-                    <Text style={{ color: parseFloat(levelResults.savingsPercent) >= levelResults.savingsGoal ? '#4CAF50' : '#FF4444', fontSize: 16, textAlign: 'center', fontWeight: 'bold' }}>
+                    <Text style={{ color: parseFloat(levelResults.savingsPercent) >= levelResults.savingsGoal ? '#4CAF50' : '#FF4444', fontSize: 16, textAlign: 'center', fontFamily: FONTS.bodyBold }}>
                       {levelResults.savingsPercent}% saved (Goal: {levelResults.savingsGoal}%)
                     </Text>
                   </View>
@@ -8356,7 +8390,7 @@ export default function BuildScreen() {
                     <Text style={{
                       color: levelResults.dailyTasks.allComplete ? '#4CAF50' : '#FF4444',
                       fontSize: 14,
-                      fontWeight: '600',
+                      fontFamily: FONTS.bodySemiBold,
                       textAlign: 'center',
                     }}>
                       {levelResults.dailyTasks.allComplete ? '✓ All daily tasks complete' : '✗ Finish all daily tasks to pass'}
@@ -8381,7 +8415,7 @@ export default function BuildScreen() {
                   openDayReportHistory();
                 }}
               >
-                <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' }}>
+                <Text style={{ color: '#FFFFFF', fontSize: 16, fontFamily: FONTS.bodyBold }}>
                   Day Report History
                 </Text>
               </TouchableOpacity>
@@ -8403,7 +8437,7 @@ export default function BuildScreen() {
                     openLevelIntro(storyLevel + 1);
                   }}
                 >
-                  <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' }}>
+                  <Text style={{ color: '#FFFFFF', fontSize: 16, fontFamily: FONTS.bodyBold }}>
                     Next Level →
                   </Text>
                 </TouchableOpacity>
@@ -8429,7 +8463,7 @@ export default function BuildScreen() {
                     setShowCompletionDialogue(true);
                   }}
                 >
-                  <Text style={{ color: '#f8f8fa', fontSize: 16, fontWeight: 'bold' }}>
+                  <Text style={{ color: '#f8f8fa', fontSize: 16, fontFamily: FONTS.bodyBold }}>
                     Continue
                   </Text>
                 </TouchableOpacity>
@@ -8451,7 +8485,7 @@ export default function BuildScreen() {
                   startStoryLevel(storyLevel);
                 }}
               >
-                <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' }}>
+                <Text style={{ color: '#FFFFFF', fontSize: 16, fontFamily: FONTS.bodyBold }}>
                   {levelPassed ? 'Replay Level' : 'Try Again'}
                 </Text>
               </TouchableOpacity>
@@ -8473,7 +8507,7 @@ export default function BuildScreen() {
                   setGameMode(null);
                 }}
               >
-                <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' }}>
+                <Text style={{ color: '#FFFFFF', fontSize: 16, fontFamily: FONTS.bodyBold }}>
                   Back to Menu
                 </Text>
               </TouchableOpacity>
@@ -8492,7 +8526,7 @@ export default function BuildScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.travelModalContent, { alignItems: 'center', paddingVertical: 30 }]}>
             <Text style={{ fontSize: 48, marginBottom: 12 }}>⚠️</Text>
-            <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#FFF', marginBottom: 8, textAlign: 'center' }}>
+            <Text style={{ fontSize: 20, fontFamily: FONTS.headingSemiBold, letterSpacing: -0.3, color: '#FFF', marginBottom: 8, textAlign: 'center' }}>
               End Session?
             </Text>
             <Text style={{ fontSize: 14, color: '#BBB', textAlign: 'center', marginBottom: 24, paddingHorizontal: 12 }}>
@@ -8511,7 +8545,7 @@ export default function BuildScreen() {
                 }}
                 onPress={() => setShowAbandonModal(false)}
               >
-                <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '600' }}>Cancel</Text>
+                <Text style={{ color: '#FFF', fontSize: 15, fontFamily: FONTS.bodySemiBold }}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={{
@@ -8523,7 +8557,7 @@ export default function BuildScreen() {
                 }}
                 onPress={handleConfirmAbandon}
               >
-                <Text style={{ color: '#FFF', fontSize: 15, fontWeight: 'bold' }}>Give Up</Text>
+                <Text style={{ color: '#FFF', fontSize: 15, fontFamily: FONTS.bodyBold }}>Give Up</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -8545,7 +8579,7 @@ export default function BuildScreen() {
             {/* Tutorial guidance banner inside travel modal */}
             {tutorialActive && gameMode === 'tutorial' && (
               <View style={{ backgroundColor: '#FFF3E0', borderRadius: 10, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#FF9800' }}>
-                <Text style={{ fontSize: 13, color: '#E65100', textAlign: 'center', fontWeight: '600' }}>
+                <Text style={{ fontSize: 13, color: '#E65100', textAlign: 'center', fontFamily: FONTS.bodySemiBold }}>
                   {TUTORIAL_STEPS[tutorialStep]?.id === 'exit_door'
                     ? '🎓 Choose School to continue the tutorial!'
                     : TUTORIAL_STEPS[tutorialStep]?.id === 'go_to_mall'
@@ -8610,7 +8644,7 @@ export default function BuildScreen() {
             {/* Tutorial guidance banner inside transport modal */}
             {tutorialActive && gameMode === 'tutorial' && (
               <View style={{ backgroundColor: '#FFF3E0', borderRadius: 10, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#FF9800' }}>
-                <Text style={{ fontSize: 13, color: '#E65100', textAlign: 'center', fontWeight: '600' }}>
+                <Text style={{ fontSize: 13, color: '#E65100', textAlign: 'center', fontFamily: FONTS.bodySemiBold }}>
                   {!transportMode && !tutorialViewedCar
                     ? '🎓 First, try the Car option to learn about gas tracking!'
                     : !transportMode && tutorialViewedCar
@@ -8881,7 +8915,7 @@ export default function BuildScreen() {
             {/* Tutorial guidance banner inside expense modal */}
             {tutorialActive && gameMode === 'tutorial' && (
               <View style={{ backgroundColor: '#FFF3E0', borderRadius: 10, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#FF9800' }}>
-                <Text style={{ fontSize: 13, color: '#E65100', textAlign: 'center', fontWeight: '600' }}>
+                <Text style={{ fontSize: 13, color: '#E65100', textAlign: 'center', fontFamily: FONTS.bodySemiBold }}>
                   🎓 Practice time! Log an expense here. It won't be saved to your records.
                 </Text>
               </View>
@@ -8978,7 +9012,7 @@ export default function BuildScreen() {
                           <Text style={{
                             fontSize: 14,
                             color: expenseSubCategory === sub ? (EXPENSE_CATEGORIES.find(c => c.id === expenseCategory)?.color || '#4CAF50') : colors.text,
-                            fontWeight: expenseSubCategory === sub ? 'bold' : 'normal',
+                            fontFamily: expenseSubCategory === sub ? FONTS.bodyBold : FONTS.bodyRegular,
                           }}>
                             {sub}
                           </Text>

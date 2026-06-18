@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemeContext } from '../../context/ThemeContext';
 import { useGameAudio } from '../../context/AudioContext';
+import { FONTS } from '../../theme/typography';
 
 // Music attribution — all BGM tracks are composed by Pix.
 const PIX_YOUTUBE_URL = 'https://www.youtube.com/@Pixverses';
@@ -149,13 +150,13 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   title: {
+    fontFamily: FONTS.headingBold,
     fontSize: 24,
-    fontWeight: 'bold',
     letterSpacing: -0.3,
   },
   sectionTitle: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 16,
-    fontWeight: '600',
     marginBottom: 12,
     marginLeft: 4,
     textTransform: 'uppercase',
@@ -190,11 +191,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   settingText: {
+    fontFamily: FONTS.bodyMedium,
     fontSize: 16,
-    fontWeight: '500',
     marginBottom: 2,
   },
   settingValue: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 14,
     opacity: 0.7,
     lineHeight: 18,
@@ -217,22 +219,24 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   creditsLabel: {
+    fontFamily: FONTS.bodyMedium,
     fontSize: 13,
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginBottom: 2,
   },
   creditsArtist: {
+    fontFamily: FONTS.headingBold,
     fontSize: 24,
-    fontWeight: 'bold',
     letterSpacing: -0.3,
   },
   creditsHandle: {
+    fontFamily: FONTS.bodySemiBold,
     fontSize: 15,
-    fontWeight: '600',
     marginTop: 2,
   },
   creditsBlurb: {
+    fontFamily: FONTS.bodyRegular,
     fontSize: 13,
     lineHeight: 19,
     textAlign: 'center',
@@ -250,9 +254,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   creditsButtonText: {
+    fontFamily: FONTS.bodySemiBold,
     color: '#fff',
     fontSize: 15,
-    fontWeight: '600',
     letterSpacing: 0.2,
   },
 });
