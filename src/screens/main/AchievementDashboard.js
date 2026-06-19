@@ -10,8 +10,7 @@ import {
   FlatList,
   Modal,
   Animated,
-  Image,
-  Alert
+  Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import gameDatabaseService from '../../services/GameDatabaseService';
 import { FONTS } from '../../theme/typography';
 import AnimatedBar from '../../components/AnimatedBar';
+import { toast } from '../../utils/toast';
 
 const { width } = Dimensions.get('window');
 
@@ -551,18 +551,16 @@ const AchievementDashboard = () => {
   // Purchase item
   const purchaseItem = async (item) => {
     const spendableXP = getSpendableXP();
-    
+
+    // Ghost: the confirm modal already shows the shortfall inline and disables
+    // the Purchase button when you can't afford it — dead guard, keep the return.
     if (item.price > spendableXP) {
-      Alert.alert(
-        'Not Enough XP',
-        `You need ${item.price - spendableXP} more XP to purchase this item.`,
-        [{ text: 'OK' }]
-      );
       return;
     }
-    
+
+    // Ghost: owned items show an "Owned" badge and their card is disabled, so
+    // this can't be reached from the UI — keep the guard, drop the pop-up.
     if (isItemPurchased(item.id)) {
-      Alert.alert('Already Owned', 'You already own this item!', [{ text: 'OK' }]);
       return;
     }
     
@@ -599,12 +597,11 @@ const AchievementDashboard = () => {
     
     setShowPurchaseConfirm(false);
     setSelectedStoreItem(null);
-    
-    Alert.alert(
-      '🎉 Purchase Successful!',
-      `You've unlocked ${item.name}! Go to the Game tab and open the Closet to use your new skin.`,
-      [{ text: 'Awesome!' }]
-    );
+
+    // Confirm modal closes and the item flips to "Owned" + Spendable XP drops —
+    // that's the purchase confirmation. The toast carries the one thing the UI
+    // can't show: where to actually equip the new skin.
+    toast.success(`Unlocked ${item.name}`, 'Open the Closet in the Game tab to wear it.');
   };
 
   // Load store data on mount

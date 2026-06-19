@@ -1,5 +1,5 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,8 @@ import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../config/supabase';
 import { getSessionForMutation } from '../../services/AuthSessionHelper';
 import { FONTS } from '../../theme/typography';
+import { toast } from '../../utils/toast';
+import { useConfirm } from '../../components/feedback/ConfirmProvider';
 
 const { width } = Dimensions.get('window');
 
@@ -63,6 +65,7 @@ const BudgetGoalsScreen = ({ navigation }) => {
   const { updateBudget } = useContext(DataContext);
   const { theme } = useContext(ThemeContext);
   const { userInfo } = useAuth();
+  const confirm = useConfirm();
   const [monthlyBudget, setMonthlyBudget] = useState('');
   const [error, setError] = useState('');
 
@@ -98,11 +101,7 @@ const BudgetGoalsScreen = ({ navigation }) => {
       // ── Wait for a verified Supabase session to prevent RLS errors ──
       const { session: budgetSession, userId } = await getSessionForMutation();
       if (!userId) {
-        Alert.alert(
-          'Session Not Ready',
-          'Your login session is still being established. Please wait a moment and try again.',
-          [{ text: 'OK' }]
-        );
+        toast.error('Session not ready', 'Give it a moment, then tap Complete Setup again.');
         return;
       }
       const monthly = parseFloat(monthlyBudget);
@@ -135,23 +134,23 @@ const BudgetGoalsScreen = ({ navigation }) => {
       navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } catch (error) {
       console.error('Error in BudgetGoalsScreen:', error);
-      Alert.alert(
-        'Budget Setup Failed',
-        'We couldn\'t save your budget right now. This does NOT affect your account.\n\nWould you like to retry?',
-        [
-          { text: 'Retry', onPress: () => handleComplete() },
-          {
-            text: 'Skip for Now',
-            style: 'cancel',
-            onPress: async () => {
-              // Let the user into the app with defaults — they can set budget later
-              await AsyncStorage.setItem('onboardingComplete', 'true');
-              if (global.setHasOnboarded) global.setHasOnboarded(true);
-              navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-            }
-          },
-        ]
-      );
+      // Two-button decision (retry vs. skip into the app) — keep it as a
+      // themed confirm. Not destructive: skip just enters with defaults.
+      const retry = await confirm({
+        title: 'Could not save budget',
+        message: "This doesn't affect your account. Retry now, or skip and set your budget up later.",
+        confirmLabel: 'Retry',
+        cancelLabel: 'Skip for now',
+        icon: 'cloud-offline-outline',
+      });
+      if (retry) {
+        handleComplete();
+      } else {
+        // Let the user into the app with defaults — they can set budget later.
+        await AsyncStorage.setItem('onboardingComplete', 'true');
+        if (global.setHasOnboarded) global.setHasOnboarded(true);
+        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+      }
     }
   };
 

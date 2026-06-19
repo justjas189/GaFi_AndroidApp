@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,9 +12,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { FriendService } from '../../services/FriendService';
 import { FONTS } from '../../theme/typography';
+import { toast } from '../../utils/toast';
+import { useConfirm } from '../../components/feedback/ConfirmProvider';
 
 const FriendsListScreen = ({ navigation }) => {
   const { theme } = useTheme();
+  const confirm = useConfirm();
   const [friends, setFriends] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -40,7 +42,7 @@ const FriendsListScreen = ({ navigation }) => {
         errorMessage = 'Please log in again to view friends.';
       }
       
-      Alert.alert('Error', errorMessage);
+      toast.error('Could not load friends', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -53,31 +55,28 @@ const FriendsListScreen = ({ navigation }) => {
   };
 
   const removeFriend = async (friendId, friendName) => {
-    Alert.alert(
-      'Remove Friend',
-      `Are you sure you want to remove ${friendName} from your friends list?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const result = await FriendService.removeFriend(friendId);
-              if (result.success) {
-                Alert.alert('Success', 'Friend removed successfully');
-                await loadFriends(); // Refresh the list
-              } else {
-                Alert.alert('Error', result.error || 'Failed to remove friend');
-              }
-            } catch (error) {
-              console.error('Error removing friend:', error);
-              Alert.alert('Error', 'Failed to remove friend');
-            }
-          }
-        }
-      ]
-    );
+    const ok = await confirm({
+      title: 'Remove friend?',
+      message: `${friendName} will be removed from your friends. You can add them back later.`,
+      confirmLabel: 'Remove',
+      cancelLabel: 'Cancel',
+      destructive: true,
+      icon: 'person-remove-outline',
+    });
+    if (!ok) return;
+    try {
+      const result = await FriendService.removeFriend(friendId);
+      if (result.success) {
+        // Ghost: reload drops the friend card + the Friends count — the card
+        // disappearing is the confirmation.
+        await loadFriends();
+      } else {
+        toast.error('Remove failed', result.error || 'Could not remove this friend. Try again.');
+      }
+    } catch (error) {
+      console.error('Error removing friend:', error);
+      toast.error('Remove failed', 'Could not remove this friend. Try again.');
+    }
   };
 
   const renderFriend = (friend, index) => {

@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Alert,
   Modal,
   TextInput,
   ActivityIndicator,
@@ -23,6 +22,7 @@ import MascotImage from '../../components/MascotImage';
 import AnimatedBar from '../../components/AnimatedBar';
 import { getSessionForMutation } from '../../services/AuthSessionHelper';
 import { FONTS } from '../../theme/typography';
+import { toast } from '../../utils/toast';
 
 // Story Mode ships 3 progressive levels; clearing Level 3 ("Super Saver")
 // completes the campaign and unlocks Custom Mode.
@@ -143,15 +143,15 @@ const ProfileScreen = ({ navigation }) => {
   const handleUpdateProfile = async () => {
     try {
       if (!name.trim()) {
-        Alert.alert('Error', 'Please enter your name');
+        toast.error('Name required', 'Enter your name.');
         return;
       }
       if (username.trim() && username.trim().length < 3) {
-        Alert.alert('Error', 'Username must be at least 3 characters long');
+        toast.error('Username too short', 'Use at least 3 characters.');
         return;
       }
       if (username.trim() && !/^[a-zA-Z0-9_]+$/.test(username.trim())) {
-        Alert.alert('Error', 'Username can only contain letters, numbers, and underscores');
+        toast.error('Invalid username', 'Use only letters, numbers, and underscores.');
         return;
       }
 
@@ -162,14 +162,15 @@ const ProfileScreen = ({ navigation }) => {
 
       const result = await updateProfile(profileData);
       if (result.success) {
-        Alert.alert('Success', 'Profile updated successfully');
+        // Ghost: modal closes and the updated name/username re-render on the
+        // profile card behind it — that swap is the confirmation.
         setShowEditProfile(false);
       } else {
-        Alert.alert('Error', result.error || 'Failed to update profile');
+        toast.error('Update failed', result.error || 'Try again.');
       }
     } catch (error) {
       console.error('Profile update error:', error);
-      Alert.alert('Error', 'Failed to update profile. Please try again.');
+      toast.error('Update failed', 'Try again.');
     }
   };
 
@@ -179,8 +180,9 @@ const ProfileScreen = ({ navigation }) => {
       monthly: parseFloat(monthlyBudget) || 0,
     };
     updateBudget(newBudget);
+    // Ghost: modal closes and the new ₱ amount (+ utilization bar) updates on
+    // the budget card behind it — that's the feedback.
     setShowEditBudget(false);
-    Alert.alert('Success', 'Monthly budget updated');
   };
 
   // ── Helpers ──

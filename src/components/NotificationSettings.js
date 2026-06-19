@@ -1,6 +1,6 @@
 // src/components/NotificationSettings.js
 import React, { useState, useEffect } from 'react';
-import { View, Text, Switch, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, Switch, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -39,10 +39,11 @@ const NotificationSettings = () => {
     if (value) {
       // Save the reminder preference
       await AsyncStorage.setItem('expense_reminder_enabled', 'true');
-      Alert.alert('Reminder Set! \uD83D\uDD14', 'You will be reminded daily to track your expenses!');
+      // Ghost: the switch flips on and the reminder-time row slides in below \u2014
+      // that state change is the confirmation.
     } else {
       await AsyncStorage.removeItem('expense_reminder_enabled');
-      Alert.alert('Reminder Disabled', 'Daily expense reminders have been turned off.');
+      // Ghost: the switch flips off and the time row disappears.
     }
   };
 
@@ -58,7 +59,7 @@ const NotificationSettings = () => {
           hour: selectedTime.getHours(),
           minute: selectedTime.getMinutes()
         }));
-        Alert.alert('Time Updated! \u23F0', `Reminder set for ${selectedTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`);
+        // Ghost: the "Reminder Time: X" row re-renders with the new time \u2014 that's the feedback.
       }
     }
   };

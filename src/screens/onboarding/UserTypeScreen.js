@@ -1,6 +1,6 @@
 ﻿// src/screens/onboarding/UserTypeScreen.js
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -9,6 +9,7 @@ import { useAuth } from '../../context/AuthContext';
 import { ThemeContext } from '../../context/ThemeContext';
 import MascotImage from '../../components/MascotImage';
 import { FONTS } from '../../theme/typography';
+import { toast } from '../../utils/toast';
 
 const UserTypeScreen = ({ navigation }) => {
   const [selectedType, setSelectedType] = useState(null);
@@ -41,7 +42,7 @@ const UserTypeScreen = ({ navigation }) => {
 
   const handleContinue = async () => {
     if (!selectedType) {
-      Alert.alert('Selection Required', 'Please select whether you\'re a student or an employee.');
+      toast.error('Pick one', "Tell us if you're a student or an employee.");
       return;
     }
 
@@ -80,7 +81,7 @@ const UserTypeScreen = ({ navigation }) => {
       navigation.navigate('BudgetGoals');
     } catch (error) {
       console.error('Error saving user type:', error);
-      Alert.alert('Error', 'Failed to save your selection. Please try again.');
+      toast.error('Could not save', "Your selection didn't save. Try again.");
     } finally {
       setIsLoading(false);
     }

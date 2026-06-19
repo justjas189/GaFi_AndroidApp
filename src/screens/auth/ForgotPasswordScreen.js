@@ -1,10 +1,11 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../../context/AuthContext';
 import { ThemeContext } from '../../context/ThemeContext';
 import { FONTS } from '../../theme/typography';
+import { toast } from '../../utils/toast';
 
 const ForgotPasswordScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -15,27 +16,30 @@ const ForgotPasswordScreen = ({ navigation }) => {
   const handleResetPassword = async () => {
     try {
       if (!email) {
-        Alert.alert('Error', 'Please enter your email address');
+        toast.error('Email required', 'Enter your email address.');
         return;
       }
 
       // Basic email format validation
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email.trim())) {
-        Alert.alert('Error', 'Please enter a valid email address');
+        toast.error('Check your email', "That doesn't look like a valid address.");
         return;
       }
 
       setIsSubmitting(true);
       const result = await sendPasswordResetEmail(email.trim());
       if (result.success) {
+        // Ghost: navigating to the code screen IS the feedback. The
+        // toast just carries the why so the new screen has context.
+        toast.success('Code sent', `Check ${email.trim()} for your 6-digit code.`);
         navigation.navigate('VerifyResetCode', { email: email.trim() });
       } else {
-        Alert.alert('Error', result.error || 'Failed to send verification code. Please try again.');
+        toast.error('Could not send code', result.error || 'Try again.');
       }
     } catch (err) {
       console.error('Reset password error:', err);
-      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+      toast.error('Something went wrong', 'Try again in a moment.');
     } finally {
       setIsSubmitting(false);
     }

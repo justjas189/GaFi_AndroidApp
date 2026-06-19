@@ -12,7 +12,6 @@ import {
   Animated,
   Dimensions,
   Platform,
-  Alert,
   StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +23,7 @@ import notificationService, { PREF_KEYS } from '../../services/NotificationServi
 import gameModeNotificationService from '../../services/GameModeNotificationService';
 import { IS_DEVELOPMENT } from '../../utils/appEnvironment';
 import { FONTS } from '../../theme/typography';
+import { toast } from '../../utils/toast';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -368,25 +368,19 @@ const NotificationSettingsScreen = ({ navigation }) => {
       } else {
         await notificationService.sendTestNotification(channel.testType);
       }
-      Alert.alert(
-        `${channel.emoji} Test Sent!`,
-        `A test "${channel.title}" notification has been fired. Check your notification tray!`
-      );
+      // Toast: the test notification lands in the device tray (outside the app),
+      // so nothing changes on-screen — confirm the fire + point to the tray.
+      toast.success('Test sent', 'Check your notification tray.');
     } catch (error) {
-      Alert.alert('Error', 'Failed to send test notification: ' + error.message);
+      toast.error('Test failed', error?.message || 'Could not send the test notification.');
     }
   }, []);
 
   const handleTimeChange = useCallback(async (time) => {
     setPreferences(prev => ({ ...prev, DAILY_REMINDER_TIME: time }));
     await notificationService.scheduleDailyReminder(time.hour, time.minute);
-    Alert.alert(
-      '⏰ Time Updated!',
-      `Daily reminder set for ${new Date(0, 0, 0, time.hour, time.minute).toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-      })}`
-    );
+    // Ghost: the Daily Tracker card's "Remind at X" row re-renders with the new
+    // time the instant preferences update — that swap is the confirmation.
   }, []);
 
   const enabledCount = NOTIFICATION_CHANNELS.filter(

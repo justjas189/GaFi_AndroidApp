@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   RefreshControl,
   Dimensions,
   Animated
@@ -18,6 +17,7 @@ import { supabase } from '../../config/supabase';
 import { AchievementService } from '../../services/AchievementService';
 import { FONTS } from '../../theme/typography';
 import AnimatedBar from '../../components/AnimatedBar';
+import { toast } from '../../utils/toast';
 
 const { width } = Dimensions.get('window');
 
@@ -290,7 +290,7 @@ const LeaderboardScreen = ({ navigation }) => {
 
     } catch (error) {
       console.error('Error loading leaderboard:', error);
-      Alert.alert('Error', 'Failed to load leaderboard data');
+      toast.error('Could not load leaderboard', 'Pull down to refresh and try again.');
     } finally {
       setLoading(false);
     }

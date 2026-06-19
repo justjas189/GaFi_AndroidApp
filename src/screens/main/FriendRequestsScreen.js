@@ -6,16 +6,18 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
-  Alert,
   RefreshControl
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { FriendService } from '../../services/FriendService';
 import { FONTS } from '../../theme/typography';
+import { toast } from '../../utils/toast';
+import { useConfirm } from '../../components/feedback/ConfirmProvider';
 
 const FriendRequestsScreen = ({ navigation }) => {
   const { theme } = useTheme();
+  const confirm = useConfirm();
   const [friendRequests, setFriendRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -40,7 +42,7 @@ const FriendRequestsScreen = ({ navigation }) => {
         errorMessage = 'Please log in again to view friend requests.';
       }
       
-      Alert.alert('Error', errorMessage);
+      toast.error('Could not load requests', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -53,22 +55,32 @@ const FriendRequestsScreen = ({ navigation }) => {
   };
 
   const handleFriendRequest = async (requesterId, response) => {
+    // Declining permanently drops the request and the X sits right beside
+    // Accept — guard the destructive path with a confirm. Accept needs none:
+    // the card vanishing on reload IS the reward.
+    if (response === 'declined') {
+      const ok = await confirm({
+        title: 'Decline request?',
+        message: 'This removes the request. They can send another later.',
+        confirmLabel: 'Decline',
+        cancelLabel: 'Keep',
+        destructive: true,
+        icon: 'person-remove-outline',
+      });
+      if (!ok) return;
+    }
     try {
       const result = await FriendService.respondToFriendRequest(requesterId, response);
-      
       if (result.success) {
-        Alert.alert(
-          'Success',
-          response === 'accepted' ? 'Friend request accepted!' : 'Friend request declined.'
-        );
-        // Reload the requests
+        // Ghost: reload drops the request card (and on accept the new friend
+        // moves into the Friends list) — that swap is the confirmation.
         await loadFriendRequests();
       } else {
-        Alert.alert('Error', result.error || 'Failed to respond to friend request');
+        toast.error('Could not respond', result.error || 'Try again.');
       }
     } catch (error) {
       console.error('Error responding to friend request:', error);
-      Alert.alert('Error', 'Failed to respond to friend request');
+      toast.error('Something went wrong', 'Could not update the request. Try again.');
     }
   };
 

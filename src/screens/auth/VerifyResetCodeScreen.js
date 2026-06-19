@@ -1,11 +1,12 @@
 import React, { useState, useRef, useContext } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Keyboard } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, ActivityIndicator, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../../context/AuthContext';
 import { ThemeContext } from '../../context/ThemeContext';
 import { FONTS } from '../../theme/typography';
+import { toast } from '../../utils/toast';
 
 const VerifyResetCodeScreen = ({ navigation, route }) => {
   const { email } = route.params;
@@ -65,64 +66,48 @@ const VerifyResetCodeScreen = ({ navigation, route }) => {
     try {
       const code = resetCode.join('');
       if (!code || code.length !== 6) {
-        Alert.alert('Error', 'Please enter the complete 6-digit code');
+        toast.error('Enter the code', 'Type all 6 digits from your email.');
         return;
       }
 
       if (!newPassword) {
-        Alert.alert('Error', 'Please enter your new password');
+        toast.error('New password required', 'Enter the password you want to use.');
         return;
       }
 
-      // Validate all password requirements are met
+      // Validate all password requirements are met. The live checklist below
+      // already shows which rules pass — point the user at it, no wall of text.
       if (!Object.values(passwordStrength).every(Boolean)) {
-        Alert.alert(
-          'Invalid Password',
-          'Your password must include:\n' +
-          '• At least 8 characters\n' +
-          '• One uppercase letter\n' +
-          '• One lowercase letter\n' +
-          '• One number\n' +
-          '• One special character (@$!%*?&)'
-        );
+        toast.error('Password too weak', 'Meet all the requirements listed below.');
         return;
       }
 
       setIsSubmitting(true);
       const result = await resetPassword(code, newPassword.trim(), email);
       if (result.success) {
-        Alert.alert(
-          'Success', 
-          'Your password has been reset successfully. Please log in with your new password.',
-          [{ 
-            text: 'OK',
-            onPress: () => {
-              // Clear sensitive data
-              setResetCode(['', '', '', '', '', '']);
-              setNewPassword('');
-              setPasswordStrength({
-                uppercase: false,
-                lowercase: false,
-                number: false,
-                special: false,
-                length: false
-              });
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Login' }],
-              });
-            }
-          }]
-        );
+        // Clear sensitive data before leaving the screen.
+        setResetCode(['', '', '', '', '', '']);
+        setNewPassword('');
+        setPasswordStrength({
+          uppercase: false,
+          lowercase: false,
+          number: false,
+          special: false,
+          length: false
+        });
+        // Ghost: the reset-to-Login swap IS the feedback. Toast is root-mounted
+        // so it survives the navigation reset and tells them why they're here.
+        toast.success('Password reset', 'Log in with your new password.');
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Login' }],
+        });
       } else {
-        Alert.alert('Error', result.error || 'Failed to reset password. Please try again.');
+        toast.error('Could not reset password', result.error || 'Try again.');
       }
     } catch (err) {
       console.error('Password reset error:', err);
-      Alert.alert(
-        'Error',
-        'An unexpected error occurred while resetting your password. Please try again.'
-      );
+      toast.error('Something went wrong', 'Could not reset your password. Try again.');
     } finally {
       setIsSubmitting(false);
     }
