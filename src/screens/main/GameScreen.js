@@ -1,5 +1,5 @@
 import React, { useState, useRef, useContext, useEffect, useCallback, useMemo } from 'react';
-import { View, StyleSheet, ImageBackground, Dimensions, TouchableWithoutFeedback, Animated, Modal, Text, TextInput, TouchableOpacity, Alert, ScrollView, SectionList, Easing, Image, useWindowDimensions, AppState } from 'react-native';
+import { View, StyleSheet, ImageBackground, Dimensions, TouchableWithoutFeedback, Animated, Modal, Text, TextInput, TouchableOpacity, ScrollView, SectionList, Easing, Image, useWindowDimensions, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, useIsFocused } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
@@ -29,6 +29,8 @@ import DailyTaskPopup from '../../components/DailyTaskPopup';
 import EndOfDayReportModal from '../../components/EndOfDayReportModal';
 import { useGameAudio } from '../../context/AudioContext';
 import { FONTS } from '../../theme/typography';
+import { toast } from '../../utils/toast';
+import { useConfirm } from '../../components/feedback/ConfirmProvider';
 
 const { width: INITIAL_WIDTH, height: INITIAL_HEIGHT } = Dimensions.get('window');
 const CHARACTER_SIZE = 48;
@@ -372,6 +374,7 @@ export default function BuildScreen() {
   const { addExpense, expenses } = useContext(DataContext);
   const { startGameTutorial: startContextTutorial, markConditionComplete, cancelTutorial, tutorialPhase } = useTutorial();
   const navigation = useNavigation();
+  const confirm = useConfirm();
 
   // Background music lives in AudioContext (global, survives this unmount).
   // Here we only drive the "distant room" illusion: full audio when this
@@ -1658,8 +1661,13 @@ export default function BuildScreen() {
         });
       }
 
-      const completedLines = newlyCompleted.map((task) => `• ${task.successMessage}`).join('\n');
-      Alert.alert('Daily Task Complete', `${completedLines}${earnedXp > 0 ? `\n\n+${earnedXp} XP` : ''}`);
+      // Reward moment kept as a celebratory toast (genuinely new info: which
+      // task cleared + XP gained). The drop-from-top toast fits the game flow.
+      const count = newlyCompleted.length;
+      toast.success(
+        count > 1 ? `${count} tasks complete 🎉` : 'Task complete 🎉',
+        earnedXp > 0 ? `+${earnedXp} XP earned` : newlyCompleted[0].successMessage,
+      );
     }
   }, [
     gameMode,
@@ -2473,7 +2481,7 @@ export default function BuildScreen() {
   // Start Story Mode with a specific level
   const startStoryLevel = async (level) => {
     if (!user?.id) {
-      Alert.alert('Error', 'You must be logged in to start Story Mode.');
+      toast.error('Not signed in', 'Sign in to start Story Mode.');
       return;
     }
     // Guard: if an active session already exists for this level, resume it instead
@@ -2584,7 +2592,7 @@ export default function BuildScreen() {
 
     } catch (error) {
       console.error('Error starting story level:', error);
-      Alert.alert('Error', 'Could not start story mode. Please try again.');
+      toast.error("Couldn't start", 'Could not start Story Mode. Try again.');
     }
   };
 
@@ -2607,19 +2615,16 @@ export default function BuildScreen() {
   }, [gameMode, storyEndDate, showLevelComplete]);
 
   // Function to manually end the week (for testing or if user wants to end early)
-  const handleEndWeek = () => {
-    Alert.alert(
-      '⏰ End Week Early?',
-      'Are you sure you want to end this week and check your progress?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'End Week',
-          style: 'destructive',
-          onPress: () => checkLevelCompletion(weeklySpending)
-        }
-      ]
-    );
+  const handleEndWeek = async () => {
+    const ok = await confirm({
+      title: 'End week early?',
+      message: 'This ends the week now and checks your progress.',
+      confirmLabel: 'End week',
+      cancelLabel: 'Cancel',
+      destructive: true,
+      icon: 'time',
+    });
+    if (ok) checkLevelCompletion(weeklySpending);
   };
 
   // ==================== ACHIEVEMENT FUNCTIONS ====================
@@ -2790,7 +2795,7 @@ export default function BuildScreen() {
         setShowNotebookModal(true);
         break;
       case 'info':
-        Alert.alert(`${location.name} ${location.icon}`, location.message || 'Nothing here.');
+        toast.info(`${location.name} ${location.icon}`, location.message || 'Nothing here.');
         break;
       case 'floor_change':
         console.log(`🔄 Floor change triggered: going to ${location.targetFloor}`);
@@ -2843,18 +2848,18 @@ export default function BuildScreen() {
     if (transportMode === 'commute') {
       const fare = parseFloat(fareAmount);
       if (!fareAmount || isNaN(fare) || fare < 0) {
-        Alert.alert('Invalid Fare', 'Please enter a valid fare amount.');
+        toast.error('Invalid fare', 'Enter a valid fare amount.');
         return;
       }
     } else if (transportMode === 'car') {
       if (didBuyFuel === null) {
-        Alert.alert('Fuel Question', 'Please select if you bought fuel or not.');
+        toast.error('Pick an option', 'Select whether you bought fuel.');
         return;
       }
       if (didBuyFuel) {
         const fuel = parseFloat(fuelAmount);
         if (!fuelAmount || isNaN(fuel) || fuel <= 0) {
-          Alert.alert('Invalid Amount', 'Please enter a valid fuel cost.');
+          toast.error('Invalid amount', 'Enter a valid fuel cost.');
           return;
         }
       }
@@ -2982,7 +2987,7 @@ export default function BuildScreen() {
 
       if (!success) {
         console.error('❌ Transport: Failed to save expense');
-        Alert.alert('Sync Error', 'Transport expense may not have been saved.');
+        toast.error('Sync failed', 'Your transport expense may not have been saved.');
       } else {
         console.log(`✅ Transport: Recorded ${description}: ₱${amount}`);
 
@@ -3503,7 +3508,7 @@ export default function BuildScreen() {
   const allocateToGoal = (goalId, amount) => {
     const available = getRemainingWeeklyBudget();
     if (amount > available) {
-      Alert.alert('Insufficient Funds', `You only have ₱${available.toFixed(2)} available.`);
+      toast.error('Insufficient funds', `You only have ₱${available.toFixed(2)} available.`);
       return;
     }
 
@@ -3540,16 +3545,9 @@ export default function BuildScreen() {
       evaluateActiveStoryDayTasks();
     }
 
-    const newTotal = (goalAllocations[goalId] || 0) + amount;
-    const totalGoalTarget = savingsGoals.reduce((sum, g) => sum + g.target, 0);
-    const totalAllocated = Object.values(goalAllocations).reduce((sum, val) => sum + val, 0) + amount;
-    const overallProgress = totalGoalTarget > 0 ? ((totalAllocated / totalGoalTarget) * 100).toFixed(0) : 0;
-
-    Alert.alert(
-      '✅ Allocated!',
-      `₱${amount} added to ${goal?.name || 'goal'}!\n\nOverall Progress: ${overallProgress}%`,
-      [{ text: 'OK' }]
-    );
+    // Ghost: the goal's progress bar (AnimatedBar) animates up and the overall
+    // progress figure re-renders the instant we setGoalAllocations — that IS the
+    // feedback, so no pop-up.
 
     // NOTE: Level completion is only checked when the week ends (in useEffect),
     // NOT after each allocation. This allows players to keep allocating throughout the week.
@@ -3639,18 +3637,18 @@ export default function BuildScreen() {
 
   const handleSubmitExpense = async () => {
     if (!expenseAmount || parseFloat(expenseAmount) <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid expense amount.');
+      toast.error('Invalid amount', 'Enter a valid expense amount.');
       return;
     }
 
     if (!expenseNote.trim() && !(SUBCATEGORIES[expenseCategory] || []).length) {
-      Alert.alert('Missing Details', 'Please describe what you bought.');
+      toast.error('Add a note', 'Describe what you bought.');
       return;
     }
 
     // Check if user is logged in
     if (!user?.id) {
-      Alert.alert('Error', 'You must be logged in to save expenses.');
+      toast.error('Not signed in', 'Sign in to save expenses.');
       return;
     }
 
@@ -3670,11 +3668,8 @@ export default function BuildScreen() {
 
     // ── Tutorial mode: skip DB save, mark conditions ──
     if (tutorialActive && gameMode === 'tutorial') {
-      Alert.alert(
-        '🎓 Practice Expense!',
-        `You practiced logging ₱${savedAmount} on ${savedCategory}.\n\nThis wasn't saved — great job learning!`,
-        [{ text: 'OK' }]
-      );
+      // Practice run saves nothing, so nothing animates — a toast is the feedback.
+      toast.success('Nice practice! 🎓', `Logged ₱${savedAmount} on ${savedCategory} — not saved.`);
       // Mark tutorial conditions based on current map
       if (currentMapId === 'school') markTutorialCondition('school_expense_logged');
       if (currentMapId.startsWith('mall')) markTutorialCondition('mall_expense_logged');
@@ -3682,12 +3677,8 @@ export default function BuildScreen() {
       return;
     }
 
-    // Show quick feedback toast-style (non-blocking)
-    Alert.alert(
-      '🎉 Purchase Recorded!',
-      `You spent ₱${savedAmount} on ${savedCategory}.\n\n"${savedNote}"`,
-      [{ text: 'OK' }]
-    );
+    // Ghost: modal already closed and fetchTodaySpending() + the budget bars
+    // re-render with the new spend — that's the confirmation, no pop-up.
 
     const expenseAmountNum = parseFloat(savedAmount);
     const normalizedCategory = normalizeCategory(savedCategory);
@@ -3733,7 +3724,7 @@ export default function BuildScreen() {
       if (!success) {
         console.error('❌ Failed to save expense in background');
         // Optionally show error after the fact
-        Alert.alert('Sync Error', 'Your expense may not have been saved. Please check your expenses list.');
+        toast.error('Sync failed', 'Your expense may not have been saved. Check your expenses list.');
       } else {
         console.log('✅ Expense saved successfully via DataContext');
 
@@ -3814,10 +3805,7 @@ export default function BuildScreen() {
       fetchTodaySpending(); // Refresh spending total
     } catch (error) {
       console.error('❌ Error saving expense:', error);
-      Alert.alert(
-        'Sync Error',
-        `Your expense may not have been saved: ${error.message || 'Unknown error'}`
-      );
+      toast.error('Sync failed', error.message || 'Your expense may not have been saved.');
     }
   };
 
@@ -5458,14 +5446,14 @@ export default function BuildScreen() {
   const handleStoryMode = async () => {
     // Gate behind tutorial completion
     if (!tutorialCompleted) {
-      Alert.alert(
-        '🎓 Tutorial Required',
-        'Please complete the Tutorial first to learn the basics before starting Story Mode!',
-        [
-          { text: 'Start Tutorial', onPress: startTutorial },
-          { text: 'Cancel', style: 'cancel' },
-        ]
-      );
+      const start = await confirm({
+        title: 'Tutorial first 🎓',
+        message: 'Finish the Tutorial to learn the basics before Story Mode.',
+        confirmLabel: 'Start tutorial',
+        cancelLabel: 'Cancel',
+        icon: 'school',
+      });
+      if (start) startTutorial();
       return;
     }
     // Clear any leftover tutorial state
@@ -6681,11 +6669,7 @@ export default function BuildScreen() {
               if (customModeUnlocked) {
                 navigation.navigate('CustomModeDashboard');
               } else {
-                Alert.alert(
-                  '🔒 Locked',
-                  'Complete all 3 Story Mode levels to unlock Custom Mode!',
-                  [{ text: 'OK' }]
-                );
+                toast.info('Locked 🔒', 'Finish all 3 Story Mode levels to unlock Custom Mode.');
               }
             }}
             activeOpacity={customModeUnlocked ? 0.7 : 1}
@@ -7474,11 +7458,7 @@ export default function BuildScreen() {
                           });
                           gameDatabaseService.logActivity({ activityType: 'closet_visit', details: { selected: key } });
                         } else {
-                          Alert.alert(
-                            '🔒 Skin Locked',
-                            `${char.name} is not unlocked yet! Visit the Store in the Achievements screen to purchase this skin with XP.`,
-                            [{ text: 'OK' }]
-                          );
+                          toast.info('Skin locked 🔒', `${char.name} isn't unlocked. Buy it with XP in the Store.`);
                         }
                       }}
                     >
@@ -7798,15 +7778,11 @@ export default function BuildScreen() {
                       setExpenseNote('');
                       setNotebookCategory('Food & Dining');
 
-                      // Success feedback
-                      Alert.alert(
-                        '🌟 Great Job!',
-                        'No-spend day logged! Your tracking streak continues.',
-                        [{ text: 'Awesome!' }]
-                      );
+                      // No bar moves on a ₱0 log, so a toast carries the win.
+                      toast.success('No-spend day logged 🌟', 'Your tracking streak continues.');
                     } catch (error) {
                       console.error('Error logging no-spend day:', error);
-                      Alert.alert('Error', 'Failed to log. Please try again.');
+                      toast.error('Log failed', 'Could not log it. Try again.');
                     } finally {
                       setIsSubmitting(false);
                     }
@@ -7845,7 +7821,7 @@ export default function BuildScreen() {
                     // Validate amount
                     const amount = parseFloat(expenseAmount);
                     if (!expenseAmount || isNaN(amount) || amount <= 0) {
-                      Alert.alert('Invalid Amount', 'Please enter a valid expense amount.');
+                      toast.error('Invalid amount', 'Enter a valid expense amount.');
                       return;
                     }
 
@@ -7866,22 +7842,15 @@ export default function BuildScreen() {
 
                     // ── Tutorial mode: skip DB save, mark condition ──
                     if (tutorialActive && gameMode === 'tutorial') {
-                      Alert.alert(
-                        '🎓 Practice Expense!',
-                        `You practiced logging ₱${savedAmount.toFixed(2)} in ${savedCategory}.\n\nThis wasn't saved — nice work!`,
-                        [{ text: 'OK' }]
-                      );
+                      // Practice saves nothing, so nothing animates — toast is the feedback.
+                      toast.success('Nice practice! 🎓', `Logged ₱${savedAmount.toFixed(2)} in ${savedCategory} — not saved.`);
                       markTutorialCondition('notebook_expense_logged');
                       console.log('🎓 Tutorial: Skipped notebook expense save (practice mode)');
                       return;
                     }
 
-                    // Quick non-blocking feedback
-                    Alert.alert(
-                      '✅ Expense Recorded!',
-                      `₱${savedAmount.toFixed(2)} added to ${savedCategory}`,
-                      [{ text: 'OK' }]
-                    );
+                    // Ghost: modal already closed and the category/budget bars
+                    // animate to the new spend below — that's the confirmation.
 
                     // Optimistic local state updates (instant, no await)
                     setCategorySpending(prev => ({
@@ -7940,7 +7909,7 @@ export default function BuildScreen() {
 
                       if (!success) {
                         console.error('❌ Notebook: Failed to save expense');
-                        Alert.alert('Sync Error', 'Your expense may not have been saved. Please check your expenses list.');
+                        toast.error('Sync failed', 'Your expense may not have been saved. Check your expenses list.');
                       } else {
                         console.log('✅ Notebook: Expense saved successfully');
 
@@ -7994,7 +7963,7 @@ export default function BuildScreen() {
                       }
                     } catch (error) {
                       console.error('❌ Notebook: Error saving expense:', error);
-                      Alert.alert('Sync Error', `Your expense may not have been saved: ${error.message || 'Unknown error'}`);
+                      toast.error('Sync failed', error.message || 'Your expense may not have been saved.');
                     }
                   }}
                   disabled={isSubmitting}

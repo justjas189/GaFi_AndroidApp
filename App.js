@@ -34,6 +34,11 @@ import { TutorialProvider } from './src/context/TutorialContext';
 import { useAppFonts } from './src/hooks/useAppFonts';
 import { usePushNotifications } from './src/hooks/usePushNotifications';
 
+// Feedback infrastructure (branded toast + confirm modal, replaces Alert.alert)
+import Toast from 'react-native-toast-message';
+import { toastConfig } from './src/components/feedback/toastConfig';
+import { ConfirmProvider } from './src/components/feedback/ConfirmProvider';
+
 const Stack = createStackNavigator();
 
 // NOTE: Koin bubble + tutorial overlays moved into MainNavigator so they sit
@@ -281,14 +286,18 @@ export default function App() {
               <AuthProvider>
                 <DataProvider>
                   <TutorialProvider>
-                    <StatusBar style="auto" />
-                    <View style={{ flex: 1 }}>
-                      <AppNavigator />
-                    </View>
+                    <ConfirmProvider>
+                      <StatusBar style="auto" />
+                      <View style={{ flex: 1 }}>
+                        <AppNavigator />
+                      </View>
+                    </ConfirmProvider>
                   </TutorialProvider>
                 </DataProvider>
               </AuthProvider>
             </ThemedNavigationContainer>
+            {/* Floats above navigation; inside ThemeProvider so branded toasts read useTheme */}
+            <Toast config={toastConfig} topOffset={60} />
           </ThemeProvider>
         </SafeAreaProvider>
       </GestureHandlerRootView>

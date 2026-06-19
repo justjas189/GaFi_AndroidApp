@@ -9,8 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  ActivityIndicator,
-  Alert
+  ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +20,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import ProfileService from '../../services/ProfileService';
 import GoogleSignInButton from '../../components/auth/GoogleSignInButton';
 import { FONTS } from '../../theme/typography';
+import { toast } from '../../utils/toast';
+import { useConfirm } from '../../components/feedback/ConfirmProvider';
 
 const SignUpScreen = ({ navigation }) => {
   const [name, setName] = useState('');
@@ -36,13 +37,14 @@ const SignUpScreen = ({ navigation }) => {
   const [usernameAvailable, setUsernameAvailable] = useState(null);
   const { register, loginWithGoogle, error, isLoading } = useContext(AuthContext);
   const { colors, spacing, borderRadius, shadows, createThemedStyles } = useTheme();
+  const confirm = useConfirm();
 
   const handleGoogleSignUp = async () => {
     // Google handles sign-up and sign-in identically; the SIGNED_IN auth event
     // swaps the navigator (new users route to Onboarding automatically).
     const { success, error, cancelled } = await loginWithGoogle();
     if (!success && !cancelled) {
-      Alert.alert('Google Sign-In Failed', error || 'Could not sign in with Google. Please try again.');
+      toast.error('Google sign-in failed', error || 'Could not sign in with Google. Try again.');
     }
   };
 
@@ -162,11 +164,7 @@ const SignUpScreen = ({ navigation }) => {
     }
 
     if (!termsAccepted) {
-      Alert.alert(
-        'Terms & Conditions Required',
-        'Please accept the Terms & Conditions to create your account.',
-        [{ text: 'OK' }]
-      );
+      toast.error('Accept the terms', 'Agree to the Terms & Conditions to create your account.');
       return;
     }
 
@@ -175,26 +173,20 @@ const SignUpScreen = ({ navigation }) => {
       const { exists, error: checkError } = await checkEmailExists(email);
       
       if (checkError) {
-        Alert.alert(
-          'Error',
-          'Unable to verify email availability. Please try again.',
-          [{ text: 'OK' }]
-        );
+        toast.error('Something went wrong', 'Could not verify email availability. Try again.');
         return;
       }
-      
+
       if (exists) {
-        Alert.alert(
-          'Email Already Exists',
-          'An account with this email already exists. Please use a different email or sign in to your existing account.',
-          [
-            {
-              text: 'Go to Login',
-              onPress: () => navigation.replace('Login')
-            },
-            { text: 'OK' }
-          ]
-        );
+        // Two-way decision (sign in vs. pick another email) → confirm modal.
+        const goLogin = await confirm({
+          title: 'Email already registered',
+          message: 'An account with this email exists. Sign in instead?',
+          confirmLabel: 'Go to login',
+          cancelLabel: 'Use another email',
+          icon: 'mail',
+        });
+        if (goLogin) navigation.replace('Login');
         return;
       }
 
@@ -209,39 +201,32 @@ const SignUpScreen = ({ navigation }) => {
       
       // Handle any unexpected registration errors
       if (error) {
-        Alert.alert(
-          'Registration Failed',
-          error || 'Unable to create account. Please try again.',
-          [{ text: 'OK' }]
-        );
+        toast.error('Registration failed', error || 'Could not create your account. Try again.');
         return;
       }
-      
+
       if (success && needsVerification) {
-        Alert.alert(
-          'Verify Your Email',
-          'A verification link has been sent to your email. Please check your inbox and click the link to verify your account.',
-          [
-            {
-              text: 'Resend Email',
-              onPress: async () => {
-                const { error } = await supabase.auth.resend({
-                  type: 'signup',
-                  email: email.trim()
-                });
-                if (error) {
-                  Alert.alert('Error', 'Failed to resend verification email. Please try again.');
-                } else {
-                  Alert.alert('Success', 'Verification email has been resent. Please check your inbox.');
-                }
-              }
-            },
-            {
-              text: 'Go to Login',
-              onPress: () => navigation.replace('Login')
-            }
-          ]
-        );
+        // Two-button decision (resend vs. head to login) → confirm modal.
+        const resend = await confirm({
+          title: 'Verify your email',
+          message: 'We sent a verification link to your email. Tap it to activate your account.',
+          confirmLabel: 'Resend email',
+          cancelLabel: 'Go to login',
+          icon: 'mail-unread',
+        });
+        if (resend) {
+          const { error } = await supabase.auth.resend({
+            type: 'signup',
+            email: email.trim(),
+          });
+          if (error) {
+            toast.error('Resend failed', 'Could not resend the email. Try again.');
+          } else {
+            toast.success('Email sent', 'Check your inbox for the verification link.');
+          }
+        } else {
+          navigation.replace('Login');
+        }
         return;
       }
       
@@ -252,19 +237,11 @@ const SignUpScreen = ({ navigation }) => {
       }
 
       // If we reach here, there was an unexpected error
-      Alert.alert(
-        'Registration Failed',
-        'Unable to create account. Please try again.',
-        [{ text: 'OK' }]
-      );
+      toast.error('Registration failed', 'Could not create your account. Try again.');
 
     } catch (err) {
       console.error('SignUp error:', err);
-      Alert.alert(
-        'Error',
-        'An unexpected error occurred. Please try again later.',
-        [{ text: 'OK' }]
-      );
+      toast.error('Something went wrong', 'An unexpected error occurred. Try again later.');
     }
   };
 

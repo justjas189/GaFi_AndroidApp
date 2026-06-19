@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  Alert,
   Dimensions,
   ScrollView,
   Platform,
@@ -21,6 +20,8 @@ import { LineChart } from 'react-native-chart-kit';
 import { FONTS } from '../../theme/typography';
 import { normalizeCategory } from '../../utils/categoryUtils';
 import { getCategoryIcon } from '../../utils/categoryIcons';
+import { toast } from '../../utils/toast';
+import { useConfirm } from '../../components/feedback/ConfirmProvider';
 
 // Sub-categories per expense category (synced with GameScreen)
 const SUBCATEGORIES = {
@@ -42,7 +43,8 @@ const screenWidth = Dimensions.get('window').width;
 const ExpenseScreen = ({ navigation, route }) => {
   const { expenses, addExpense, deleteExpense, budget } = useContext(DataContext);
   const { theme } = useContext(ThemeContext);
-  
+  const confirm = useConfirm();
+
   // View states
   const [viewMode, setViewMode] = useState('statistics'); // 'statistics' or 'detailed'
   const [showForm, setShowForm] = useState(false);
@@ -532,7 +534,7 @@ const ExpenseScreen = ({ navigation, route }) => {
 
   const applyCustomRange = () => {
     if (tempStartDate > tempEndDate) {
-      Alert.alert('Invalid Range', 'Start date must be before end date');
+      toast.error('Invalid range', 'Start date must be before the end date.');
       return;
     }
     setCustomStartDate(new Date(tempStartDate));
@@ -552,7 +554,7 @@ const ExpenseScreen = ({ navigation, route }) => {
 
   const handleSave = async () => {
     if (!amount || !category) {
-      Alert.alert('Error', 'Please fill in amount and category');
+      toast.error('Missing info', 'Add an amount and category.');
       return;
     }
 
@@ -602,15 +604,16 @@ const ExpenseScreen = ({ navigation, route }) => {
     }
   };
 
-  const handleDelete = (id) => {
-    Alert.alert(
-      'Delete Expense',
-      'Are you sure you want to delete this expense?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => deleteExpense(id) }
-      ]
-    );
+  const handleDelete = async (id) => {
+    const ok = await confirm({
+      title: 'Delete expense',
+      message: "This permanently removes the expense. You can't undo this.",
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      destructive: true,
+    });
+    // Row disappears from the list on delete — that's the feedback, no toast.
+    if (ok) deleteExpense(id);
   };
 
   // Render expense item for detailed view

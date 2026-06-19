@@ -9,7 +9,6 @@ import {
   FlatList,
   TextInput,
   Modal,
-  Alert,
   Platform,
   RefreshControl,
   Animated,
@@ -27,6 +26,8 @@ import { supabase } from '../../config/supabase';
 import goalNotificationService from '../../services/GoalNotificationService';
 import { getCategoryIcon } from '../../utils/categoryIcons';
 import { normalizeCategory } from '../../utils/categoryUtils';
+import { toast } from '../../utils/toast';
+import { useConfirm } from '../../components/feedback/ConfirmProvider';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -204,6 +205,7 @@ export default function CustomModeDashboard({ navigation }) {
   const { theme } = useContext(ThemeContext);
   const { user, userInfo } = useContext(AuthContext);
   const { budget, expenses, addExpense } = useContext(DataContext);
+  const confirm = useConfirm();
   const isEmployee = userInfo?.userType === 'employee';
 
   // ── Tab ─────────────────────────────────────────────────────────────
@@ -545,11 +547,11 @@ export default function CustomModeDashboard({ navigation }) {
   const handleSubmitExpense = async () => {
     const amount = parseFloat(expenseAmount);
     if (!expenseAmount || isNaN(amount) || amount <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid expense amount.');
+      toast.error('Invalid amount', 'Enter a valid expense amount.');
       return;
     }
     if (!user?.id) {
-      Alert.alert('Error', 'You must be logged in to save expenses.');
+      toast.error('Not signed in', 'Sign in to save expenses.');
       return;
     }
     setIsSubmitting(true);
@@ -568,13 +570,13 @@ export default function CustomModeDashboard({ navigation }) {
         date: new Date().toISOString(),
         appMode: 'custom',
       });
+      // Success ghosts: modal already closed and the budget bars re-render from
+      // the new expense. Only surface the failure path.
       if (!success) {
-        Alert.alert('Sync Error', 'Your expense may not have been saved.');
-      } else {
-        Alert.alert('Expense Recorded', `₱${savedAmount.toFixed(2)} added to ${savedCategory}`);
+        toast.error('Sync failed', 'Your expense may not have been saved.');
       }
     } catch (error) {
-      Alert.alert('Error', `Failed to save expense: ${error.message || 'Unknown error'}`);
+      toast.error('Save failed', error.message || 'Could not save the expense.');
     } finally {
       setIsSubmitting(false);
     }
@@ -595,11 +597,11 @@ export default function CustomModeDashboard({ navigation }) {
 
   const handleSaveBudgetRules = async () => {
     if (editRules.savings < 20) {
-      Alert.alert('Invalid', 'Savings must be at least 20%.');
+      toast.error('Savings too low', 'Savings must be at least 20%.');
       return;
     }
     if (editRulesTotal !== 100) {
-      Alert.alert('Invalid', 'Needs + Wants + Savings must equal 100%.');
+      toast.error("Doesn't add up", 'Needs + Wants + Savings must equal 100%.');
       return;
     }
     setBudgetRules({ ...editRules });
@@ -634,11 +636,11 @@ export default function CustomModeDashboard({ navigation }) {
   const handleAddGoal = async () => {
     const target = parseFloat(newGoalTarget);
     if (!newGoalTitle.trim() || isNaN(target) || target <= 0) {
-      Alert.alert('Invalid Input', 'Please enter a valid goal name and target amount.');
+      toast.error('Missing info', 'Enter a goal name and a valid target amount.');
       return;
     }
     if (!newGoalDeadline.trim() || !newGoalDeadlineDate) {
-      Alert.alert('Invalid Date', 'Please enter a valid deadline date in MM/DD/YYYY format.');
+      toast.error('Invalid date', 'Enter a deadline in MM/DD/YYYY format.');
       return;
     }
     setGoalSubmitting(true);
@@ -668,9 +670,9 @@ export default function CustomModeDashboard({ navigation }) {
           target
         );
       }
-      Alert.alert('Goal Added', `Goal added successfully: ${savedTitle}`);
+      // Ghost: modal closed and fetchGoals() drops the new goal card into the list.
     } catch (err) {
-      Alert.alert('Error', err.message);
+      toast.error("Couldn't add goal", err.message);
     } finally {
       setGoalSubmitting(false);
     }
@@ -678,33 +680,33 @@ export default function CustomModeDashboard({ navigation }) {
 
 
 
-  const handleDeleteGoal = (goal) => {
-    Alert.alert('Delete Goal', `Are you sure you want to delete "${goal.title}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            const { error } = await supabase
-              .from('goals_custom_mode')
-              .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-              .eq('id', goal.id);
-            if (error) throw error;
-            await fetchGoals();
-            goalNotificationService.cancelGoalNotifications(goal.id);
-          } catch (err) {
-            Alert.alert('Error', err.message);
-          }
-        },
-      },
-    ]);
+  const handleDeleteGoal = async (goal) => {
+    const ok = await confirm({
+      title: 'Delete goal',
+      message: `This permanently deletes "${goal.title}". You can't undo this.`,
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      const { error } = await supabase
+        .from('goals_custom_mode')
+        .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+        .eq('id', goal.id);
+      if (error) throw error;
+      // Ghost: the goal card disappears from the list on fetchGoals().
+      await fetchGoals();
+      goalNotificationService.cancelGoalNotifications(goal.id);
+    } catch (err) {
+      toast.error('Delete failed', err.message);
+    }
   };
 
   const handleAllocate = async () => {
     const amt = parseFloat(allocateAmount);
     if (!allocateGoal || isNaN(amt) || amt <= 0) {
-      Alert.alert('Invalid Amount', 'Enter a positive number.');
+      toast.error('Invalid amount', 'Enter a positive number.');
       return;
     }
     try {
@@ -733,15 +735,16 @@ export default function CustomModeDashboard({ navigation }) {
         goalNotificationService.cancelGoalNotifications(allocateGoal.id);
       }
 
+      const achievedTitle = allocateGoal.title;
       setAllocateGoal(null);
       await Promise.all([fetchGoals(), fetchGoalContributions()]);
+      // Allocation itself ghosts — the goal's progress bar animates up. Only the
+      // milestone (hitting 100%) earns a celebratory toast.
       if (isAchieved) {
-        Alert.alert('Goal Achieved!', `You've reached your target for "${allocateGoal.title}"!`);
-      } else {
-        Alert.alert('Funds Allocated', `${formatCurrency(amt)} allocated to ${allocateGoal.title}`);
+        toast.success('Goal achieved! 🎉', `You hit your target for "${achievedTitle}".`);
       }
     } catch (err) {
-      Alert.alert('Error', err.message);
+      toast.error('Allocation failed', err.message);
     }
   };
 
@@ -749,11 +752,11 @@ export default function CustomModeDashboard({ navigation }) {
 
   const handleAddWallet = async () => {
     if (!newWalletName.trim()) {
-      Alert.alert('Invalid', 'Please enter a name for the savings account.');
+      toast.error('Name required', 'Enter a name for the savings account.');
       return;
     }
     if (!newWalletLocationType) {
-      Alert.alert('Invalid', 'Please select a savings location type.');
+      toast.error('Pick a location', 'Select a savings location type.');
       return;
     }
     try {
@@ -763,28 +766,25 @@ export default function CustomModeDashboard({ navigation }) {
         location_type: newWalletLocationType,
       });
       if (error) throw error;
-      Alert.alert('Account Added', `${newWalletName.trim()} added successfully`);
+      // Ghost: modal closes and the new account card appears via fetchSavingsData().
       setNewWalletName('');
       setNewWalletLocationType('');
       setShowAddWallet(false);
       await fetchSavingsData();
     } catch (err) {
-      Alert.alert('Error', err.message);
+      toast.error("Couldn't add account", err.message);
     }
   };
 
   const handleTransaction = async () => {
     const amt = parseFloat(txnAmount);
     if (!selectedWallet || isNaN(amt) || amt <= 0) {
-      Alert.alert('Invalid', 'Enter a valid amount.');
+      toast.error('Invalid amount', 'Enter a valid amount.');
       return;
     }
     const currentBalance = parseFloat(selectedWallet.current_amount) || 0;
     if (txnType === 'withdrawal' && amt > currentBalance) {
-      Alert.alert(
-        'Insufficient Balance',
-        `${selectedWallet.name} only has ${formatCurrency(currentBalance)}.`,
-      );
+      toast.error('Insufficient balance', `${selectedWallet.name} only has ${formatCurrency(currentBalance)}.`);
       return;
     }
     // Deposits are positive, withdrawals are negative in the ledger
@@ -797,42 +797,42 @@ export default function CustomModeDashboard({ navigation }) {
         account_id: selectedWallet.id,
       });
       if (error) throw error;
-      const label = txnType === 'deposit' ? 'deposited to' : 'withdrawn from';
-      Alert.alert('Success', `${formatCurrency(amt)} ${label} ${selectedWallet.name}`);
+      // Ghost: modal closes and the account's savings bar animates to the new
+      // balance via fetchSavingsData() — that's the confirmation.
       setTxnAmount('');
       setTxnNote('');
       setShowTxnModal(false);
       setSelectedWallet(null);
       await fetchSavingsData();
     } catch (err) {
-      Alert.alert('Error', err.message);
+      toast.error('Transaction failed', err.message);
     }
   };
 
-  const handleDeleteWallet = (wallet) => {
+  const handleDeleteWallet = async (wallet) => {
     const bal = parseFloat(wallet.current_amount) || 0;
     const msg = bal > 0
-      ? `"${wallet.name}" has ${formatCurrency(bal)} in savings. Delete this account and all its transactions?`
-      : `Delete "${wallet.name}" and all its transactions?`;
-    Alert.alert('Delete Account', msg, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            const { error } = await supabase
-              .from('savings_accounts_custom_mode')
-              .delete()
-              .eq('id', wallet.id);
-            if (error) throw error;
-            await fetchSavingsData();
-          } catch (err) {
-            Alert.alert('Error', err.message);
-          }
-        },
-      },
-    ]);
+      ? `"${wallet.name}" holds ${formatCurrency(bal)}. Deleting removes the account and all its transactions. You can't undo this.`
+      : `Deleting removes "${wallet.name}" and all its transactions. You can't undo this.`;
+    const ok = await confirm({
+      title: 'Delete account',
+      message: msg,
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      const { error } = await supabase
+        .from('savings_accounts_custom_mode')
+        .delete()
+        .eq('id', wallet.id);
+      if (error) throw error;
+      // Ghost: the account card disappears from the list via fetchSavingsData().
+      await fetchSavingsData();
+    } catch (err) {
+      toast.error('Delete failed', err.message);
+    }
   };
 
   // ── FAB ─────────────────────────────────────────────────────────────

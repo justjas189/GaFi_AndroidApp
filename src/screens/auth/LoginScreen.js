@@ -10,7 +10,6 @@ import {
   ScrollView,
   Platform,
   ActivityIndicator,
-  Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +19,8 @@ import { useTheme } from '../../context/ThemeContext';
 import { supabase } from '../../config/supabase';
 import GoogleSignInButton from '../../components/auth/GoogleSignInButton';
 import { FONTS } from '../../theme/typography';
+import { toast } from '../../utils/toast';
+import { useConfirm } from '../../components/feedback/ConfirmProvider';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -27,10 +28,11 @@ const LoginScreen = ({ navigation }) => {
   const [showPassword, setShowPassword] = useState(false);
   const { login, loginWithGoogle, isLoading } = useAuth();
   const { colors, isDarkMode, createThemedStyles } = useTheme();
+  const confirm = useConfirm();
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      toast.error('Missing info', 'Enter your email and password.');
       return;
     }
 
@@ -38,27 +40,25 @@ const LoginScreen = ({ navigation }) => {
       const { success, error, session, needsVerification, needsOnboarding } = await login(email.trim(), password);
 
       if (needsVerification) {
-        Alert.alert(
-          'Email Not Verified',
-          'Please verify your email before logging in. Check your inbox for a verification link.',
-          [
-            {
-              text: 'Resend Email',
-              onPress: async () => {
-                const { error } = await supabase.auth.resend({
-                  type: 'signup',
-                  email: email.trim()
-                });
-                if (error) {
-                  Alert.alert('Error', 'Failed to resend verification email. Please try again.');
-                } else {
-                  Alert.alert('Success', 'Verification email has been resent. Please check your inbox.');
-                }
-              }
-            },
-            { text: 'OK' }
-          ]
-        );
+        // Two-button decision (resend vs dismiss) → confirm modal, not toast.
+        const resend = await confirm({
+          title: 'Verify your email',
+          message: 'Confirm your email before signing in. Check your inbox for the link.',
+          confirmLabel: 'Resend email',
+          cancelLabel: 'OK',
+          icon: 'mail-unread',
+        });
+        if (resend) {
+          const { error } = await supabase.auth.resend({
+            type: 'signup',
+            email: email.trim(),
+          });
+          if (error) {
+            toast.error('Resend failed', 'Could not resend the email. Try again.');
+          } else {
+            toast.success('Email sent', 'Check your inbox for the verification link.');
+          }
+        }
         return;
       }
 
@@ -70,11 +70,11 @@ const LoginScreen = ({ navigation }) => {
         // by any navigator" — Main isn't mounted yet (or the user is headed to
         // Onboarding, so Main doesn't exist). Same hands-off pattern as Google.
       } else if (!needsVerification) {
-        Alert.alert('Login Failed', error || 'Please check your credentials and try again.');
+        toast.error('Login failed', error || 'Check your credentials and try again.');
       }
     } catch (err) {
       console.error('Login error:', err);
-      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+      toast.error('Something went wrong', 'An unexpected error occurred. Try again.');
     }
   };
 
@@ -83,7 +83,7 @@ const LoginScreen = ({ navigation }) => {
     // (AppNavigator reacts to userToken). A cancelled picker is a no-op.
     const { success, error, cancelled } = await loginWithGoogle();
     if (!success && !cancelled) {
-      Alert.alert('Google Sign-In Failed', error || 'Could not sign in with Google. Please try again.');
+      toast.error('Google sign-in failed', error || 'Could not sign in with Google. Try again.');
     }
   };
 

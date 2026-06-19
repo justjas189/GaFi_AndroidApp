@@ -4,6 +4,7 @@ import { getChatCompletion } from '../config/nvidia';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getCategoryIcon } from '../utils/categoryIcons';
+import AnimatedBar from './AnimatedBar';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -239,11 +240,11 @@ const EndOfDayReportModal = ({
                     +{Number(resolvedXpEarned) || 0} XP
                   </Text>
                 </View>
-                <View style={styles.progressTrack}>
-                  <View
-                    style={[styles.progressFill, { width: `${progressPercent}%` }]}
-                  />
-                </View>
+                <AnimatedBar
+                  percent={progressPercent}
+                  trackStyle={styles.progressTrack}
+                  fillStyle={styles.progressFill}
+                />
 
                 {resolvedUnlockedAchievement ? (
                   <View style={styles.achievementBadge}>

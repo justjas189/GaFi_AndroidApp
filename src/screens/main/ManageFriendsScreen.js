@@ -6,7 +6,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   RefreshControl,
   Modal,
   TextInput,
@@ -15,14 +14,46 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { useTheme } from '../../context/ThemeContext';
 import { FriendService } from '../../services/FriendService';
 import { FONTS } from '../../theme/typography';
+import { toast } from '../../utils/toast';
+import { useConfirm } from '../../components/feedback/ConfirmProvider';
 
 const { width } = Dimensions.get('window');
 
+// One avatar for every row. Shows the user's profile picture (Google/OAuth
+// avatar_url) when present, and falls back to the coloured initial circle so
+// username-only accounts and stale rows still render cleanly. Hoisted to module
+// scope so the <Image> keeps its identity across re-renders (a friends-list
+// refresh shouldn't reload and flash every picture).
+const Avatar = ({ uri, name, color, size = 46 }) => {
+  const dims = { width: size, height: size, borderRadius: size / 2 };
+  if (uri) {
+    return (
+      <Image
+        source={{ uri }}
+        style={[styles.avatarImage, dims]}
+        contentFit="cover"
+        transition={200}
+        cachePolicy="memory-disk"
+        accessibilityLabel={`${name || 'User'} profile picture`}
+      />
+    );
+  }
+  return (
+    <View style={[styles.avatarCircle, dims, { backgroundColor: color }]}>
+      <Text style={[styles.avatarText, size <= 40 && { fontSize: 16 }]}>
+        {(name || '?').charAt(0).toUpperCase()}
+      </Text>
+    </View>
+  );
+};
+
 const ManageFriendsScreen = ({ navigation }) => {
   const { theme } = useTheme();
+  const confirm = useConfirm();
 
   // Friends list state
   const [friends, setFriends] = useState([]);
@@ -90,57 +121,71 @@ const ManageFriendsScreen = ({ navigation }) => {
     try {
       const result = await FriendService.sendFriendRequest(username);
       if (result.success) {
-        Alert.alert('Success', 'Friend request sent!');
+        // The request lands on THEIR screen — nothing changes here to ghost
+        // against. Close the search modal, then let the toast carry the win.
         setShowAddFriendModal(false);
         setSearchTerm('');
         setSearchResults([]);
+        toast.success('Request sent', `@${username} will see it in their requests.`);
       } else {
-        Alert.alert('Error', result.error || 'Failed to send friend request');
+        toast.error('Could not send request', result.error || 'Try again.');
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to send friend request');
+      toast.error('Could not send request', 'Something went wrong. Try again.');
     }
   };
 
   const respondToRequest = async (requesterId, response) => {
+    // Declining permanently drops the request, and the X sits right next to
+    // Accept — guard the destructive path with a confirm. Accept needs none:
+    // the card vanishing and the Friends count ticking up IS the reward.
+    if (response === 'decline') {
+      const ok = await confirm({
+        title: 'Decline request?',
+        message: 'This removes the request. They can send another later.',
+        confirmLabel: 'Decline',
+        cancelLabel: 'Keep',
+        destructive: true,
+        icon: 'person-remove-outline',
+      });
+      if (!ok) return;
+    }
     try {
       const result = await FriendService.respondToFriendRequest(requesterId, response);
       if (result.success) {
-        Alert.alert('Success', result.message || `Request ${response}ed`);
-        await loadData(); // Refresh lists
+        // Ghost: loadData() drops the request card (and on accept bumps the
+        // Friends list + count) — that swap is the confirmation.
+        await loadData();
       } else {
-        Alert.alert('Error', result.error || 'Failed to respond to friend request');
+        toast.error('Could not respond', result.error || 'Try again.');
       }
     } catch (error) {
-      Alert.alert('Error', 'Something went wrong');
+      toast.error('Something went wrong', 'Could not update the request. Try again.');
     }
   };
 
   const removeFriend = async (friendId, friendName) => {
-    Alert.alert(
-      'Remove Friend',
-      `Are you sure you want to remove ${friendName}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const result = await FriendService.removeFriend(friendId);
-              if (result.success) {
-                Alert.alert('Success', 'Friend removed');
-                await loadData();
-              } else {
-                Alert.alert('Error', result.error || 'Failed to remove friend');
-              }
-            } catch (error) {
-              Alert.alert('Error', 'Failed to remove friend');
-            }
-          },
-        },
-      ]
-    );
+    const ok = await confirm({
+      title: 'Remove friend?',
+      message: `${friendName} will be removed from your friends. You can add them back later.`,
+      confirmLabel: 'Remove',
+      cancelLabel: 'Cancel',
+      destructive: true,
+      icon: 'person-remove-outline',
+    });
+    if (!ok) return;
+    try {
+      const result = await FriendService.removeFriend(friendId);
+      if (result.success) {
+        // Ghost: loadData() drops the friend card + the Friends count — the
+        // card disappearing is the confirmation.
+        await loadData();
+      } else {
+        toast.error('Remove failed', result.error || 'Could not remove this friend. Try again.');
+      }
+    } catch (error) {
+      toast.error('Remove failed', 'Could not remove this friend. Try again.');
+    }
   };
 
   // ── Render helpers ──
@@ -150,11 +195,7 @@ const ManageFriendsScreen = ({ navigation }) => {
       key={friend.friend_id || index}
       style={[styles.friendCard, { backgroundColor: theme.colors.card }]}
     >
-      <View style={[styles.avatarCircle, { backgroundColor: theme.colors.primary }]}>
-        <Text style={styles.avatarText}>
-          {(friend.friend_name || '?').charAt(0).toUpperCase()}
-        </Text>
-      </View>
+      <Avatar uri={friend.friend_avatar} name={friend.friend_name} color={theme.colors.primary} />
       <View style={styles.friendInfo}>
         <Text style={[styles.friendName, { color: theme.colors.text }]} numberOfLines={1}>
           {friend.friend_name}
@@ -178,11 +219,7 @@ const ManageFriendsScreen = ({ navigation }) => {
       key={request.id || index}
       style={[styles.requestCard, { backgroundColor: theme.colors.card }]}
     >
-      <View style={[styles.avatarCircle, { backgroundColor: '#FF9800' }]}>
-        <Text style={styles.avatarText}>
-          {(request.requester_name || '?').charAt(0).toUpperCase()}
-        </Text>
-      </View>
+      <Avatar uri={request.requester_avatar} name={request.requester_name} color="#FF9800" />
       <View style={styles.friendInfo}>
         <Text style={[styles.friendName, { color: theme.colors.text }]} numberOfLines={1}>
           {request.requester_name}
@@ -260,11 +297,12 @@ const ManageFriendsScreen = ({ navigation }) => {
                   onPress={() => sendFriendRequest(resultUser.username)}
                   activeOpacity={0.7}
                 >
-                  <View style={[styles.avatarCircle, { backgroundColor: theme.colors.primary, width: 40, height: 40 }]}>
-                    <Text style={[styles.avatarText, { fontSize: 16 }]}>
-                      {(resultUser.full_name || resultUser.username || '?').charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
+                  <Avatar
+                    uri={resultUser.avatar_url}
+                    name={resultUser.full_name || resultUser.username}
+                    color={theme.colors.primary}
+                    size={40}
+                  />
                   <View style={{ flex: 1, marginLeft: 12 }}>
                     <Text style={[styles.friendName, { color: theme.colors.text }]}>
                       {resultUser.full_name}
@@ -493,15 +531,24 @@ const styles = StyleSheet.create({
     borderRadius: 23,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+  },
+  avatarImage: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    // Faint placeholder tint while the remote picture streams in.
+    backgroundColor: 'rgba(127,127,127,0.12)',
   },
   avatarText: {
     fontFamily: FONTS.headingBold,
     color: '#fff',
     fontSize: 20,
   },
+  // Gap lives on the info column (not the avatar) so the picture and the
+  // initials circle sit at the exact same offset.
   friendInfo: {
     flex: 1,
+    marginLeft: 12,
   },
   friendName: {
     fontFamily: FONTS.bodySemiBold,

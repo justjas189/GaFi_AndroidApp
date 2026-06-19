@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Alert,
   Switch,
   Linking,
   Share,
@@ -23,6 +22,8 @@ import { supabase } from '../../config/supabase';
 import { getSessionForMutation } from '../../services/AuthSessionHelper';
 import { IS_DEVELOPMENT } from '../../utils/appEnvironment';
 import { FONTS } from '../../theme/typography';
+import { toast } from '../../utils/toast';
+import { useConfirm } from '../../components/feedback/ConfirmProvider';
 
 const SettingsScreen = ({ navigation }) => {
   const { logout, userInfo } = useContext(AuthContext);
@@ -32,28 +33,29 @@ const SettingsScreen = ({ navigation }) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const confirm = useConfirm();
 
   // ── Handlers ──
 
-  const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            const { userId } = await getSessionForMutation();
-            const result = await logout();
-            if (!result.success) {
-              Alert.alert('Error', 'Failed to logout. Please try again.');
-            }
-          },
-        },
-      ]
-    );
+  const handleLogout = async () => {
+    const ok = await confirm({
+      title: 'Log out?',
+      message: 'You can sign back in anytime.',
+      confirmLabel: 'Log out',
+      cancelLabel: 'Cancel',
+      destructive: true,
+      icon: 'log-out-outline',
+    });
+    if (!ok) return;
+
+    const { userId } = await getSessionForMutation();
+    const result = await logout();
+    if (!result.success) {
+      toast.error('Logout failed', 'Could not log you out. Try again.');
+    }
+    // Success ghosts itself: logout() flips userToken and App.js swaps to the
+    // auth navigator — that screen change is the confirmation.
   };
 
   // ── DEV ONLY · TEMP debug hack — remove before release ──
@@ -68,31 +70,23 @@ const SettingsScreen = ({ navigation }) => {
     if (global.setHasOnboarded) {
       global.setHasOnboarded(false);
     } else {
-      Alert.alert('Debug', 'global.setHasOnboarded is not available.');
+      toast.error('Debug', 'global.setHasOnboarded is not available.');
     }
   };
 
   const handleExportData = async () => {
     if (!expenses || expenses.length === 0) {
-      Alert.alert('No Data', 'You have no expense data to export yet.');
+      toast.info('Nothing to export', 'You have no expense data yet.');
       return;
     }
+    // Three-way choice (CSV / TXT / Cancel) isn't a yes/no confirm — open the
+    // themed format picker instead of a native action sheet.
+    setShowExportModal(true);
+  };
 
-    Alert.alert(
-      'Export Format',
-      'Choose your preferred export format:',
-      [
-        {
-          text: 'CSV',
-          onPress: () => exportAs('csv'),
-        },
-        {
-          text: 'TXT',
-          onPress: () => exportAs('txt'),
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
+  const pickExportFormat = (format) => {
+    setShowExportModal(false);
+    exportAs(format);
   };
 
   const exportAs = async (format) => {
@@ -137,54 +131,52 @@ const SettingsScreen = ({ navigation }) => {
     } catch (error) {
       if (error.message !== 'User did not share') {
         console.error('Export error:', error);
-        Alert.alert('Error', 'Failed to export data. Please try again.');
+        toast.error('Export failed', 'Could not export your data. Try again.');
       }
     } finally {
       setExportingData(false);
     }
   };
 
-  const handleClearData = () => {
-    Alert.alert(
-      'Clear All Data',
-      'This will permanently delete all your local expense data and cached information. Your account will remain active. This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear Data',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { userId } = await getSessionForMutation();
-              // Clear locally-cached keys (keep auth tokens so user stays signed in)
-              const allKeys = await AsyncStorage.getAllKeys();
-              const keysToRemove = allKeys.filter(
-                (k) =>
-                  !k.startsWith('userToken') &&
-                  !k.startsWith('userInfo') &&
-                  !k.startsWith('hasOnboarded_') &&
-                  !k.startsWith('theme') &&
-                  !k.startsWith('sb-') // Preserve Supabase session token
-              );
-              if (keysToRemove.length > 0) {
-                await AsyncStorage.multiRemove(keysToRemove);
-              }
-              Alert.alert('Done', 'Local cached data has been cleared. Your cloud data remains intact.');
-            } catch (error) {
-              console.error('Clear data error:', error);
-              Alert.alert('Error', 'Failed to clear data. Please try again.');
-            }
-          },
-        },
-      ]
-    );
+  const handleClearData = async () => {
+    const ok = await confirm({
+      title: 'Clear local data?',
+      message: 'This removes cached data on this device. Your cloud data stays intact. This cannot be undone.',
+      confirmLabel: 'Clear data',
+      cancelLabel: 'Cancel',
+      destructive: true,
+      icon: 'trash-outline',
+    });
+    if (!ok) return;
+
+    try {
+      const { userId } = await getSessionForMutation();
+      // Clear locally-cached keys (keep auth tokens so user stays signed in)
+      const allKeys = await AsyncStorage.getAllKeys();
+      const keysToRemove = allKeys.filter(
+        (k) =>
+          !k.startsWith('userToken') &&
+          !k.startsWith('userInfo') &&
+          !k.startsWith('hasOnboarded_') &&
+          !k.startsWith('theme') &&
+          !k.startsWith('sb-') // Preserve Supabase session token
+      );
+      if (keysToRemove.length > 0) {
+        await AsyncStorage.multiRemove(keysToRemove);
+      }
+      // No visible change on this screen, so the toast carries the win.
+      toast.success('Local data cleared', 'Your cloud data is untouched.');
+    } catch (error) {
+      console.error('Clear data error:', error);
+      toast.error('Clear failed', 'Could not clear local data. Try again.');
+    }
   };
 
   const handleReportBug = () => {
     Linking.openURL(
       'mailto:malabananbills@gmail.com?subject=GaFI%20Bug%20Report&body=Please%20describe%20the%20issue%20you%20encountered:'
     ).catch(() => {
-      Alert.alert('Error', 'Could not open email client. Please email malabananbills@gmail.com manually.');
+      toast.error('Email client unavailable', 'Email malabananbills@gmail.com manually.');
     });
   };
 
@@ -196,7 +188,7 @@ const SettingsScreen = ({ navigation }) => {
 
       const { userId } = await getSessionForMutation();
       if (!userId) {
-        Alert.alert('Error', 'You are not signed in.');
+        toast.error('Not signed in', 'Sign in to delete your account.');
         return;
       }
 
@@ -234,11 +226,13 @@ const SettingsScreen = ({ navigation }) => {
       setShowDeleteModal(false);
       setDeleteConfirmText('');
 
-      // The AuthContext will detect the sign-out and redirect to auth screen
-      Alert.alert('Account Deleted', 'Your account and all associated data have been permanently deleted.');
+      // AuthContext detects the sign-out and swaps to the auth navigator. The
+      // toast is mounted at root (outside the navigator) so it rides the swap
+      // and tells the user, now on the login screen, why they landed there.
+      toast.success('Account deleted', 'Your account and all data are permanently removed.');
     } catch (error) {
       console.error('Delete account error:', error);
-      Alert.alert('Error', 'Failed to delete account. Please try again or contact support.');
+      toast.error('Delete failed', 'Could not delete your account. Try again or contact support.');
     } finally {
       setDeletingAccount(false);
     }
@@ -328,7 +322,26 @@ const SettingsScreen = ({ navigation }) => {
             </View>
             <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
           </TouchableOpacity>
-
+          {/* Budget Management Menu Item 
+          {IS_DEVELOPMENT && (
+          <TouchableOpacity
+            style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
+            onPress={() => navigation.navigate('MainTabs', { screen: 'Budget' })}
+            activeOpacity={0.7}>
+            <View style={styles.settingItemLeft}>
+              <View style={[styles.settingIconContainer, { backgroundColor: `${theme.colors.primary}20` }]}>
+                <Ionicons name="pie-chart-outline" size={20} color={theme.colors.primary} />
+              </View>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>Budget Management</Text>
+                <Text style={[styles.settingValue, { color: theme.colors.text }]}>
+                  Review and adjust your allocation targets
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
+          </TouchableOpacity>
+          )}*/}
           {/* PRODUCTION GUARD: Test Notifications only exists in the dev variant */}
           {IS_DEVELOPMENT && (
             <TouchableOpacity
@@ -541,7 +554,7 @@ const SettingsScreen = ({ navigation }) => {
               Linking.openURL(
                 'mailto:malabananbills@gmail.com?subject=GaFI%20Feedback'
               ).catch(() => {
-                Alert.alert('Error', 'Could not open email client.');
+                toast.error('Email client unavailable', 'Could not open your email app.');
               });
             }}
             activeOpacity={0.7}
@@ -671,6 +684,57 @@ const SettingsScreen = ({ navigation }) => {
                     Delete Forever
                   </Text>
                 )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Export Format Picker ── */}
+      <Modal
+        visible={showExportModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowExportModal(false)}
+        statusBarTranslucent
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.background }]}>
+            <Ionicons
+              name="download-outline"
+              size={44}
+              color={theme.colors.primary}
+              style={{ alignSelf: 'center', marginBottom: 12 }}
+            />
+            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Export format</Text>
+            <Text style={[styles.modalDescription, { color: theme.colors.textSecondary }]}>
+              Choose how to share your expense history.
+            </Text>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.exportOptionBtn, { backgroundColor: theme.colors.primary }]}
+                onPress={() => pickExportFormat('csv')}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="grid-outline" size={18} color="#fff" />
+                <Text style={styles.exportOptionText}>CSV</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.exportOptionBtn, { backgroundColor: theme.colors.primary }]}
+                onPress={() => pickExportFormat('txt')}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="document-text-outline" size={18} color="#fff" />
+                <Text style={styles.exportOptionText}>TXT</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalCancelBtn, { backgroundColor: theme.colors.card, marginTop: 12 }]}
+                onPress={() => setShowExportModal(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.modalCancelText, { color: theme.colors.text }]}>Cancel</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -870,6 +934,22 @@ const styles = StyleSheet.create({
   modalDeleteText: {
     fontFamily: FONTS.bodySemiBold,
     fontSize: 16,
+  },
+
+  // Export format picker
+  exportOptionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  exportOptionText: {
+    fontFamily: FONTS.bodySemiBold,
+    fontSize: 16,
+    color: '#fff',
   },
 });
 

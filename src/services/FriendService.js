@@ -51,7 +51,7 @@ export class FriendService {
       const term = searchTerm.trim();
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, username, full_name')
+        .select('id, username, full_name, avatar_url')
         .or(`username.ilike.%${term}%,full_name.ilike.%${term}%`)
         .neq('id', currentUser)
         .limit(20);
@@ -61,11 +61,13 @@ export class FriendService {
         throw error;
       }
 
-      // Map to the shape expected by the UI (user_id, username, full_name)
+      // Map to the shape expected by the UI (user_id, username, full_name).
+      // avatar_url is the OAuth/Google profile picture (migration 20260615).
       return (data || []).filter(u => u.username).map(u => ({
         user_id: u.id,
         username: u.username,
         full_name: u.full_name || u.username,
+        avatar_url: u.avatar_url || null,
       }));
     } catch (error) {
       console.error('Error searching users:', error);
@@ -168,7 +170,7 @@ export class FriendService {
       const requesterIds = requestsData.map(req => req.user_id);
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, full_name, username')
+        .select('id, full_name, username, avatar_url')
         .in('id', requesterIds);
 
       if (profilesError) {
@@ -183,6 +185,7 @@ export class FriendService {
           requester_id: request.user_id,
           requester_name: profile?.full_name || 'Unknown User',
           requester_username: profile?.username || profile?.full_name || 'unknown',
+          requester_avatar: profile?.avatar_url || null,
           created_at: new Date().toISOString(), // Use current date since we don't have created_at
           status: request.status
         };
@@ -277,7 +280,7 @@ export class FriendService {
       // Get profile data for friends separately
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, full_name, username')
+        .select('id, full_name, username, avatar_url')
         .in('id', friendIds);
 
       if (profilesError) {
@@ -305,6 +308,7 @@ export class FriendService {
           friend_id: friendId,
           friend_name: profile?.full_name || 'Unknown User',
           friend_username: profile?.username || profile?.full_name || 'unknown',
+          friend_avatar: profile?.avatar_url || null,
           current_level: levels?.current_level || 1,
           total_saved: parseFloat(levels?.total_saved || 0)
         };

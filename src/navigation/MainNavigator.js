@@ -27,7 +27,6 @@ import NotificationTestScreen from '../screens/main/NotificationTestScreen';
 import GameScreen from '../screens/main/GameScreen';
 import ExploreScreen from '../screens/main/ExploreScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
-import BudgetManagementScreen from '../screens/main/BudgetManagementScreen';
 import LeaderboardScreen from '../screens/main/LeaderboardScreen';
 import AchievementDashboard from '../screens/main/AchievementDashboard';
 import FriendRequestsScreen from '../screens/main/FriendRequestsScreen';
@@ -94,6 +93,7 @@ const TabNavigator = () => {
           } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
           }
+          
 
           return <Ionicons name={iconName} size={size} color={color} />;
         },
@@ -143,7 +143,6 @@ const MainNavigator = () => {
             <Stack.Screen name="NotificationTest" component={NotificationTestScreen} />
             {/* <Stack.Screen name="Gamification" component={GamificationScreen} /> */}
             <Stack.Screen name="Achievements" component={AchievementDashboard} />
-            <Stack.Screen name="Budget" component={BudgetManagementScreen} />
             <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
             <Stack.Screen name="FriendRequests" component={FriendRequestsScreen} />
             <Stack.Screen name="FriendsList" component={FriendsListScreen} />
