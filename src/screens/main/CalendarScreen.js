@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar } from 'react-native-calendars';
@@ -9,44 +9,90 @@ import { getCategoryIcon } from '../../utils/categoryIcons';
 import { normalizeCategory } from '../../utils/categoryUtils';
 import { FONTS } from '../../theme/typography';
 
+// Canonical names mirror ExpenseScreen's categoryColors — single source of truth.
+const CATEGORY_COLORS = {
+  'Food & Dining':  '#FF9800',
+  'Transport':      '#2196F3',
+  'Shopping':       '#E91E63',
+  'Groceries':      '#8BC34A',
+  'Entertainment':  '#9C27B0',
+  'Electronics':    '#00BCD4',
+  'School Supplies':'#3F51B5',
+  'Utilities':      '#607D8B',
+  'Health':         '#4CAF50',
+  'Education':      '#673AB7',
+  'Other':          '#795548',
+  'No Spend Day':   '#2ECC71',
+};
+
+const getCategoryColor = (category) => CATEGORY_COLORS[normalizeCategory(category)] || '#795548';
+
+// DB stores `date` as a full ISO timestamp (UTC). Format it to the LOCAL
+// calendar day (YYYY-MM-DD) so dots, filtering, and the day picker all agree.
+// Splitting the raw ISO string on 'T' would key dots by the UTC day, which
+// drifts a day off the local day near midnight (and always in west-of-UTC zones).
+const toLocalYMD = (value) => {
+  if (!value) return '';
+  const d = value instanceof Date ? value : new Date(value);
+  if (isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+// react-native-calendars hands back a 'YYYY-MM-DD' string. new Date(thatString)
+// parses as UTC midnight, so display can land on the wrong day — rebuild it as a
+// LOCAL date instead.
+const parseLocalYMD = (ymd) => {
+  if (!ymd) return new Date(NaN);
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(y, m - 1, d);
+};
+
 const CalendarScreen = ({ navigation }) => {
  
   const [selected, setSelected] = useState('');
   const { expenses } = useContext(DataContext);
   const { theme, isDarkMode } = useContext(ThemeContext);
-  const currentDate = new Date().toISOString().split('T')[0];
-  
-  // Get expenses for selected date
-  const selectedDateExpenses = expenses.filter(expense => {
-    const expenseDate = new Date(expense.date);
-    const selectedDate = new Date(selected);
-    return (
-      expenseDate.getFullYear() === selectedDate.getFullYear() &&
-      expenseDate.getMonth() === selectedDate.getMonth() &&
-      expenseDate.getDate() === selectedDate.getDate()
-    );
-  });
+  const primaryColor = theme.colors.primary;
 
-  // Create marked dates object for calendar
-  const markedDates = expenses.reduce((acc, expense) => {
-    const date = expense.date.split('T')[0];
-    acc[date] = { marked: true, dotColor: theme.colors.primary };
-    return acc;
-  }, {});
+  // Expenses logged on the selected LOCAL day. Compare local-day strings on both
+  // sides so a tap on June 12 shows exactly June 12's expenses.
+  const selectedDateExpenses = useMemo(() => {
+    if (!selected) return [];
+    return expenses.filter(expense => toLocalYMD(expense.date) === selected);
+  }, [expenses, selected]);
 
-  // Add selected date marking
-  if (selected) {
-    markedDates[selected] = {
-      ...(markedDates[selected] || {}),
-      selected: true,
-      selectedColor: theme.colors.primary
-    };
-  }
+  // Total for the selected day (amount is a string from the DB).
+  const selectedDateTotal = useMemo(
+    () => selectedDateExpenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0),
+    [selectedDateExpenses]
+  );
 
-  const renderExpenseItem = ({ item }) => (
-    <TouchableOpacity 
-      key={item.id} 
-      style={[styles.expenseItem, { 
+  // One orange dot per local day that has expenses, plus the selected-day highlight.
+  // Rebuilt whenever expenses change, so adding an expense anywhere re-marks the
+  // calendar automatically.
+  const markedDates = useMemo(() => {
+    const marks = {};
+    for (const expense of expenses) {
+      const day = toLocalYMD(expense.date);
+      if (day) marks[day] = { marked: true, dotColor: primaryColor };
+    }
+    if (selected) {
+      marks[selected] = {
+        ...(marks[selected] || {}),
+        selected: true,
+        selectedColor: primaryColor,
+      };
+    }
+    return marks;
+  }, [expenses, selected, primaryColor]);
+
+  const renderExpenseItem = useCallback(({ item }) => (
+    <TouchableOpacity
+      key={item.id}
+      style={[styles.expenseItem, {
         backgroundColor: theme.colors.card,
         shadowColor: theme.colors.text,
       }]}
@@ -67,32 +113,13 @@ const CalendarScreen = ({ navigation }) => {
         </View>
       </View>
       <View style={styles.expenseRight}>
-        <Text style={[styles.expenseAmount, { color: theme.colors.primary }]}>₱{item.amount.toFixed(2)}</Text>
+        <Text style={[styles.expenseAmount, { color: theme.colors.primary }]}>₱{(parseFloat(item.amount) || 0).toFixed(2)}</Text>
         <View style={[styles.categoryTag, { backgroundColor: getCategoryColor(item.category) }]}>
           <Text style={styles.categoryTagText}>{item.category.charAt(0).toUpperCase()}</Text>
         </View>
       </View>
     </TouchableOpacity>
-  );
-
-  const getCategoryColor = (category) => {
-    // Canonical names mirror ExpenseScreen's categoryColors — single source of truth.
-    const colorMap = {
-      'Food & Dining':  '#FF9800',
-      'Transport':      '#2196F3',
-      'Shopping':       '#E91E63',
-      'Groceries':      '#8BC34A',
-      'Entertainment':  '#9C27B0',
-      'Electronics':    '#00BCD4',
-      'School Supplies':'#3F51B5',
-      'Utilities':      '#607D8B',
-      'Health':         '#4CAF50',
-      'Education':      '#673AB7',
-      'Other':          '#795548',
-      'No Spend Day':   '#2ECC71',
-    };
-    return colorMap[normalizeCategory(category)] || '#795548';
-  };
+  ), [theme]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -139,11 +166,11 @@ const CalendarScreen = ({ navigation }) => {
               <Ionicons name="calendar" size={24} color={theme.colors.primary} />
               <View style={styles.selectedDateTextContainer}>
                 <Text style={[styles.selectedDateTitle, { color: theme.colors.text }]}>
-                  {new Date(selected).toLocaleDateString('en-US', { 
-                    weekday: 'long', 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
+                  {parseLocalYMD(selected).toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
                   })}
                 </Text>
                 <Text style={[styles.expenseCount, { color: theme.colors.text }]}>
@@ -154,7 +181,7 @@ const CalendarScreen = ({ navigation }) => {
             {selectedDateExpenses.length > 0 && (
               <View style={[styles.totalAmount, { backgroundColor: theme.colors.primary }]}>
                 <Text style={[styles.totalAmountText, { color: theme.colors.background }]}>
-                  ₱{selectedDateExpenses.reduce((sum, expense) => sum + expense.amount, 0).toFixed(2)}
+                  ₱{selectedDateTotal.toFixed(2)}
                 </Text>
               </View>
             )}
@@ -163,7 +190,7 @@ const CalendarScreen = ({ navigation }) => {
             <FlatList
               data={selectedDateExpenses}
               renderItem={renderExpenseItem}
-              keyExtractor={item => item.id}
+              keyExtractor={item => String(item.id)}
               style={styles.expensesList}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.expensesListContent}

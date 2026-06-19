@@ -23,6 +23,12 @@
 // Both transitions are ramped by AudioParam automation, which runs on the
 // native audio thread — no JS setInterval, no main-thread jank.
 //
+// Focus Mode (user toggle, default on) gates that unfocused muffle: when the
+// user turns it off, every screen resolves to the FULL preset and the BGM
+// plays open everywhere. The screen's intent and the toggle are tracked
+// separately, so flipping the switch re-derives the live preset without a
+// screen having to re-report. The choice is persisted to AsyncStorage.
+//
 // Track selection (changeBgmTrack) is persisted to AsyncStorage, so the user's
 // choice is restored on the next app launch.
 
@@ -63,6 +69,12 @@ const STORAGE_KEY = 'bgmTrackKey';
 export const PLAYBACK_MODE = { LOOP: 'loop', ALL: 'all' };
 const DEFAULT_MODE = PLAYBACK_MODE.LOOP;
 const STORAGE_KEY_MODE = 'bgmPlaybackMode';
+
+// Focus Mode (default ON): muffle the BGM on non-game screens. When the user
+// turns it off, the unfocused duck is bypassed and every screen plays at the
+// FULL preset. Persisted so the preference survives an app relaunch.
+const FOCUS_MODE_DEFAULT = true;
+const STORAGE_KEY_FOCUS = 'bgmFocusMode';
 
 // Two acoustic presets. Tune to taste.
 const FULL = { gain: 0.85, cutoff: 20000 }; // in the room — filter wide open
@@ -113,6 +125,14 @@ export function AudioProvider({ children }) {
   // lands before the parent effect builds the nodes is not lost.
   const desiredRef = useRef(DISTANT);
 
+  // The active screen's *intent* (FULL on a game screen, DISTANT elsewhere),
+  // kept separate from the focus toggle so flipping focus can re-derive the
+  // effective preset without a screen re-reporting. focusModeRef mirrors
+  // isFocusModeEnabled so the stable enter/exitRoom callbacks read it without a
+  // state dependency (a dep would churn their identity and rebuild the graph).
+  const roomIntentRef = useRef(DISTANT);
+  const focusModeRef = useRef(FOCUS_MODE_DEFAULT);
+
   // The only piece of React state here: drives the Settings selector UI. Track
   // switches are rare (a user tap), so the resulting consumer re-render is
   // negligible — enterRoom/exitRoom never touch state, so focus changes stay
@@ -123,6 +143,10 @@ export function AudioProvider({ children }) {
   // the track key, this is the only other slice of React state here; it moves
   // only on an explicit user toggle.
   const [playbackMode, setPlaybackModeState] = useState(DEFAULT_MODE);
+
+  // Drives the Focus Mode switch on BackgroundMusicScreen. Only moves on an
+  // explicit user toggle (or once, when the saved preference loads at launch).
+  const [isFocusModeEnabled, setFocusModeState] = useState(FOCUS_MODE_DEFAULT);
 
   // Drive the graph toward a preset. ramp=false snaps (used for initial state).
   const applyPreset = useCallback((preset, ramp = true) => {
@@ -152,15 +176,43 @@ export function AudioProvider({ children }) {
     filter.frequency.exponentialRampToValueAtTime(preset.cutoff, end);
   }, []);
 
+  // Resolve the active screen's intent against the focus-mode switch and drive
+  // the graph there. Focus off ⇒ always FULL (no ducking anywhere); focus on ⇒
+  // honour what the screen asked for. desiredRef is kept in sync so the mount
+  // effect can snap to the right preset before any audio exists.
+  const applyEffective = useCallback(
+    (ramp = true) => {
+      const effective = focusModeRef.current ? roomIntentRef.current : FULL;
+      desiredRef.current = effective;
+      applyPreset(effective, ramp);
+    },
+    [applyPreset]
+  );
+
   const enterRoom = useCallback(() => {
-    desiredRef.current = FULL;
-    applyPreset(FULL); // no-op if the graph isn't built yet; mount effect snaps later
-  }, [applyPreset]);
+    roomIntentRef.current = FULL;
+    applyEffective(); // no-op if the graph isn't built yet; mount effect snaps later
+  }, [applyEffective]);
 
   const exitRoom = useCallback(() => {
-    desiredRef.current = DISTANT;
-    applyPreset(DISTANT);
-  }, [applyPreset]);
+    roomIntentRef.current = DISTANT;
+    applyEffective();
+  }, [applyEffective]);
+
+  // Flip Focus Mode and re-derive the preset live. Re-uses applyPreset's
+  // AudioParam ramp (RAMP_SEC), so toggling mid-song glides between the open
+  // and muffled presets on the audio thread rather than snapping — no extra
+  // smoothing needed. Persisted so the choice is restored on next launch.
+  const setFocusModeEnabled = useCallback(
+    (enabled) => {
+      const val = !!enabled;
+      focusModeRef.current = val;
+      setFocusModeState(val);
+      AsyncStorage.setItem(STORAGE_KEY_FOCUS, val ? '1' : '0').catch(() => {});
+      applyEffective();
+    },
+    [applyEffective]
+  );
 
   // Cancel a pending auto-advance. Idempotent — safe to call when nothing is armed.
   const clearAdvanceTimer = useCallback(() => {
@@ -375,25 +427,34 @@ export function AudioProvider({ children }) {
 
     // Honour whatever preset a child screen requested before this parent effect
     // ran (child effects fire first). Snap, don't ramp — there's no audio yet.
-    applyPreset(desiredRef.current, false);
+    applyEffective(false);
 
     (async () => {
       let startKey = DEFAULT_TRACK_KEY;
       let startMode = DEFAULT_MODE;
+      let startFocus = FOCUS_MODE_DEFAULT;
       try {
         // Independent reads — fetch in parallel, not as a waterfall.
-        const [savedKey, savedMode] = await Promise.all([
+        const [savedKey, savedMode, savedFocus] = await Promise.all([
           AsyncStorage.getItem(STORAGE_KEY),
           AsyncStorage.getItem(STORAGE_KEY_MODE),
+          AsyncStorage.getItem(STORAGE_KEY_FOCUS),
         ]);
         if (savedKey && BGM_TRACKS.some((t) => t.key === savedKey)) startKey = savedKey;
         if (savedMode === PLAYBACK_MODE.LOOP || savedMode === PLAYBACK_MODE.ALL) startMode = savedMode;
+        if (savedFocus === '0') startFocus = false;
+        else if (savedFocus === '1') startFocus = true;
       } catch {}
       if (cancelled) return;
       // Prime the mode BEFORE the first startTrack so the initial source loops
       // (or arms its advance) according to the saved preference.
       playbackModeRef.current = startMode;
       setPlaybackModeState(startMode);
+      // Prime focus mode and re-snap: if it was saved off, open to FULL now
+      // rather than leaving the DISTANT default until a screen re-reports.
+      focusModeRef.current = startFocus;
+      setFocusModeState(startFocus);
+      applyEffective(false);
       currentTrackKeyRef.current = startKey;
       setCurrentTrackKey(startKey);
       startTrack(startKey);
@@ -417,7 +478,7 @@ export function AudioProvider({ children }) {
       sourceGainRef.current = null;
       bufferCacheRef.current.clear();
     };
-  }, [applyPreset, startTrack]);
+  }, [applyEffective, startTrack]);
 
   // Suspend the audio clock when backgrounded; resume on return. Keeps the
   // source position and preset intact (no node teardown).
@@ -447,11 +508,13 @@ export function AudioProvider({ children }) {
       exitRoom,
       changeBgmTrack,
       changePlaybackMode,
+      setFocusModeEnabled,
       currentBgmTrack: currentTrackKey,
       playbackMode,
+      isFocusModeEnabled,
       tracks: BGM_TRACKS,
     }),
-    [enterRoom, exitRoom, changeBgmTrack, changePlaybackMode, currentTrackKey, playbackMode]
+    [enterRoom, exitRoom, changeBgmTrack, changePlaybackMode, setFocusModeEnabled, currentTrackKey, playbackMode, isFocusModeEnabled]
   );
 
   return (

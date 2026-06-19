@@ -24,9 +24,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Markdown from 'react-native-markdown-display';
 import { useTheme } from '../context/ThemeContext';
-import { useNavigation } from '@react-navigation/native';
+import { navigationRef } from '../navigation/navigationRef';
 import { DataContext } from '../context/DataContext';
 import { AuthContext } from '../context/AuthContext';
+import { useChat } from '../context/ChatContext';
 import { getChatCompletion, getUserTypeContext } from '../config/nvidia';
 import DebugUtils from '../utils/DebugUtils';
 import MascotImage from './MascotImage';
@@ -98,102 +99,169 @@ const ChatInputBar = ({ colors, onSend, isTyping, bottomInset }) => {
   );
 };
 
-// Screen context descriptions for AI awareness
-// NOTE: 'Game' = GameScreen.js (interactive map game tab)
-//       'Gamification' = GamificationScreen.js (challenges screen from Explore)
+// ──────────────────────────────────────────────
+// Screen context map — keys are the ACTUAL React Navigation route names from
+// MainNavigator.js. Koin reads the active route at send-time and injects the
+// matching guide into the system prompt, so "What do I do here?" is answered
+// for the screen the user is on RIGHT NOW.
+//
+// The 6 main tabs (MainTabs): Game, Custom, Expenses, Predictions, Explore, Profile.
+// Everything else is a stack screen pushed over the tabs.
+//
+// NOTE: 'Game' = GameScreen.js (interactive walking game). 'Custom' =
+//       CustomModeDashboard.js (budgeting + goals + saving) — this replaced the
+//       old standalone Budget / Gamification / SavingsGoals screens.
+// ──────────────────────────────────────────────
 const SCREEN_CONTEXTS = {
-  'Home': {
-    name: 'Home Dashboard',
-    description: 'Main overview showing budget status, recent expenses, and quick actions. This is one of the 4 main tabs.',
-    actions: ['View budget overview', 'Check recent expenses', 'See spending summary', 'Access quick stats'],
-    tips: ['Add expenses quickly', 'Track daily spending', 'Monitor budget progress'],
+  'Game': {
+    name: 'Game (Story Mode)',
+    description: 'The interactive walking game and one of the 6 main tabs. The user controls a character with the on-screen joystick, walks around the campus map, and visits locations (canteen, shops) to log real expenses in-game. Story Mode teaches budgeting across 3 progressive levels of daily money tasks.',
+    actions: ['Play Story Mode levels', 'Move with the joystick', 'Visit the canteen to log a food expense', 'Complete the day\'s tasks', 'Finish the end-of-day report'],
+    tips: ['Tap a location to interact with it', 'Clear all 3 Story levels to unlock Custom Mode', 'Logging in-game expenses counts toward your real tracking'],
   },
-  'Budget': {
-    name: 'Budget Management',
-    description: 'Set and manage monthly budget limits for different spending categories',
-    actions: ['Set monthly budget', 'Adjust category limits', 'View budget breakdown', 'Reset spending'],
-    tips: ['Allocate wisely across categories', 'Review limits regularly', 'Track category spending'],
+  'Custom': {
+    name: 'Custom Mode',
+    description: 'One of the 6 main tabs (unlocked after Story Mode). A free-form money dashboard with three sections: Budgeting (set monthly limits split into needs/wants/savings), Goals (create and track savings targets), and Saving (log money set aside). This is where budget limits and savings goals live now. The user\'s expense, budget, and spending totals are tracked app-wide — to answer any question about expenses or budgets on this screen, read the live USER\'S FINANCIAL DATA block below. Never claim the user has ₱0 or no transactions, and never tell them to switch to the Expenses tab just to see their own numbers.',
+    actions: ['Set your monthly budget', 'Adjust needs/wants/savings split', 'Create a savings goal', 'Log savings toward a goal', 'Track goal progress'],
+    tips: ['Switch between the Budgeting, Goals, and Saving tabs at the top', 'Try the 50/30/20 split for a salary or 70/20/10 for an allowance', 'Set realistic, short-term goals first'],
+  },
+  'CustomModeDashboard': {
+    name: 'Custom Mode',
+    description: 'Same as the Custom tab — the budgeting, goals, and saving dashboard, opened as a full screen. The user\'s expense, budget, and spending totals are tracked app-wide — to answer any question about expenses or budgets on this screen, read the live USER\'S FINANCIAL DATA block below. Never claim the user has ₱0 or no transactions, and never tell them to switch to the Expenses tab just to see their own numbers.',
+    actions: ['Set your monthly budget', 'Adjust needs/wants/savings split', 'Create a savings goal', 'Log savings toward a goal', 'Track goal progress'],
+    tips: ['Switch between the Budgeting, Goals, and Saving tabs', 'Set realistic, short-term goals first', 'Review your limits each month'],
   },
   'Expenses': {
     name: 'Expense Tracker',
-    description: 'View and manage all expenses with statistics, charts, and detailed transaction history. This is one of the 4 main tabs. User can see weekly/monthly spending breakdowns here.',
-    actions: ['Add new expense', 'Filter by category', 'View expense charts', 'Delete expenses', 'See weekly/monthly totals', 'View spending by date'],
-    tips: ['Categorize expenses properly', 'Add notes for reference', 'Switch between Statistics and Detailed views'],
+    description: 'One of the 6 main tabs. Add, edit, and delete expenses, and review spending through stats, a line chart, and a detailed transaction list. Shows weekly and monthly breakdowns by category.',
+    actions: ['Add a new expense', 'Edit or delete an expense', 'Filter by category', 'View the spending chart', 'See weekly/monthly totals', 'Browse the transaction history'],
+    tips: ['Pick the right category so reports stay accurate', 'Add a note so you remember what each expense was', 'Check the chart to spot spending spikes'],
+  },
+  'ExpenseGraph': {
+    name: 'Expense Graphs',
+    description: 'A deeper, full-screen chart view of spending — drilled in from the Expense Tracker for visual breakdowns over time.',
+    actions: ['View spending by category', 'Compare periods', 'Spot spending trends'],
+    tips: ['Look for the biggest slice to find where to cut back', 'Compare this week to last week'],
+  },
+  'Predictions': {
+    name: 'Spending Predictions',
+    description: 'One of the 6 main tabs. AI-powered forecasts of future spending based on the user\'s history, with per-category predictions and trend insights.',
+    actions: ['View your spending forecast', 'See per-category predictions', 'Read the AI insights', 'Analyze spending trends'],
+    tips: ['The more you track, the sharper the forecast', 'Use the forecast to plan next month\'s budget', 'Watch categories that are trending up'],
   },
   'Explore': {
-    name: 'Explore Features',
-    description: 'Navigation hub to discover all app features. This is one of the 4 main tabs. Links to Budget, Predictions, Leaderboard, Achievements, and Gamification challenges.',
-    actions: ['Go to Budget Management', 'View Predictions', 'Check Leaderboard', 'See Achievements', 'Access Gamification challenges'],
-    tips: ['Use this to navigate to advanced features', 'Try the prediction tool', 'Check your achievements'],
+    name: 'Explore',
+    description: 'One of the 6 main tabs — a navigation hub. From here the user can open the Leaderboard, Achievements, and Manage Friends.',
+    actions: ['Open the Leaderboard', 'View Achievements', 'Manage Friends'],
+    tips: ['Use this hub to jump to social and reward features', 'Check Achievements to see your next milestone'],
   },
-  'Game': {
-    name: 'Interactive Game (GameScreen)',
-    description: 'Play the interactive financial game with Story Mode, Custom challenges, and explore virtual maps',
-    actions: ['Play Story Mode', 'Create Custom challenges', 'Walk around maps', 'Record expenses in-game', 'Change character outfit'],
-    tips: ['Complete Story Mode levels', 'Follow the 50/30/20 budget rule', 'Visit the canteen to log food expenses'],
-  },
-  'DataPrediction': {
-    name: 'Spending Predictions',
-    description: 'AI-powered forecasts and predictions for future spending patterns',
-    actions: ['View spending forecast', 'See category predictions', 'Check AI insights', 'Analyze trends'],
-    tips: ['Track regularly for better predictions', 'Review prediction accuracy', 'Plan based on forecasts'],
-  },
-  'Gamification': {
-    name: 'Savings Challenges (from Explore)',
-    description: 'Challenge-based savings mode accessed from Explore screen. Create savings goals and track progress through gamified challenges. This is NOT the Game tab - it is for setting financial challenges.',
-    actions: ['Create savings challenge', 'Set custom goals', 'Track challenge progress', 'Earn rewards for completing challenges'],
-    tips: ['Start with small challenges', 'Be consistent', 'Use Story Mode in the Game tab for interactive learning'],
+  'Profile': {
+    name: 'Profile',
+    description: 'One of the 6 main tabs. Shows the user\'s profile, rank/level and XP, and Story Mode progress. They can edit their profile and update their monthly budget here, and reach Settings.',
+    actions: ['View your rank, level, and XP', 'Check Story Mode progress', 'Edit your profile', 'Update your monthly budget', 'Open Settings'],
+    tips: ['Earn XP by tracking expenses and hitting goals', 'Keep your budget up to date for accurate insights'],
   },
   'Achievements': {
-    name: 'Achievements Dashboard',
-    description: 'View earned badges, milestones, and progress rewards',
-    actions: ['View earned badges', 'Check progress', 'See next milestones', 'Share achievements'],
-    tips: ['Complete all categories', 'Maintain streaks', 'Unlock rare badges'],
+    name: 'Achievements',
+    description: 'Earned badges, milestones, and progress rewards. Reached from Explore.',
+    actions: ['View earned badges', 'Check progress to the next badge', 'See locked milestones'],
+    tips: ['Track consistently to keep streaks alive', 'Aim for one new badge at a time'],
   },
   'Leaderboard': {
-    name: 'Savings Leaderboard',
-    description: 'Compare savings progress with friends and global users',
-    actions: ['View rankings', 'Add friends', 'Check your position', 'See top savers'],
-    tips: ['Stay consistent', 'Challenge friends', 'Climb the ranks'],
+    name: 'Leaderboard',
+    description: 'Ranks the user against friends and other savers. Reached from Explore.',
+    actions: ['View the rankings', 'Check your position', 'See the top savers'],
+    tips: ['Add friends to make it competitive', 'Stay consistent to climb'],
+  },
+  'ManageFriends': {
+    name: 'Manage Friends',
+    description: 'The friends hub — search for and add friends, view the current friends list, and handle incoming friend requests. Reached from Explore.',
+    actions: ['Search for and add a friend', 'View your friends list', 'Accept or decline friend requests'],
+    tips: ['Add friends to appear on each other\'s leaderboards', 'Check for pending requests'],
+  },
+  'FriendsList': {
+    name: 'Friends List',
+    description: 'The list of the user\'s current friends.',
+    actions: ['Browse your friends', 'Open a friend\'s details', 'Remove a friend'],
+    tips: ['Compare progress with friends on the Leaderboard'],
+  },
+  'FriendRequests': {
+    name: 'Friend Requests',
+    description: 'Incoming and pending friend requests waiting to be accepted or declined.',
+    actions: ['Accept a request', 'Decline a request', 'See who sent a request'],
+    tips: ['Respond to requests to grow your savings circle'],
   },
   'Calendar': {
     name: 'Expense Calendar',
-    description: 'Calendar view showing daily expenses and spending patterns over time',
-    actions: ['View daily expenses', 'Navigate months', 'See spending by date', 'Track patterns'],
-    tips: ['Review weekly', 'Spot high-spending days', 'Plan ahead'],
-  },
-  'Learn': {
-    name: 'Financial Education',
-    description: 'Learn about personal finance, budgeting, and smart money management',
-    actions: ['Read articles', 'Take quizzes', 'Watch tutorials', 'Track learning progress'],
-    tips: ['Learn daily', 'Apply knowledge', 'Complete all modules'],
+    description: 'A calendar view of daily expenses and spending patterns over time.',
+    actions: ['View expenses for a day', 'Move between months', 'Spot spending patterns'],
+    tips: ['Review weekly to catch high-spend days', 'Plan around recurring costs'],
   },
   'Settings': {
-    name: 'App Settings',
-    description: 'Customize app preferences, notifications, and account settings',
-    actions: ['Change theme', 'Manage notifications', 'Edit profile', 'Export data'],
-    tips: ['Enable reminders', 'Customize experience', 'Keep profile updated'],
+    name: 'Settings',
+    description: 'App preferences and account settings — theme, notifications, background music, profile, FAQ, and more.',
+    actions: ['Change the theme', 'Manage notifications', 'Open Background Music', 'Read the FAQ', 'Edit your profile'],
+    tips: ['Turn on reminders so you never forget to track', 'Keep your profile up to date'],
   },
-  'EnhancedChat': {
-    name: 'AI Chat Assistant',
-    description: 'Full-featured chat with Koin for detailed financial advice',
-    actions: ['Ask complex questions', 'Get detailed analysis', 'Request reports', 'Save conversations'],
-    tips: ['Be specific in questions', 'Ask follow-ups', 'Request actionable advice'],
+  'BackgroundMusic': {
+    name: 'Background Music',
+    description: 'The in-app music player settings. Choose which background track plays and the playback mode (Loop one track or Play All). All tracks are composed by Pix.',
+    actions: ['Pick a background track', 'Switch between Loop and Play All', 'Mute or change the music'],
+    tips: ['Loop a calm track while you budget', 'Music is just for vibe — it doesn\'t affect your finances'],
   },
-  'SavingsGoals': {
-    name: 'Savings Goals',
-    description: 'Set and track progress toward specific savings targets',
-    actions: ['Create new goal', 'Add to savings', 'View progress', 'Edit goals'],
-    tips: ['Set realistic targets', 'Save consistently', 'Celebrate milestones'],
+  'FAQ': {
+    name: 'FAQ & Help',
+    description: 'Frequently asked questions and help about using GaFi.',
+    actions: ['Read common questions', 'Learn how features work', 'Find quick how-tos'],
+    tips: ['Search here first if a feature is unclear', 'Ask me directly if the FAQ doesn\'t cover it'],
   },
+  'NotificationSettings': {
+    name: 'Notification Settings',
+    description: 'Control which notifications and reminders GaFi sends (budget alerts, goal reminders, daily tracking nudges).',
+    actions: ['Toggle budget alerts', 'Set tracking reminders', 'Manage goal notifications'],
+    tips: ['A daily reminder makes tracking a habit', 'Keep budget alerts on to avoid overspending'],
+  },
+  'NotificationTest': {
+    name: 'Notification Test',
+    description: 'A developer/testing screen for firing sample notifications. Not a normal user feature.',
+    actions: ['Send a test notification', 'Check notification delivery'],
+    tips: ['This is a testing tool — your real reminders are in Notification Settings'],
+  },
+};
+
+// Resolve the deepest active route name from the app-wide navigation ref.
+// This is the single source of truth for "where is the user now?", used both
+// for the live header badge and the per-request system prompt. Falls back to
+// 'Game' (the initial main tab) if navigation isn't ready yet.
+const getLiveScreen = () => {
+  try {
+    if (navigationRef?.isReady?.()) {
+      const route = navigationRef.getCurrentRoute?.();
+      if (route?.name && SCREEN_CONTEXTS[route.name]) return route.name;
+      if (route?.name) return route.name;
+    }
+  } catch (_) {
+    // ignore — fall through to default
+  }
+  return 'Game';
 };
 
 const ChatModal = forwardRef(({ visible, onClose }, ref) => {
   const { colors, theme } = useTheme();
-  const navigation = useNavigation();
-  const { expenses, budget, calculateTotalExpenses } = useContext(DataContext);
+  const { expenses, budget, calculateTotalExpenses, savings, refreshSavings } = useContext(DataContext);
   const { userInfo } = useContext(AuthContext);
   const insets = useSafeAreaInsets();
+
+  // GLOBAL chat memory — lives in ChatContext so the conversation survives modal
+  // close + navigation for the whole session (see src/context/ChatContext.js).
+  const {
+    messages, setMessages,
+    conversationHistory, setConversationHistory,
+    conversationHistoryRef,
+    isTyping, setIsTyping,
+    isInitialized, setIsInitialized,
+    resetChat,
+  } = useChat();
 
   const flatListRef = useRef(null);
 
@@ -217,17 +285,22 @@ const ChatModal = forwardRef(({ visible, onClose }, ref) => {
     };
   }, []);
 
-  // Chat state
-  const [messages, setMessages] = useState([]);
-  const [isTyping, setIsTyping] = useState(false);
-  const [currentScreen, setCurrentScreen] = useState('Home');
-  const [conversationHistory, setConversationHistory] = useState([]);
+  // `currentScreen` is DYNAMIC, not part of the persisted chat. It tracks the
+  // route the user is on RIGHT NOW so the header badge, quick actions, and (most
+  // importantly) the per-request system prompt always reflect the live location.
+  // Default 'Game' = the first/initial main tab.
+  const [currentScreen, setCurrentScreen] = useState(() => getLiveScreen());
 
-  // Ref mirror of conversationHistory — prevents stale closures in async sendMessage
-  const conversationHistoryRef = useRef([]);
+  // Keep `currentScreen` in sync with navigation. navigationRef is the app-wide
+  // container ref, so this fires even when the user navigates with the bubble
+  // (not the sheet) on screen.
   useEffect(() => {
-    conversationHistoryRef.current = conversationHistory;
-  }, [conversationHistory]);
+    if (!navigationRef?.isReady?.()) return undefined;
+    const sync = () => setCurrentScreen(getLiveScreen());
+    sync();
+    const unsubscribe = navigationRef.addListener('state', sync);
+    return unsubscribe;
+  }, []);
 
   // Imperative handle kept for back-compat with GlobalDraggableKoin's failsafe.
   // Visibility is now fully controlled by the `visible` prop + native Modal, so
@@ -243,49 +316,59 @@ const ChatModal = forwardRef(({ visible, onClose }, ref) => {
     console.log('[ChatModal] visible prop changed →', visible);
   }, [visible]);
 
-  // Seed the contextual welcome each time the modal opens. The native Modal
-  // shows/hides purely from the `visible` prop, so there is no present() to call.
+  // Seed a fresh conversation with the screen-aware welcome. Used for the very
+  // first open of the session and when the user taps "New chat". The welcome is
+  // also pushed into conversationHistory so the AI has context if the user
+  // replies straight to the greeting. Plain function (not memoized) so it always
+  // closes over the latest getContextualWelcome — and so its definition never
+  // touches getContextualWelcome before that const is initialized below.
+  const seedWelcome = (screenName) => {
+    let welcomeMessage;
+    try {
+      welcomeMessage = getContextualWelcome(screenName);
+    } catch (err) {
+      console.log('[ChatModal] Welcome build failed, using fallback:', err);
+      welcomeMessage = "Hi! I'm Koin, your AI finance buddy. How can I help? 💰";
+    }
+    setMessages([{
+      id: Date.now().toString(),
+      text: welcomeMessage,
+      sender: 'koin',
+      timestamp: new Date(),
+      type: 'welcome',
+    }]);
+    const seedHistory = [{ role: 'assistant', content: welcomeMessage }];
+    setConversationHistory(seedHistory);
+    conversationHistoryRef.current = seedHistory;
+    setIsInitialized(true);
+  };
+
+  // On open: sync the live screen for the header, and seed the welcome ONLY the
+  // first time. On every later open the persisted conversation is kept intact —
+  // this is what makes Koin a "Global Buddy" instead of resetting per screen.
   useEffect(() => {
     if (!visible) return;
-
-    try {
-      // Detect screen and prepare welcome message
-      let screenName = 'Home';
-      try {
-        const navState = navigation.getState();
-        screenName = getActiveRouteName(navState) || 'Home';
-        console.log('[ChatModal] Detected screen:', screenName);
-      } catch (error) {
-        console.log('Navigation state error:', error);
-      }
-      setCurrentScreen(screenName);
-
-      // Set welcome message and SEED it into conversation history
-      // so the AI has context when the user replies to the greeting
-      const welcomeMessage = getContextualWelcome(screenName);
-      setMessages([{
-        id: Date.now().toString(),
-        text: welcomeMessage,
-        sender: 'koin',
-        timestamp: new Date(),
-        type: 'welcome'
-      }]);
-      const seedHistory = [{ role: 'assistant', content: welcomeMessage }];
-      setConversationHistory(seedHistory);
-      conversationHistoryRef.current = seedHistory;
-    } catch (err) {
-      // Fallback welcome so the sheet still opens with something on screen
-      console.log('[ChatModal] Welcome build failed, using fallback:', err);
-      setCurrentScreen('Home');
-      setMessages([{
-        id: Date.now().toString(),
-        text: "Hi! I'm Koin, your AI finance buddy. How can I help? 💰",
-        sender: 'koin',
-        timestamp: new Date(),
-        type: 'welcome',
-      }]);
+    const screenName = getLiveScreen();
+    setCurrentScreen(screenName);
+    // Pull the freshest savings/goals snapshot from Supabase on every open. The
+    // savings tables have no realtime listener (the dashboard mutates them
+    // locally), so this one-shot refresh guarantees Koin quotes the live "Total
+    // Saved" the moment the user opens the chat. It writes context state once →
+    // no effect here depends on `savings`, so it can't loop.
+    refreshSavings?.();
+    if (!isInitialized) {
+      seedWelcome(screenName);
     }
+    console.log('[ChatModal] Opened on screen:', screenName, '| initialized:', isInitialized);
   }, [visible]);
+
+  // "New chat" — wipe the global conversation and re-seed for the live screen.
+  const handleNewChat = () => {
+    const screenName = getLiveScreen();
+    setCurrentScreen(screenName);
+    resetChat();
+    seedWelcome(screenName);
+  };
 
   // Single close path — dismiss keyboard, then tell the parent to flip visible=false.
   // Used by backdrop tap, close button, and Android hardware back (onRequestClose).
@@ -293,18 +376,6 @@ const ChatModal = forwardRef(({ visible, onClose }, ref) => {
     Keyboard.dismiss();
     onClose();
   }, [onClose]);
-
-  // ──────────────────────────────────────────────
-  // Helper function to get the deepest focused route name
-  // ──────────────────────────────────────────────
-  const getActiveRouteName = (state) => {
-    if (!state || !state.routes) return null;
-    const route = state.routes[state.index ?? 0];
-    if (route.state) {
-      return getActiveRouteName(route.state);
-    }
-    return route.name;
-  };
 
   // ──────────────────────────────────────────────
   // Financial context
@@ -371,6 +442,10 @@ const ChatModal = forwardRef(({ visible, onClose }, ref) => {
       date: new Date(e.date || e.created_at).toLocaleDateString()
     }));
 
+    // Live savings / goals snapshot (from DataContext — mirrors the Custom Mode
+    // dashboard's own numbers, so Koin's "Total Saved" matches the screen).
+    const sv = savings || {};
+
     return {
       totalSpent,
       budgetRemaining,
@@ -390,29 +465,46 @@ const ChatModal = forwardRef(({ visible, onClose }, ref) => {
       monthlyExpenseCount: thisMonthExpenses.length,
       todaySpent,
       todayExpenseCount: todayExpenses.length,
+      // Savings & goals
+      totalSaved: sv.totalSaved || 0,
+      savedThisMonth: sv.monthlySaved || 0,
+      savingsDeposits: sv.monthlyDeposits || 0,
+      savingsWithdrawals: sv.monthlyWithdrawals || 0,
+      walletCount: sv.walletCount || 0,
+      goalsActive: sv.goalsActive || 0,
+      goalsAchieved: sv.goalsAchieved || 0,
+      goalsTotalAllocated: sv.goalsTotalAllocated || 0,
+      goals: sv.goals || [],
+      budgetRules: sv.budgetRules || { needs: 50, wants: 30, savings: 20 },
     };
-  }, [expenses, budget, userInfo, calculateTotalExpenses]);
+  }, [expenses, budget, userInfo, calculateTotalExpenses, savings]);
 
   // ──────────────────────────────────────────────
   // Welcome messages
   // ──────────────────────────────────────────────
   const getContextualWelcome = (screenName) => {
     const financial = getFinancialContext();
-    const screenContext = SCREEN_CONTEXTS[screenName] || SCREEN_CONTEXTS['Home'];
+    const screenContext = SCREEN_CONTEXTS[screenName] || SCREEN_CONTEXTS['Game'];
 
     const welcomeTemplates = {
-      'Home': `Hey ${financial.userName}! 👋 You're on the Home tab. You've spent ₱${financial.monthlySpent.toLocaleString()} of your ₱${financial.monthlyBudget.toLocaleString()} budget (${financial.budgetPercentage}%). How can I help?`,
-      'Budget': `Hi! You're managing your budget. Current limit: ₱${financial.monthlyBudget.toLocaleString()}. Need help adjusting categories?`,
-      'Expenses': `You're on the Expenses tab! 📊 You have ${financial.expenseCount} transactions totaling ₱${financial.totalSpent.toLocaleString()}. Ask me about your spending - like "What did I spend this week?" or "Show my top category"!`,
-      'Explore': `Welcome to the Explore tab! 🧭 Navigate to Budget tools, Predictions, Leaderboard, Achievements, or Gamification challenges from here. What interests you?`,
-      'Game': `You're in the Game tab! 🎮 Walk around, visit the canteen, shops, or other locations to log expenses interactively. Use the joystick to move! Try Story Mode to learn the 50/30/20 budget rule.`,
-      'DataPrediction': `Welcome to Predictions! I can explain spending forecasts and AI insights. What would you like to know?`,
-      'Gamification': `You're in Gamification Challenges! 🏆 This is where you set savings challenges and track progress. (Note: For the interactive walking game, go to the Game tab!)`,
-      'Achievements': `Checking your achievements! 🏆 Ask me about any badge or how to unlock new ones.`,
-      'Leaderboard': `Viewing the leaderboard! See how you rank against other savers. Need tips to climb higher?`,
-      'Calendar': `On the Calendar view! This shows your daily spending patterns. Ask about any date or trend.`,
-      'Learn': `Great choice! 📚 The Learn section has financial tips and education. What topic interests you?`,
-      'Settings': `In Settings! I can help you customize your GaFI experience. What would you like to adjust?`,
+      'Game': `You're in the Game tab! 🎮 Use the joystick to walk around and visit the canteen or shops to log expenses in-game. Playing Story Mode? Ask me how to clear the day's tasks!`,
+      'Custom': `You're in Custom Mode! 🎯 You've saved ₱${financial.totalSaved.toLocaleString()} so far and used ${financial.budgetPercentage}% of your ₱${financial.monthlyBudget.toLocaleString()} budget. Want help with your budget split or a savings goal?`,
+      'CustomModeDashboard': `You're in Custom Mode! 🎯 Budgeting, Goals, and Saving all live here. You've saved ₱${financial.totalSaved.toLocaleString()} total${financial.goalsActive > 0 ? ` across ${financial.goalsActive} active goal${financial.goalsActive > 1 ? 's' : ''}` : ''}. Want help setting a realistic savings goal?`,
+      'Expenses': `You're on the Expenses tab! 📊 You have ${financial.expenseCount} transactions totaling ₱${financial.totalSpent.toLocaleString()}. Ask me "What did I spend this week?" or "Show my top category"!`,
+      'ExpenseGraph': `Looking at your spending graphs! 📈 Ask me what your charts are telling you or where you can cut back.`,
+      'Predictions': `Welcome to Predictions! 🔮 I can explain your spending forecast and what the AI insights mean for next month. What would you like to know?`,
+      'Explore': `Welcome to Explore! 🧭 From here you can open the Leaderboard, Achievements, or Manage Friends. What are you looking for?`,
+      'Profile': `This is your Profile! 🏆 Check your rank, XP, and Story Mode progress, or update your budget. Hey ${financial.userName}, how can I help?`,
+      'Achievements': `Checking your achievements! 🏅 Ask me about any badge or how to unlock the next one.`,
+      'Leaderboard': `Viewing the leaderboard! 📊 See how you rank against other savers. Need tips to climb higher?`,
+      'ManageFriends': `Managing friends! 👥 Add friends, view your list, or handle requests. Friends show up on each other's leaderboards!`,
+      'FriendsList': `Here's your friends list! 👥 Compare your savings progress on the Leaderboard anytime.`,
+      'FriendRequests': `Your friend requests! ✉️ Accept or decline pending requests here.`,
+      'Calendar': `On the Calendar view! 📅 This shows your daily spending patterns. Ask me about any date or trend.`,
+      'Settings': `In Settings! ⚙️ I can help you customize your GaFi experience. What would you like to adjust?`,
+      'BackgroundMusic': `Setting the vibe! 🎵 Pick a background track or playback mode here. Want a money tip while you're at it?`,
+      'FAQ': `On the FAQ! 📖 If you can't find an answer here, just ask me directly. What's on your mind?`,
+      'NotificationSettings': `Notification Settings! 🔔 Turn on reminders to make tracking a daily habit. Need a hand?`,
     };
 
     return welcomeTemplates[screenName] || `Hi ${financial.userName}! I'm Koin, your AI finance buddy. You're on the ${screenContext.name}. How can I help? 💰`;
@@ -423,10 +515,10 @@ const ChatModal = forwardRef(({ visible, onClose }, ref) => {
   // ──────────────────────────────────────────────
   const buildSystemPrompt = (screenName) => {
     const financial = getFinancialContext();
-    const screenContext = SCREEN_CONTEXTS[screenName] || SCREEN_CONTEXTS['Home'];
+    const screenContext = SCREEN_CONTEXTS[screenName] || SCREEN_CONTEXTS['Game'];
 
-    const isTabScreen = ['Home', 'Expenses', 'Game', 'Explore'].includes(screenName);
-    const tabInfo = isTabScreen ? `\n⚠️ USER IS ON THE "${screenName.toUpperCase()}" TAB (one of 4 main tabs: Game, Home, Expenses, Explore)` : '';
+    const isTabScreen = ['Game', 'Custom', 'Expenses', 'Predictions', 'Explore', 'Profile'].includes(screenName);
+    const tabInfo = isTabScreen ? `\n⚠️ USER IS ON THE "${screenName.toUpperCase()}" TAB (one of 6 main tabs: Game, Custom, Expenses, Predictions, Explore, Profile)` : '';
 
     // Dynamic user-type context block (student vs employee)
     const userTypeBlock = getUserTypeContext(userInfo?.userType);
@@ -435,6 +527,11 @@ const ChatModal = forwardRef(({ visible, onClose }, ref) => {
     return `You are Koin, GaFi's friendly AI financial assistant for ${userTypeLabel}. You are CONTEXT-AWARE and currently helping the user on the "${screenContext.name}" screen.
 ${tabInfo}
 ${userTypeBlock}
+
+═══════════════════════════════════════
+CRITICAL RULE — LANGUAGE MIRRORING  (HIGHEST PRIORITY)
+═══════════════════════════════════════
+You must always detect and mirror the language of the user's MOST RECENT message. If the user asks a question in English, you MUST reply entirely in English. If the user asks in Tagalog/Filipino, reply in Tagalog/Filipino. If they write in Taglish, reply in Taglish. Do not mix languages unless the user does. This overrides any personality or tone guidance below — being a "Filipino financial friend" does NOT mean defaulting to Tagalog; match the user's language every single time, judged fresh on each new message.
 
 ═══════════════════════════════════════
 STRICT DOMAIN POLICY  (NEVER VIOLATE)
@@ -483,9 +580,10 @@ Available Actions: ${screenContext.actions.join(', ')}
 Pro Tips: ${screenContext.tips.join(', ')}
 
 IMPORTANT DISTINCTIONS:
-- "Game" tab = Interactive map game (GameScreen.js) where user walks around and visits locations
-- "Gamification" screen = Savings challenges accessed from Explore, NOT the walking game
-- The 4 main tabs are: Game, Home, Expenses, Explore
+- "Game" tab = the interactive walking game (Story Mode) where the user moves a character and visits locations to log expenses.
+- "Custom" tab = Custom Mode: budgeting, savings goals, and logging saved money. This is where budget limits and goals live (it replaced the old separate Budget/Gamification/Savings screens).
+- The 6 main tabs are: Game, Custom, Expenses, Predictions, Explore, Profile.
+- There is NO "Home", "Budget", "Gamification", or "Learn" screen anymore — do not point the user to them.
 
 ═══════════════════════════════════════
 USER'S FINANCIAL DATA
@@ -517,13 +615,32 @@ This Week's Expenses:
 ${financial.weekExpensesList.length > 0 ? financial.weekExpensesList.map(e => `  - ${e.date}: ${e.category} - ₱${e.amount} (${e.note})`).join('\n') : '  No expenses this week yet'}
 
 ═══════════════════════════════════════
+SAVINGS & GOALS  (LIVE — Custom Mode)
+═══════════════════════════════════════
+💸 SPENDING THIS MONTH (identical to the Expenses tab — fully valid to quote here on Custom Mode):
+• Total Expenses This Month: ₱${financial.totalSpent.toLocaleString()} (${financial.expenseCount} transactions)
+• Monthly Budget: ₱${financial.monthlyBudget.toLocaleString()} — Used ${financial.budgetPercentage}%, Remaining ₱${financial.budgetRemaining.toLocaleString()}
+
+💰 SAVINGS:
+• Total Saved (all accounts, lifetime): ₱${financial.totalSaved.toLocaleString()}
+• Saved Net This Month: ₱${financial.savedThisMonth.toLocaleString()} (deposits ₱${financial.savingsDeposits.toLocaleString()} − withdrawals ₱${financial.savingsWithdrawals.toLocaleString()})
+• Savings Accounts: ${financial.walletCount}
+• Recommended Savings Split: ${financial.budgetRules.savings}% of budget (target ₱${Math.round(financial.monthlyBudget * (financial.budgetRules.savings / 100)).toLocaleString()}/month). Full split → Needs ${financial.budgetRules.needs}% / Wants ${financial.budgetRules.wants}% / Savings ${financial.budgetRules.savings}%
+
+🎯 GOALS:
+• Active: ${financial.goalsActive} | Achieved: ${financial.goalsAchieved} | Total Allocated to Goals: ₱${financial.goalsTotalAllocated.toLocaleString()}
+${financial.goals.length > 0 ? financial.goals.map(g => `  - ${g.title}: ₱${g.current.toLocaleString()} / ₱${g.target.toLocaleString()} (${g.pct}%${g.achieved ? ', achieved' : ''}${g.deadline ? `, due ${g.deadline}` : ''})`).join('\n') : '  No savings goals set yet'}
+
+⚠️ ALWAYS use this live financial data to answer the user's specific questions about their money — on EVERY screen, Custom Mode included. Expense and budget questions are fully valid on Custom Mode: quote "Total Expenses This Month" above, NEVER tell the user they have ₱0 expenses or "no transactions" while a real number is shown, and NEVER tell them to switch to the Expenses tab just to see their own totals. When they ask how much they've saved, quote "Total Saved". If a value is genuinely ₱0, it really is 0 — encourage them to start. Do not invent or round figures.
+
+═══════════════════════════════════════
 STRICT LANGUAGE MATCHING
 ═══════════════════════════════════════
-You MUST automatically detect the language the user is speaking. Your final response MUST be written entirely in that exact same language.
-- If the user writes in Tagalog, reply completely in Tagalog.
-- If the user writes in English, reply completely in English.
-- If the user writes in Taglish, reply in Taglish.
-- Do NOT mix languages unless the user explicitly asks you to translate.
+You MUST detect the language of the user's MOST RECENT message and write your final response entirely in that exact same language. Judge this fresh on every message — earlier turns do not lock the language.
+- If the user's latest message is in Tagalog, reply completely in Tagalog.
+- If the user's latest message is in English, reply completely in English.
+- If the user's latest message is in Taglish, reply in Taglish.
+- Do NOT mix languages unless the user does, or explicitly asks you to translate.
 
 ═══════════════════════════════════════
 OUTPUT FORMATTING (CRITICAL)
@@ -551,7 +668,7 @@ RESPONSE GUIDELINES
 YOUR PERSONALITY:
 - Friendly Filipino financial friend ("Koin")
 - Knowledgeable but not condescending
-- Uses casual language with occasional Taglish
+- Uses casual, warm language — but ONLY in the user's current language (see CRITICAL RULE — LANGUAGE MIRRORING); Taglish only if the user uses it
 - Celebrates small wins
 - Gives actionable, practical advice
 - NEVER answers off-topic questions`;
@@ -578,13 +695,23 @@ YOUR PERSONALITY:
       flatListRef.current?.scrollToEnd({ animated: true });
     }, 100);
 
+    // HYBRID FIX: resolve the user's CURRENT screen at request time and build a
+    // FRESH system prompt for it. The persistent conversation history is reused
+    // as-is, but the screen guide is recomputed on every send — so Koin answers
+    // "What do I do here?" for wherever the user is NOW, while still remembering
+    // everything said earlier on other screens.
+    const liveScreen = getLiveScreen();
+    setCurrentScreen(liveScreen);
+
     try {
-      const systemPrompt = buildSystemPrompt(currentScreen);
+      const systemPrompt = buildSystemPrompt(liveScreen);
 
       // Read the LATEST history from the ref to avoid stale closures
       const currentHistory = conversationHistoryRef.current;
 
       const apiMessages = [
+        // System prompt is rebuilt per request (NOT persisted in history) so the
+        // screen context always matches the live route.
         { role: 'system', content: systemPrompt },
         // Include up to 10 recent messages (5 full turns) for richer context
         ...currentHistory.slice(-10),
@@ -592,7 +719,7 @@ YOUR PERSONALITY:
       ];
 
       DebugUtils.log('KOIN_CHAT', 'Sending to NVIDIA API', {
-        screen: currentScreen,
+        screen: liveScreen,
         questionLength: userQuestion.length,
         historyLength: currentHistory.length,
         historyPreview: currentHistory.slice(-4).map(m => `${m.role}: ${m.content.substring(0, 40)}...`)
@@ -627,7 +754,7 @@ YOUR PERSONALITY:
     } catch (error) {
       DebugUtils.error('KOIN_CHAT', 'AI response failed', error);
 
-      const fallbackResponse = generateSmartFallback(userQuestion, currentScreen);
+      const fallbackResponse = generateSmartFallback(userQuestion, liveScreen);
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         text: fallbackResponse,
@@ -641,7 +768,13 @@ YOUR PERSONALITY:
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
-  }, [isTyping, currentScreen]);
+    // expenses/budget/savings/userInfo MUST stay in deps: sendMessage builds the
+    // system prompt via getFinancialContext (memoized on them). Omitting them froze
+    // sendMessage on the FIRST render's snapshot (expenses=[] → ₱0), so the first
+    // chat of a session injected ₱0 into the prompt — Koin then "hallucinated" ₱0
+    // until an unrelated re-render swapped the closure. This is why the bug looked
+    // screen-specific (Custom = first chat) rather than order-specific.
+  }, [isTyping, expenses, budget, savings, userInfo, setMessages, setIsTyping, setConversationHistory, conversationHistoryRef]);
 
   // ──────────────────────────────────────────────
   // Smart fallback when AI fails
@@ -649,7 +782,7 @@ YOUR PERSONALITY:
   const generateSmartFallback = (question, screen) => {
     const q = question.toLowerCase();
     const financial = getFinancialContext();
-    const screenContext = SCREEN_CONTEXTS[screen] || SCREEN_CONTEXTS['Home'];
+    const screenContext = SCREEN_CONTEXTS[screen] || SCREEN_CONTEXTS['Game'];
 
     if (q.includes('what can i do') || q.includes('help') || q.includes('this screen')) {
       return `On the ${screenContext.name}, you can: ${screenContext.actions.slice(0, 3).join(', ')}. 💡 Tip: ${screenContext.tips[0]}`;
@@ -679,8 +812,18 @@ YOUR PERSONALITY:
       }
     }
 
+    if (q.includes('saved') || q.includes('savings') || q.includes('goal')) {
+      if (financial.totalSaved > 0 || financial.goalsActive > 0) {
+        const goalBit = financial.goalsActive > 0
+          ? ` You have ${financial.goalsActive} active goal${financial.goalsActive > 1 ? 's' : ''}.`
+          : '';
+        return `You've saved ₱${financial.totalSaved.toLocaleString()} in total across ${financial.walletCount} account${financial.walletCount === 1 ? '' : 's'} (₱${financial.savedThisMonth.toLocaleString()} net this month).${goalBit} Keep it up! 💰`;
+      }
+      return `You haven't logged any savings yet. Head to Custom Mode → Saving to set up an account and stash your first ₱! 💰`;
+    }
+
     if (q.includes('save') || q.includes('tip')) {
-      return `Here's a tip: Try the 50/30/20 rule - 50% needs, 30% wants, 20% savings. With your current spending, you could save ₱${Math.round(financial.monthlyBudget * 0.2).toLocaleString()} monthly! 💰`;
+      return `Here's a tip: Try the 50/30/20 rule - 50% needs, 30% wants, 20% savings. With your current budget, aim to save ₱${Math.round(financial.monthlyBudget * (financial.budgetRules.savings / 100)).toLocaleString()} monthly! You've saved ₱${financial.totalSaved.toLocaleString()} so far. 💰`;
     }
 
     return `I understand you're asking about "${question.substring(0, 30)}...". Currently on ${screenContext.name}, I can help with: ${screenContext.actions[0]}. What would you like to do?`;
@@ -691,18 +834,21 @@ YOUR PERSONALITY:
   // ──────────────────────────────────────────────
   const getQuickActions = () => {
     const screenActions = {
-      'Home': ['Budget status', 'Spending tips'],
-      'Budget': ['Adjust limits', 'Category advice'],
+      'Game': ['How do I play?', 'What is Story Mode?'],
+      'Custom': ['How do I set my budget?', 'Help me set a goal'],
+      'CustomModeDashboard': ['How do I set my budget?', 'Help me set a goal'],
       'Expenses': ['What did I spend this week?', 'Top category'],
-      'Explore': ['What features?', 'Navigate app'],
-      'Game': ['How to play', 'What is Story Mode?'],
-      'DataPrediction': ['Explain predictions', 'Forecast accuracy'],
-      'Gamification': ['Create a challenge', 'Track progress'],
+      'ExpenseGraph': ['Explain my chart', 'Where can I cut back?'],
+      'Predictions': ['Explain my forecast', 'How accurate is this?'],
+      'Explore': ['What features are here?', 'Where do I add friends?'],
+      'Profile': ['How do I earn XP?', 'Update my budget'],
       'Achievements': ['Next badge', 'Progress check'],
-      'Leaderboard': ['Ranking tips', 'Add friends'],
+      'Leaderboard': ['Tips to rank up', 'How do I add friends?'],
+      'ManageFriends': ['How do I add a friend?', 'View my requests'],
       'Calendar': ['High spend days', 'Weekly review'],
-      'Learn': ['Quick tip', 'Best topics'],
-      'Settings': ['Customize app', 'Reset data'],
+      'Settings': ['Customize the app', 'Manage reminders'],
+      'BackgroundMusic': ['Give me a money tip', 'Budget summary'],
+      'NotificationSettings': ['Set a reminder', 'Why track daily?'],
     };
 
     return ['What can I do here?', ...(screenActions[currentScreen] || ['Budget summary']), 'Help me save'];
@@ -854,13 +1000,33 @@ YOUR PERSONALITY:
           </View>
         </View>
 
-        <TouchableOpacity
-          style={[styles.closeBtn, { backgroundColor: colors.card }]}
-          onPress={handleClose}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Ionicons name="close" size={22} color={colors.text} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          {/* New chat — clears the persisted conversation and re-greets for the
+              current screen. Disabled while a fresh chat already shows only the
+              welcome, so it never wipes "nothing". */}
+          <TouchableOpacity
+            style={[styles.headerBtn, { backgroundColor: colors.card }]}
+            onPress={handleNewChat}
+            disabled={messages.length <= 1}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel="Start a new chat"
+          >
+            <Ionicons
+              name="create-outline"
+              size={20}
+              color={messages.length <= 1 ? (colors.textSecondary || colors.text + '50') : colors.text}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.headerBtn, { backgroundColor: colors.card }]}
+            onPress={handleClose}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel="Close chat"
+          >
+            <Ionicons name="close" size={22} color={colors.text} />
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -997,6 +1163,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   closeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,

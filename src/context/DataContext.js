@@ -34,6 +34,27 @@ export const DataProvider = ({ children }) => {
   const [expenses, setExpenses] = useState([]);
   const [notes, setNotes] = useState([]);
 
+  // ── Savings snapshot ──────────────────────────────────────────────────
+  // Custom Mode's savings/goals live in their OWN Supabase tables
+  // (savings_accounts_custom_mode / savings_logs_custom_mode /
+  // goals_custom_mode), which the dashboard fetches into LOCAL state. Koin
+  // (the AI buddy) only ever read this DataContext, so it was blind to them and
+  // reported "Saved so far: ₱0". We mirror the dashboard's exact math here so
+  // the numbers Koin quotes always match what the user sees on screen.
+  const defaultSavings = {
+    totalSaved: 0,          // lifetime balance across all savings accounts (= dashboard "Total Saved")
+    monthlyDeposits: 0,     // deposits logged this calendar month
+    monthlyWithdrawals: 0,  // withdrawals logged this calendar month
+    monthlySaved: 0,        // net kept this month (deposits − withdrawals)
+    walletCount: 0,
+    goalsActive: 0,
+    goalsAchieved: 0,
+    goalsTotalAllocated: 0,
+    goals: [],              // up to 5 non-deleted goals: { title, current, target, pct, deadline, achieved }
+    budgetRules: { needs: 50, wants: 30, savings: 20 }, // 50/30/20 split from budgets_custom_mode
+  };
+  const [savings, setSavings] = useState(defaultSavings);
+
   // Helper function to get current user ID (resilient multi-layer lookup)
   const getCurrentUserId = async () => {
     const userId = userInfo?.id || null;
@@ -111,6 +132,7 @@ export const DataProvider = ({ children }) => {
       setBudget(defaultBudget);
       setExpenses([]);
       setNotes([]);
+      setSavings(defaultSavings);
       setInsights([]);
       setError(null);
       setIsInitialized(true);
@@ -123,6 +145,99 @@ export const DataProvider = ({ children }) => {
       if (budgetSubscription) budgetSubscription.unsubscribe();
     };
   }, [isAuthLoading, userInfo?.id]);
+
+  // ── Load the savings snapshot ─────────────────────────────────────────
+  // Mirrors CustomModeDashboard's computations exactly so Koin never drifts
+  // from the on-screen numbers:
+  //   • totalSaved      = Σ signed savings_logs for logs tied to a live account
+  //                       (== dashboard's `totalInWallets`)
+  //   • monthly*        = same logs filtered to the current calendar month
+  //   • goals*          = non-deleted goals_custom_mode rows
+  //   • budgetRules     = needs/wants/savings split from budgets_custom_mode
+  // Plain async fn (not a hook) so it can be both called inside loadData() and
+  // exposed as `refreshSavings` for on-demand refresh (e.g. when Koin opens).
+  const loadSavingsSnapshot = async (uid) => {
+    const userId = uid || userInfo?.id || null;
+    if (!userId) return;
+    try {
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+      // Accounts + logs → balances (same as dashboard's fetchSavingsData)
+      const [{ data: accounts }, { data: logs }] = await Promise.all([
+        supabase.from('savings_accounts_custom_mode').select('id').eq('user_id', userId),
+        supabase.from('savings_logs_custom_mode').select('amount, logged_at, account_id').eq('user_id', userId),
+      ]);
+
+      const liveAccountIds = new Set((accounts || []).map((a) => a.id));
+      let totalSaved = 0;
+      let monthlyDeposits = 0;
+      let monthlyWithdrawals = 0;
+      (logs || []).forEach((log) => {
+        // Only logs tied to an existing account count toward the balance —
+        // exactly how the dashboard derives `totalInWallets`.
+        if (!log.account_id || !liveAccountIds.has(log.account_id)) return;
+        const amt = parseFloat(log.amount) || 0;
+        totalSaved += amt;
+        const d = new Date(log.logged_at);
+        if (d >= monthStart && d <= monthEnd) {
+          if (amt > 0) monthlyDeposits += amt;
+          else monthlyWithdrawals += Math.abs(amt);
+        }
+      });
+
+      // Goals
+      const { data: goalsData } = await supabase
+        .from('goals_custom_mode')
+        .select('*')
+        .eq('user_id', userId);
+      const nonDeleted = (goalsData || []).filter((g) => !g.is_deleted);
+      const goalsActive = nonDeleted.filter((g) => !g.is_completed).length;
+      const goalsAchieved = nonDeleted.filter((g) => g.is_completed).length;
+      const goalsTotalAllocated = nonDeleted.reduce((s, g) => s + (parseFloat(g.current_amount) || 0), 0);
+      const goals = nonDeleted.slice(0, 5).map((g) => {
+        const current = parseFloat(g.current_amount) || 0;
+        const target = parseFloat(g.target_amount) || 0;
+        return {
+          title: g.title,
+          current,
+          target,
+          pct: target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0,
+          deadline: g.target_date,
+          achieved: !!g.is_completed,
+        };
+      });
+
+      // Budget split rules (needs/wants/savings)
+      let budgetRules = { needs: 50, wants: 30, savings: 20 };
+      try {
+        const { data: rules } = await supabase
+          .from('budgets_custom_mode')
+          .select('needs_pct, wants_pct, savings_pct')
+          .eq('user_id', userId)
+          .maybeSingle();
+        if (rules) {
+          budgetRules = { needs: rules.needs_pct, wants: rules.wants_pct, savings: rules.savings_pct };
+        }
+      } catch (_) { /* keep default split */ }
+
+      setSavings({
+        totalSaved,
+        monthlyDeposits,
+        monthlyWithdrawals,
+        monthlySaved: monthlyDeposits - monthlyWithdrawals,
+        walletCount: liveAccountIds.size,
+        goalsActive,
+        goalsAchieved,
+        goalsTotalAllocated,
+        goals,
+        budgetRules,
+      });
+    } catch (err) {
+      console.warn('loadSavingsSnapshot warning:', err?.message || err);
+    }
+  };
 
   // Load data from Supabase
   // Options:
@@ -261,6 +376,11 @@ export const DataProvider = ({ children }) => {
       setBudget(transformedBudget);
       setExpenses(expensesData || []);
       setNotes(notesData || []);
+
+      // Refresh the savings/goals snapshot alongside the rest (fire-and-forget
+      // so it never blocks the main UI render). Keeps Koin's "Total Saved" in
+      // sync after logins and expense/budget changes.
+      loadSavingsSnapshot(userId).catch((e) => console.warn('Savings snapshot warning:', e?.message || e));
 
       // ── AI insight generation (uses closure-captured data, not stale state) ──
       const runInsightGeneration = async () => {
@@ -871,6 +991,8 @@ export const DataProvider = ({ children }) => {
         expenses,
         notes,
         insights,
+        savings,
+        refreshSavings: loadSavingsSnapshot,
         addExpense,
         deleteExpense,
         updateBudget,

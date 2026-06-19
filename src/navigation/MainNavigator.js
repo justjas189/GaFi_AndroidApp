@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { ThemeContext } from '../context/ThemeContext';
 import { AudioProvider } from '../context/AudioContext';
+import { ChatProvider } from '../context/ChatContext';
 
 // Global overlays — must live INSIDE BottomSheetModalProvider (ChatModal's
 // imperative present() reads BottomSheetModalInternalContext) and render ABOVE
@@ -124,6 +125,10 @@ const MainNavigator = () => {
   return (
     <AudioProvider>
       <BottomSheetModalProvider>
+        {/* ChatProvider wraps the whole authenticated surface so Koin's
+            conversation persists across every screen + modal open/close, and
+            resets only when this navigator unmounts (logout). */}
+        <ChatProvider>
         <View style={{ flex: 1 }}>
           <Stack.Navigator
             screenOptions={{
@@ -158,6 +163,7 @@ const MainNavigator = () => {
           <AppTourManager />
           <GlobalDraggableKoin />
         </View>
+        </ChatProvider>
       </BottomSheetModalProvider>
     </AudioProvider>
   );

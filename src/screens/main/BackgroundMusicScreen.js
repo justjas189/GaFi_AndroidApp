@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Switch,
   Alert,
   Linking,
 } from 'react-native';
@@ -27,7 +28,15 @@ const PLAYBACK_OPTIONS = [
 
 const BackgroundMusicScreen = ({ navigation }) => {
   const { theme } = useContext(ThemeContext);
-  const { tracks, currentBgmTrack, changeBgmTrack, playbackMode, changePlaybackMode } = useGameAudio();
+  const {
+    tracks,
+    currentBgmTrack,
+    changeBgmTrack,
+    playbackMode,
+    changePlaybackMode,
+    isFocusModeEnabled,
+    setFocusModeEnabled,
+  } = useGameAudio();
 
   const handleOpenPix = () => {
     Linking.openURL(PIX_YOUTUBE_URL).catch(() => {
@@ -84,6 +93,37 @@ const BackgroundMusicScreen = ({ navigation }) => {
                 </TouchableOpacity>
               );
             })}
+          </View>
+
+          {/* Focus Mode — muffle the BGM on every non-game screen. On by
+              default; off plays open everywhere. Mirrors the track-row card. */}
+          <View
+            style={[
+              styles.focusRow,
+              { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+            ]}
+          >
+            <View style={styles.settingItemLeft}>
+              <View
+                style={[styles.settingIconContainer, { backgroundColor: `${theme.colors.primary}20` }]}
+              >
+                <Ionicons name="volume-low" size={20} color={theme.colors.primary} />
+              </View>
+              <View style={styles.focusInfo}>
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>Focus Mode</Text>
+                <Text style={[styles.settingValue, { color: theme.colors.textSecondary }]}>
+                  Muffle music while outside of games
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={isFocusModeEnabled}
+              onValueChange={setFocusModeEnabled}
+              trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+              thumbColor="#fff"
+              ios_backgroundColor={theme.colors.border}
+              accessibilityLabel="Focus Mode"
+            />
           </View>
 
           {tracks.map((track) => {
@@ -225,6 +265,23 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.bodySemiBold,
     fontSize: 14,
     letterSpacing: 0.2,
+  },
+
+  // Focus Mode row — same card shell as a track row, switch on the right.
+  // Extra bottom margin sets it apart from the tracklist that follows.
+  focusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    marginBottom: 16,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  focusInfo: {
+    flex: 1,
+    paddingRight: 12, // keep the description clear of the switch
   },
 
   // Track rows (mirrors SettingsScreen's settingItem styling)
