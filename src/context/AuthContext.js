@@ -1,6 +1,7 @@
 // context/AuthContext.js
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { Alert, AppState } from 'react-native';
+import * as Linking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { supabase, supabaseAdmin, formatSupabaseError } from '../config/supabase';
@@ -39,6 +40,42 @@ const buildUserInfo = (user, profileData) => ({
   email: user.email,
 });
 
+// ── Auto-username generation (for blank optional username at sign-up) ──
+// Build a valid base from the email local-part: lowercase, keep only the chars
+// the username constraint allows ([a-z0-9_], per ProfileService.validateUsername),
+// drop dots / plus-tags / everything else. Guarantee >= 3 chars and leave room
+// for a 4-digit suffix under the 30-char cap.
+const slugifyEmailLocalPart = (email) => {
+  const local = (email || '').split('@')[0] || '';
+  let base = local.toLowerCase().replace(/[^a-z0-9_]/g, '');
+  if (base.length < 3) base = `user${base}`; // e.g. "a.b" -> "ab" -> "userab"
+  return base.slice(0, 26); // 26 + 4-digit suffix = 30 max
+};
+
+const randomSuffix = () => Math.floor(1000 + Math.random() * 9000); // 4 digits
+
+// Generate a username that's free. The profiles row is written LATER by
+// syncProfileFromMetadata; a UNIQUE collision there throws 23505 and silently
+// drops the username, so pre-check via the SECURITY DEFINER RPC (works for the
+// still-unauthenticated sign-up caller, same as check_email_exists). Fail-open:
+// an RPC error means assume-free, since the DB UNIQUE index is the final guard.
+const generateUniqueUsername = async (email) => {
+  const base = slugifyEmailLocalPart(email);
+  for (let i = 0; i < 5; i++) {
+    const candidate = `${base}${randomSuffix()}`;
+    try {
+      const { data, error } = await supabase.rpc('is_username_available', {
+        check_username: candidate,
+      });
+      if (error || data === true) return candidate;
+    } catch {
+      return candidate;
+    }
+  }
+  // Exhausted (rare): widen entropy with a 6-digit time-based tail, still <= 30.
+  return `${base.slice(0, 24)}${Date.now().toString().slice(-6)}`;
+};
+
 // Self-heal the profiles row from OAuth metadata. OAuth users have no DB
 // insert-trigger, so the row may not exist yet; create it, and backfill
 // avatar_url / username when missing. Fire-and-forget, never blocks auth.
@@ -57,9 +94,20 @@ const syncProfileFromMetadata = async (user, profileData) => {
       // (PGRST204 schema-cache miss / 42703 undefined column). Detect that and
       // retry without the optional column so the row is still created — the
       // avatar backfills later once the migration is applied.
+      //
+      // username: password sign-ups carry it in user_metadata (register() passes
+      // options.data.username). OAuth (Google) sign-ups have NO username in
+      // metadata, so generate one from the email here. There is NO DB insert-
+      // trigger — THIS upsert is the only writer of the profiles row, so it must
+      // carry username through or profiles.username stays NULL forever (it shows
+      // in the app only because buildUserInfo falls back to user_metadata).
+      // username is a core column (since 20250806), not drift-prone, so it stays
+      // in the minimal retry payload too.
+      const username = meta.username || (await generateUniqueUsername(user.email));
       const fullPayload = {
         id: user.id,
         full_name: meta.full_name || meta.name || null,
+        username,
         avatar_url: googleAvatar, // column added in migration 20260615
         updated_at: new Date().toISOString(),
       };
@@ -83,9 +131,17 @@ const syncProfileFromMetadata = async (user, profileData) => {
       return;
     }
 
-    // UPDATE path — backfill only the avatar when missing.
+    // UPDATE path — backfill the avatar AND username when missing. The username
+    // backfill self-heals any row whose profiles.username is still NULL: password
+    // accounts get it from user_metadata, OAuth (Google) accounts (no metadata
+    // username) get a freshly generated one. Runs once per affected user — the
+    // next session sees a non-null username and skips. A UNIQUE collision here
+    // throws 23505 and is logged below — non-fatal, auth still proceeds.
     const patch = {};
     if (!profileData.avatar_url && googleAvatar) patch.avatar_url = googleAvatar;
+    if (!profileData.username) {
+      patch.username = meta.username || (await generateUniqueUsername(user.email));
+    }
     if (Object.keys(patch).length === 0) return;
 
     const { error } = await supabase
@@ -534,13 +590,25 @@ export const AuthProvider = ({ children }) => {
       // Attempt to sign up directly - let Supabase handle duplicate email checking.
       // username is stored in user_metadata and synced to profiles on first
       // authenticated session (see syncProfileFromMetadata).
+      // emailRedirectTo deep-links the confirmation link back into the app
+      // (gafi:// in standalone, exp:// in Expo Go) via the "gafi" scheme.
+      // Username is optional on the form. When blank, auto-generate one from the
+      // email local-part + random suffix so the profiles row always carries a
+      // username (the Friends feature keys on it). A user-supplied username was
+      // already format-validated and availability-checked on the SignUpScreen.
+      const finalUsername = username && username.trim()
+        ? username.trim()
+        : await generateUniqueUsername(email);
+
+      const redirectUrl = Linking.createURL('');
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
+          emailRedirectTo: redirectUrl,
           data: {
             full_name: name,
-            ...(username ? { username } : {}),
+            username: finalUsername,
           },
         }
       });
@@ -767,7 +835,14 @@ export const AuthProvider = ({ children }) => {
       // swap to <LoadingScreen>, which unmounts the auth navigator and
       // destroys the navigation stack.  Screens use local loading state.
 
-      const { error } = await supabase.auth.resetPasswordForEmail(email);
+      // resetPasswordForEmail's 2nd arg is the options object and the key is
+      // `redirectTo` (NOT a nested options/emailRedirectTo like signUp). This
+      // only affects the magic-link email variant; the app's OTP-code flow
+      // (verifyOtp type:'recovery') is unaffected, so it's a safe addition.
+      const redirectUrl = Linking.createURL('');
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: redirectUrl,
+      });
       if (error) throw error;
 
       return { success: true };

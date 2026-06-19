@@ -81,6 +81,59 @@ class ProfileService {
   }
 
   /**
+   * Validate a username's format (synchronous, no network).
+   * Mirrors the DB constraints: 3-30 chars, letters/numbers/underscore only.
+   * @param {string} username
+   * @returns {{ valid: boolean, error?: string }}
+   */
+  static validateUsername(username) {
+    const value = (username || '').trim();
+
+    if (value.length < 3) {
+      return { valid: false, error: 'Username must be at least 3 characters' };
+    }
+    if (value.length > 30) {
+      return { valid: false, error: 'Username must be 30 characters or fewer' };
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(value)) {
+      return { valid: false, error: 'Use only letters, numbers, and underscores' };
+    }
+
+    return { valid: true };
+  }
+
+  /**
+   * Check whether a username is free. Runs at signup time when the user is
+   * UNAUTHENTICATED, so it goes through the `is_username_available` RPC
+   * (SECURITY DEFINER) rather than a direct `profiles` SELECT, which RLS
+   * would hide from the anon role. Same pattern as `check_email_exists`.
+   * @param {string} username
+   * @returns {Promise<boolean>} true if available
+   */
+  static async isUsernameAvailable(username) {
+    const normalized = (username || '').trim();
+    if (!normalized) return false;
+
+    try {
+      const { data, error } = await supabase.rpc('is_username_available', {
+        check_username: normalized,
+      });
+
+      if (error) {
+        console.error('Error checking username availability:', error);
+        // Fail open: a transient/RPC error shouldn't paint every username as
+        // taken. The DB unique index on username is the real guard at insert.
+        return true;
+      }
+
+      return data === true;
+    } catch (err) {
+      console.error('Error in isUsernameAvailable:', err);
+      return true;
+    }
+  }
+
+  /**
    * Get current user profile
    * @returns {Promise<object|null>} User profile or null
    */

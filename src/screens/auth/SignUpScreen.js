@@ -12,6 +12,7 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Linking from 'expo-linking';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -218,6 +219,9 @@ const SignUpScreen = ({ navigation }) => {
           const { error } = await supabase.auth.resend({
             type: 'signup',
             email: email.trim(),
+            options: {
+              emailRedirectTo: Linking.createURL(''),
+            },
           });
           if (error) {
             toast.error('Resend failed', 'Could not resend the email. Try again.');
@@ -444,7 +448,7 @@ const SignUpScreen = ({ navigation }) => {
               )}
             </View>
             {errors.username && <Text style={styles.errorText}>{errors.username}</Text>}
-            {username.trim() && !errors.username && !checkingUsername && (
+            {!errors.username && !checkingUsername && usernameAvailable !== null && (
               <Text style={[styles.hintText, usernameAvailable ? styles.successText : styles.errorText]}>
                 {usernameAvailable ? '✓ Username is available' : '✗ Username is not available'}
               </Text>

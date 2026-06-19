@@ -47,11 +47,15 @@ export class FriendService {
         return [];
       }
 
-      // Search profiles table directly by username or full_name
+      // Search profiles table directly by username or full_name.
+      // select('*') (not a named column list) so a live DB missing the
+      // avatar_url column (migration 20260615 not yet applied = schema drift)
+      // can't 400 the whole query and silently return zero rows → "No users
+      // found". The map below reads avatar_url defensively (u.avatar_url || null).
       const term = searchTerm.trim();
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, username, full_name, avatar_url')
+        .select('*')
         .or(`username.ilike.%${term}%,full_name.ilike.%${term}%`)
         .neq('id', currentUser)
         .limit(20);
@@ -170,7 +174,7 @@ export class FriendService {
       const requesterIds = requestsData.map(req => req.user_id);
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, full_name, username, avatar_url')
+        .select('*') // drift-tolerant: a missing avatar_url column won't 400 this lookup
         .in('id', requesterIds);
 
       if (profilesError) {
@@ -280,7 +284,7 @@ export class FriendService {
       // Get profile data for friends separately
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, full_name, username, avatar_url')
+        .select('*') // drift-tolerant: a missing avatar_url column won't 400 this lookup
         .in('id', friendIds);
 
       if (profilesError) {

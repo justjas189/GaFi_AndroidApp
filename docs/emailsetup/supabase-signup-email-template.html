@@ -1,0 +1,116 @@
+<!-- GaFi · Supabase Signup Confirmation Email -->
+<!-- Paste in Supabase Dashboard > Authentication > Email Templates > Confirm signup -->
+<!-- IMPORTANT: replace YOUR_LIVE_IMAGE_URL_HERE with the hosted GaFi logo URL (e.g. Netlify). -->
+<!-- Email-safe: table layout + inline CSS. Dark mode set via bgcolor + inline color so it holds in Gmail/Outlook. -->
+<!--[if mso]>
+<style type="text/css">
+  body, table, td, a { font-family: 'Segoe UI', Arial, sans-serif !important; }
+  .btn-fallback { background-color: #ff7a00 !important; }
+</style>
+<![endif]-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#121212" style="margin:0; padding:0; background-color:#121212;">
+  <tr>
+    <td align="center" style="padding:24px 12px;">
+
+      <!-- Card -->
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" bgcolor="#1c1c1c" style="width:600px; max-width:600px; background-color:#1c1c1c; border:1px solid rgba(255,255,255,0.1); border-radius:24px; overflow:hidden; font-family:-apple-system, 'Segoe UI', Roboto, Arial, sans-serif;">
+
+        <!-- Header -->
+        <tr>
+          <td align="center" bgcolor="#1c1c1c" style="background-color:#1c1c1c; padding:36px 30px 30px; border-bottom:2px solid #ff7a00;">
+            <img src="https://gafiauth.netlify.app/GaFi_Logo_Mark.png" alt="GaFi logo" width="96" height="96" style="display:block; width:96px; height:96px; border-radius:22px; margin:0 auto 18px;">
+            <h1 style="margin:0; color:#f5f5f5; font-size:28px; line-height:1.2; font-weight:800; letter-spacing:-0.5px;">
+              Welcome to GaFi!
+            </h1>
+            <p style="margin:8px 0 0; color:#c9c9c9; font-size:15px; line-height:1.5;">
+              Confirm your email to start leveling up your money.
+            </p>
+          </td>
+        </tr>
+
+        <!-- Intro -->
+        <tr>
+          <td align="center" style="padding:34px 30px 8px;">
+            <h2 style="margin:0 0 12px; color:#f5f5f5; font-size:22px; font-weight:700;">
+              Almost there 🎉
+            </h2>
+            <p style="margin:0; color:#9a9a9a; font-size:15px; line-height:1.6;">
+              We're stoked to have you. Confirm your email address to finish setting up your account and start tracking, budgeting, and earning XP.
+            </p>
+          </td>
+        </tr>
+
+        <!-- Bulletproof button -->
+        <tr>
+          <td align="center" style="padding:28px 30px 8px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" bgcolor="#ff7a00" class="btn-fallback" style="background-color:#ff7a00; background-image:linear-gradient(135deg,#ff7a00,#ffb68b); border-radius:14px;">
+                  <a href="{{ .ConfirmationURL }}" target="_blank" style="display:inline-block; padding:16px 36px; color:#1c1c1c; font-size:16px; font-weight:700; text-decoration:none; font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;">
+                    Confirm your email
+                  </a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- What's next -->
+        <tr>
+          <td style="padding:24px 30px 8px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#161616" style="background-color:#161616; border:1px solid rgba(255,255,255,0.1); border-left:3px solid #ff7a00; border-radius:14px;">
+              <tr>
+                <td style="padding:20px 22px;">
+                  <h3 style="margin:0 0 12px; color:#ff7a00; font-size:15px; font-weight:700;">What's next?</h3>
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr><td style="padding:5px 0; color:#c9c9c9; font-size:14px; line-height:1.5;">📊&nbsp;&nbsp;Track daily expenses and income</td></tr>
+                    <tr><td style="padding:5px 0; color:#c9c9c9; font-size:14px; line-height:1.5;">🎯&nbsp;&nbsp;Set personalized budget goals</td></tr>
+                    <tr><td style="padding:5px 0; color:#c9c9c9; font-size:14px; line-height:1.5;">🤖&nbsp;&nbsp;Get AI insights from Koin, your mascot</td></tr>
+                    <tr><td style="padding:5px 0; color:#c9c9c9; font-size:14px; line-height:1.5;">📈&nbsp;&nbsp;Earn XP and rank up as you save</td></tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Fallback link -->
+        <tr>
+          <td style="padding:16px 30px 8px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#161616" style="background-color:#161616; border:1px solid rgba(255,255,255,0.1); border-radius:12px;">
+              <tr>
+                <td align="center" style="padding:18px 20px;">
+                  <p style="margin:0 0 8px; color:#9a9a9a; font-size:13px;">Button not working? Paste this link into your browser:</p>
+                  <p style="margin:0; color:#ffb68b; font-size:12px; word-break:break-all; line-height:1.5;">{{ .ConfirmationURL }}</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Security note -->
+        <tr>
+          <td style="padding:16px 30px 28px;">
+            <p style="margin:0; color:#9a9a9a; font-size:13px; line-height:1.6;">
+              <span style="color:#4CAF50; font-weight:700;">🔒 Security note:</span> You're getting this because someone signed up for GaFi with this address. If that wasn't you, ignore this email — no account will be created.
+            </p>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td align="center" bgcolor="#0e0e0e" style="background-color:#0e0e0e; padding:26px 30px; border-top:1px solid rgba(255,255,255,0.08);">
+            <p style="margin:0 0 8px; color:#bdbdbd; font-size:14px;">Thanks for choosing GaFi!</p>
+            <p style="margin:0 0 16px; color:#9a9a9a; font-size:12px;">
+              Need help? <a href="mailto:support@gafi.app" style="color:#ffb68b; text-decoration:none;">support@gafi.app</a>
+            </p>
+            <p style="margin:0; color:#6f6f6f; font-size:11px;">© 2026 GaFi. All rights reserved.</p>
+          </td>
+        </tr>
+
+      </table>
+      <!-- /Card -->
+
+    </td>
+  </tr>
+</table>

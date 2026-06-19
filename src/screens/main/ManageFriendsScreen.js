@@ -274,7 +274,7 @@ const ManageFriendsScreen = ({ navigation }) => {
             <Ionicons name="search" size={20} color={theme.colors.textSecondary} />
             <TextInput
               style={[styles.searchInput, { color: theme.colors.text }]}
-              placeholder="Search by username or name..."
+              placeholder="Search by name or username..."
               placeholderTextColor={theme.colors.textSecondary}
               value={searchTerm}
               onChangeText={(text) => {

@@ -11,15 +11,23 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemeContext } from '../../context/ThemeContext';
-import { useGameAudio } from '../../context/AudioContext';
+import { useGameAudio, PLAYBACK_MODE } from '../../context/AudioContext';
 import { FONTS } from '../../theme/typography';
 
 // Music attribution — all BGM tracks are composed by Pix.
 const PIX_YOUTUBE_URL = 'https://www.youtube.com/@Pixverses';
 
+// Segmented playback-mode control. Hoisted so the array identity is stable
+// across renders. `list` reads as "the whole tracklist"; `repeat` as "this one
+// again" — the two universal music-player glyphs for these behaviours.
+const PLAYBACK_OPTIONS = [
+  { mode: PLAYBACK_MODE.LOOP, label: 'Loop', icon: 'repeat' },
+  { mode: PLAYBACK_MODE.ALL, label: 'Play All', icon: 'list' },
+];
+
 const BackgroundMusicScreen = ({ navigation }) => {
   const { theme } = useContext(ThemeContext);
-  const { tracks, currentBgmTrack, changeBgmTrack } = useGameAudio();
+  const { tracks, currentBgmTrack, changeBgmTrack, playbackMode, changePlaybackMode } = useGameAudio();
 
   const handleOpenPix = () => {
     Linking.openURL(PIX_YOUTUBE_URL).catch(() => {
@@ -46,6 +54,37 @@ const BackgroundMusicScreen = ({ navigation }) => {
         {/* ── Track selector ── */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Choose a Track</Text>
+
+          {/* Playback mode — Loop this track vs. play the whole list in order */}
+          <View style={[styles.segmented, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            {PLAYBACK_OPTIONS.map((option) => {
+              const selected = playbackMode === option.mode;
+              return (
+                <TouchableOpacity
+                  key={option.mode}
+                  style={[styles.segment, selected && { backgroundColor: theme.colors.primary }]}
+                  onPress={() => changePlaybackMode(option.mode)}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                >
+                  <Ionicons
+                    name={option.icon}
+                    size={16}
+                    color={selected ? '#fff' : theme.colors.textSecondary}
+                  />
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      { color: selected ? '#fff' : theme.colors.textSecondary },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
           {tracks.map((track) => {
             const active = track.key === currentBgmTrack;
@@ -162,6 +201,30 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     opacity: 0.8,
+  },
+
+  // Playback-mode segmented control (nested-pill: a track-card-style shell with
+  // two equal segments; the active one fills with the brand orange).
+  segmented: {
+    flexDirection: 'row',
+    padding: 4,
+    marginBottom: 16,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  segment: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 9,
+  },
+  segmentText: {
+    fontFamily: FONTS.bodySemiBold,
+    fontSize: 14,
+    letterSpacing: 0.2,
   },
 
   // Track rows (mirrors SettingsScreen's settingItem styling)

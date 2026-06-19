@@ -7,10 +7,11 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
-import { View, Text, ActivityIndicator } from 'react-native';
+import { View } from 'react-native';
 
 // Enhanced Components & Utilities
 import ErrorBoundary from './src/components/ErrorBoundary';
+import LoadingScreen from './src/components/LoadingScreen';
 import DebugUtils from './src/utils/DebugUtils';
 import PerformanceManager from './src/utils/PerformanceManager';
 import SecurityManager from './src/utils/SecurityManager';
@@ -45,24 +46,9 @@ const Stack = createStackNavigator();
 // inside BottomSheetModalProvider and above the screen stack. They now mount
 // only on the authenticated Main surface (not during Onboarding).
 
-// Simple loading screen component
-const LoadingScreen = ({ message }) => (
-  <View style={{ 
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    backgroundColor: '#1C1C1C' 
-  }}>
-    <ActivityIndicator size="large" color="#FF6B00" />
-    <Text style={{ 
-      color: '#FFF', 
-      marginTop: 20, 
-      fontSize: 16 
-    }}>
-      {message || 'Loading...'}
-    </Text>
-  </View>
-);
+// LoadingScreen (branded, theme-aware) lives in src/components/LoadingScreen.js.
+// It is resilient to rendering outside ThemeProvider (the boot gate below) and
+// before fonts load, so it is safe to use both here and inside AppNavigator.
 
 // Navigation container with theme from ThemeContext
 const ThemedNavigationContainer = ({ children }) => {

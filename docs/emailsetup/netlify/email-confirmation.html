@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <title>Email Confirmed · GaFi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #121212;
+            --card: #1c1c1c;
+            --glass: rgba(255, 255, 255, 0.04);
+            --border: rgba(255, 255, 255, 0.1);
+            --orange: #ff7a00;
+            --peach: #ffb68b;
+            --green: #4CAF50;
+            --text: #f5f5f5;
+            --muted: #9a9a9a;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            background-image:
+                radial-gradient(900px circle at 50% -10%, rgba(255, 122, 0, 0.18), transparent 55%),
+                radial-gradient(700px circle at 100% 110%, rgba(255, 182, 139, 0.08), transparent 50%);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            background: var(--card);
+            background-image: linear-gradient(180deg, var(--glass), transparent 40%);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            padding: 44px 40px 36px;
+            max-width: 480px;
+            width: 100%;
+            text-align: center;
+            animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(24px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Logo with gamified glow ring */
+        .logo-wrap {
+            position: relative;
+            width: 112px;
+            height: 112px;
+            margin: 0 auto 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo-wrap::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255, 122, 0, 0.45), transparent 68%);
+            filter: blur(8px);
+            animation: pulse 3.2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(0.92); opacity: 0.7; }
+            50%      { transform: scale(1.06); opacity: 1; }
+        }
+
+        .logo-wrap img {
+            position: relative;
+            width: 100px;
+            height: 100px;
+            object-fit: contain;
+            border-radius: 22px;
+            display: block;
+        }
+
+        /* Success badge */
+        .checkmark {
+            width: 56px;
+            height: 56px;
+            background: var(--green);
+            border-radius: 50%;
+            margin: 0 auto 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 24px rgba(76, 175, 80, 0.35);
+            animation: pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.35s both;
+        }
+
+        @keyframes pop {
+            0%   { transform: scale(0); }
+            100% { transform: scale(1); }
+        }
+
+        .checkmark svg { width: 28px; height: 28px; fill: #fff; }
+
+        h1 {
+            font-family: 'Sora', sans-serif;
+            font-size: 30px;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 16px;
+            color: var(--muted);
+            margin-bottom: 28px;
+        }
+
+        .subtitle b { color: var(--peach); font-weight: 600; }
+
+        .message {
+            font-size: 15px;
+            color: #d8d8d8;
+            line-height: 1.6;
+            background: var(--glass);
+            border: 1px solid var(--border);
+            border-left: 3px solid var(--orange);
+            padding: 18px 20px;
+            border-radius: 14px;
+            text-align: left;
+            margin-bottom: 28px;
+        }
+
+        .message strong { color: var(--text); display: block; margin-bottom: 6px; }
+
+        .action-button {
+            font-family: 'Sora', sans-serif;
+            background: linear-gradient(135deg, var(--orange), var(--peach));
+            color: #1c1c1c;
+            padding: 16px 34px;
+            border: none;
+            border-radius: 14px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            box-shadow: 0 8px 22px rgba(255, 122, 0, 0.35);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .action-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(255, 122, 0, 0.45);
+        }
+
+        .action-button:focus-visible {
+            outline: 2px solid var(--peach);
+            outline-offset: 3px;
+        }
+
+        .app-info {
+            margin-top: 28px;
+            padding: 20px;
+            background: var(--glass);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            text-align: left;
+        }
+
+        .app-info h3 {
+            font-family: 'Sora', sans-serif;
+            color: var(--orange);
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .app-info ul { list-style: none; }
+
+        .app-info li {
+            color: #c9c9c9;
+            font-size: 14px;
+            line-height: 1.5;
+            padding: 6px 0 6px 26px;
+            position: relative;
+        }
+
+        .app-info li::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 12px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--orange), var(--peach));
+        }
+
+        .footer {
+            font-size: 13px;
+            color: var(--muted);
+            margin-top: 28px;
+            padding-top: 22px;
+            border-top: 1px solid var(--border);
+            line-height: 1.7;
+        }
+
+        .footer a { color: var(--peach); text-decoration: none; }
+
+        @media (max-width: 600px) {
+            .container { padding: 34px 22px 28px; border-radius: 20px; }
+            h1 { font-size: 26px; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before { animation: none !important; transition: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo-wrap">
+            <img src="GaFi_Logo_Mark.png" alt="GaFi logo">
+        </div>
+
+        <div class="checkmark">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z"/>
+            </svg>
+        </div>
+
+        <h1>You're verified!</h1>
+        <p class="subtitle">Welcome to <b>GaFi</b> — let's level up your money.</p>
+
+        <div class="message">
+            <strong>🎉 Your email is confirmed.</strong>
+            Head back to the GaFi app and sign in to start tracking expenses, hitting budget goals, and earning XP.
+        </div>
+
+        <a href="#" class="action-button" onclick="openApp()">
+            Open GaFi
+        </a>
+
+        <div class="app-info">
+            <h3>What's next?</h3>
+            <ul>
+                <li>Track daily expenses and income</li>
+                <li>Set personalized budget goals</li>
+                <li>Get AI insights from Koin, your mascot</li>
+                <li>Earn XP and rank up as you save</li>
+            </ul>
+        </div>
+
+        <div class="footer">
+            <p>Thanks for choosing GaFi!</p>
+            <p>Need help? <a href="mailto:support@gafi.app">support@gafi.app</a></p>
+        </div>
+    </div>
+
+    <script>
+        function openApp() {
+            const appScheme = 'gafi://';
+            window.location.href = appScheme;
+            setTimeout(() => {
+                alert('Please open the GaFi app manually and sign in with your credentials.');
+            }, 2000);
+        }
+
+        // Gentle nudge: after 5s, flip the button to a "redirecting" state
+        setTimeout(() => {
+            const button = document.querySelector('.action-button');
+            if (button) {
+                button.style.background = 'linear-gradient(135deg, #4CAF50, #69d36e)';
+                button.style.color = '#fff';
+                button.textContent = 'Redirecting to GaFi…';
+                setTimeout(openApp, 1000);
+            }
+        }, 5000);
+    </script>
+</body>
+</html>
