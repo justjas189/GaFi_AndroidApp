@@ -87,9 +87,12 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.gafi.app.dev'
+    // FIXED compile package — never per-variant. Flipping this moves the generated
+    // BuildConfig/R class package and breaks Java imports ("cannot find symbol").
+    namespace 'com.gafi.app'
     defaultConfig {
-        applicationId 'com.gafi.app.dev'
+        // Release / production id. Debug (dev-client) gets `.dev` via applicationIdSuffix below.
+        applicationId 'com.gafi.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -107,6 +110,10 @@ android {
     }
     buildTypes {
         debug {
+            // Dev-client / development EAS profile installs as com.gafi.app.dev,
+            // side-by-side with the production com.gafi.app. Keyed on buildType (not
+            // APP_VARIANT env) so it's deterministic and dodges gradle-daemon env staleness.
+            applicationIdSuffix '.dev'
             signingConfig signingConfigs.debug
         }
         release {
