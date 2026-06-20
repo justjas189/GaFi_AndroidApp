@@ -11,7 +11,10 @@ module.exports = function(api) {
         "safe": false,
         "allowUndefined": true
       }],
-      'react-native-reanimated/plugin'
+      // Reanimated 4 moved the worklets Babel plugin into the separate
+      // react-native-worklets package. Reference it directly (the reanimated
+      // plugin is just a re-export) and keep it LAST in the plugins list.
+      'react-native-worklets/plugin'
     ],
   };
 }; 
