@@ -87,11 +87,15 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    // FIXED compile package — never per-variant. Flipping this moves the generated
-    // BuildConfig/R class package and breaks Java imports ("cannot find symbol").
-    namespace 'com.gafi.app'
+    // Compile-time package for the generated R / BuildConfig classes. MUST match the
+    // Kotlin source package (com.gafi.app.dev — see MainActivity.kt / MainApplication.kt)
+    // and the manifest's relative .MainActivity / .MainApplication names, which both
+    // resolve against this. This is NOT the installed id (that's applicationId below) —
+    // changing it without moving/renaming the source files breaks R/BuildConfig resolution.
+    namespace 'com.gafi.app.dev'
     defaultConfig {
-        // Release / production id. Debug (dev-client) gets `.dev` via applicationIdSuffix below.
+        // Installed application id. Release/production = com.gafi.app; debug (dev-client)
+        // gets `.dev` via applicationIdSuffix below. Independent of the namespace above.
         applicationId 'com.gafi.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
