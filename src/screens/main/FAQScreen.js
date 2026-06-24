@@ -34,7 +34,7 @@ const FAQ_ITEMS = [
   {
     id: 'budget',
     q: 'How do I set or change my budget?',
-    a: 'Go to Explore → Budget Management. Set a monthly limit and split it across categories. GaFI follows the 50/30/20 rule by default (needs/wants/savings) but you can adjust every category.',
+    a: 'Go to Profile → Budget. Tap your monthly budget amount to set and update your limit. GaFi will automatically track your spending using the 50/30/20 rule (needs/wants/savings) based on your new total.',
   },
   {
     id: 'story-mode',

@@ -502,7 +502,10 @@ export const DataProvider = ({ children }) => {
       // Refresh local state by reloading all data (defer AI insights to avoid blocking)
       await loadData({ deferInsights: true });
 
-      return true;
+      // Return the inserted expense row (carries the DB-generated `id`) so callers
+      // can thread it into optimistic local state for later deletion. Still truthy
+      // on success, so existing `if (!success)` checks keep working unchanged.
+      return result.data || true;
     } catch (error) {
       console.error('Error adding expense:', error);
       setError(error.message);

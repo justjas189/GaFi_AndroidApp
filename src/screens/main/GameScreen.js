@@ -1,5 +1,5 @@
 import React, { useState, useRef, useContext, useEffect, useCallback, useMemo } from 'react';
-import { View, StyleSheet, ImageBackground, Dimensions, TouchableWithoutFeedback, Animated, Modal, Text, TextInput, TouchableOpacity, ScrollView, SectionList, Easing, Image, useWindowDimensions, AppState } from 'react-native';
+import { View, StyleSheet, ImageBackground, Dimensions, TouchableWithoutFeedback, Animated, Modal, Text, TextInput, TouchableOpacity, ScrollView, SectionList, Easing, Image, useWindowDimensions, AppState, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, useIsFocused } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
@@ -13,6 +13,10 @@ import AnimatedBar from '../../components/AnimatedBar';
 import gameDatabaseService from '../../services/GameDatabaseService';
 import { normalizeCategory } from '../../utils/categoryUtils';
 import { getCategoryIcon } from '../../utils/categoryIcons';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+// ReanimatedSwipeable (not the deprecated legacy Swipeable) — this project runs
+// Reanimated 4, so the worklet-driven swipeable is the supported path here.
+import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import {
   STORY_DAILY_TASKS,
   STORY_DAY_COUNTS,
@@ -454,6 +458,11 @@ export default function BuildScreen() {
   const pendingEntrySpawnRef = useRef(null);
 
   const profileUserType = user?.userType === 'employee' ? 'employee' : 'student';
+  // Tutorial is scripted around a single "workplace" node — School for Students,
+  // Office for Employees. Used to gate the arrival + expense tutorial conditions
+  // and to keep the on-screen copy role-appropriate.
+  const tutorialWorkplaceId = profileUserType === 'employee' ? 'office' : 'school';
+  const tutorialWorkplaceName = profileUserType === 'employee' ? 'Office' : 'School';
 
   // Character position — resolve spawn point from percentages using initial screen size
   const initialSpawn = { x: INITIAL_WIDTH * (currentMap.spawnPoint.xPct ?? 0.5), y: INITIAL_HEIGHT * (currentMap.spawnPoint.yPct ?? 0.5) };
@@ -552,14 +561,17 @@ export default function BuildScreen() {
   const [tutorialConditions, setTutorialConditions] = useState(new Set()); // Tracks step completion conditions
   const [tutorialViewedCar, setTutorialViewedCar] = useState(false); // Track if car transport was viewed in tutorial
 
+  // Role-based map gate. Applies to BOTH Story and Tutorial so the travel list
+  // matches the Student/Employee profile (Student → School, Employee → Office).
+  // Other modes (e.g. custom/null) impose no restriction.
   const isStoryModeMapAllowed = useCallback((mapId) => {
-    if (gameMode !== 'story') return true;
+    if (gameMode !== 'story' && gameMode !== 'tutorial') return true;
     const allowedMaps = STORY_MODE_ALLOWED_MAPS[profileUserType] || STORY_MODE_ALLOWED_MAPS.student;
     return allowedMaps.includes(mapId);
   }, [gameMode, profileUserType]);
 
   const filterStoryModeDestinations = useCallback((destinations = []) => {
-    if (gameMode !== 'story') return destinations;
+    if (gameMode !== 'story' && gameMode !== 'tutorial') return destinations;
     return destinations.filter((destId) => isStoryModeMapAllowed(destId));
   }, [gameMode, isStoryModeMapAllowed]);
 
@@ -645,7 +657,7 @@ export default function BuildScreen() {
     {
       id: 'exit_door',
       title: "The Exit Door 🚪",
-      message: "Walk to the Exit Door to see the places you can go! Choose School and learn about transport expenses.",
+      message: `Walk to the Exit Door to see the places you can go! Choose ${tutorialWorkplaceName} and learn about transport expenses.`,
       nextAlwaysEnabled: false,
       conditionKey: 'arrived_at_school',
       position: 'bottom',
@@ -653,8 +665,10 @@ export default function BuildScreen() {
     },
     {
       id: 'school_intro',
-      title: "Welcome to School! 🏫",
-      message: "This is the School Campus! See the NPCs here? You can approach the Librarian to buy school supplies, or the Canteen staff to buy food. Walk to either one and log an expense — this is just practice!",
+      title: `Welcome to your ${tutorialWorkplaceName}! ${profileUserType === 'employee' ? '🏢' : '🏫'}`,
+      message: profileUserType === 'employee'
+        ? "Welcome to the Office! See the NPCs here? Approach the staff and log a practice expense — try the Pantry for food. This is just practice!"
+        : "This is the School Campus! See the NPCs here? You can approach the Librarian to buy school supplies, or the Canteen staff to buy food. Walk to either one and log an expense — this is just practice!",
       nextAlwaysEnabled: false,
       conditionKey: 'school_expense_logged',
       position: 'top',
@@ -1056,6 +1070,13 @@ export default function BuildScreen() {
 
   // Content area dimensions (for accurate bounds detection)
   const [contentSize, setContentSize] = useState({ width: screenWidth, height: screenHeight });
+  // Largest content height seen for the current width. The game's tile/collision
+  // grid is keyed off contentSize, so it MUST stay stable. With the activity's
+  // windowSoftInputMode=adjustResize, opening the expense modal's keyboard shrinks
+  // the content View → onLayout would feed a shorter height → tiles remap → the
+  // sprite's fixed pixel position lands on a lower (wall) tile → movement locks
+  // ("stuck on map"). We pin the height against that transient shrink. (Bug 2)
+  const contentBaselineRef = useRef({ width: 0, height: 0 });
 
   // ─── NPC helpers ────────────────────────────────────────────────────
   // Returns true if the tile at (tileX, tileY) is occupied by an NPC on the current map
@@ -1269,6 +1290,49 @@ export default function BuildScreen() {
       return nextFull;
     });
   }, [gameMode, getActiveStoryDay]);
+
+  // After a logged expense's DB row is created, stamp its Supabase `id` onto the
+  // optimistic runtime entry (matched by the timestamp captured at log time).
+  // Day-targeted (not "active day") because the async insert can resolve after the
+  // player has advanced days. Pure id attach — does not touch counts/totals, so no
+  // re-evaluation is needed. handleDeleteExpense reads this id to delete the row.
+  const attachExpenseDbIdForDay = useCallback((dayNumber, loggedAt, dbId) => {
+    if (!dbId || dayNumber == null || !loggedAt) return;
+    setDailyTaskRuntimeByDay((prev) => {
+      const base = prev[dayNumber];
+      if (!base) return prev;
+      const entries = base.expenseEntries || [];
+      const idx = entries.findIndex((e) => e?.timestamp === loggedAt && e?.dbId == null);
+      if (idx === -1) return prev;
+
+      const nextEntries = [...entries];
+      nextEntries[idx] = { ...nextEntries[idx], dbId };
+      const nextFull = { ...prev, [dayNumber]: { ...base, expenseEntries: nextEntries } };
+      dailyTaskRuntimeByDayRef.current = nextFull;
+      return nextFull;
+    });
+  }, []);
+
+  // Permanent-failure twin of attachExpenseDbIdForDay. When the background insert
+  // rejects (no dbId will ever arrive), flag the still-pending optimistic entry so
+  // its row stops spinning forever and shows a tap-to-dismiss error instead. Same
+  // day-targeting + timestamp match; only touches entries that never got a dbId.
+  const markExpenseSyncFailedForDay = useCallback((dayNumber, loggedAt) => {
+    if (dayNumber == null || !loggedAt) return;
+    setDailyTaskRuntimeByDay((prev) => {
+      const base = prev[dayNumber];
+      if (!base) return prev;
+      const entries = base.expenseEntries || [];
+      const idx = entries.findIndex((e) => e?.timestamp === loggedAt && e?.dbId == null);
+      if (idx === -1) return prev;
+
+      const nextEntries = [...entries];
+      nextEntries[idx] = { ...nextEntries[idx], syncFailed: true };
+      const nextFull = { ...prev, [dayNumber]: { ...base, expenseEntries: nextEntries } };
+      dailyTaskRuntimeByDayRef.current = nextFull;
+      return nextFull;
+    });
+  }, []);
 
   const completedDaysHistory = useMemo(() => {
     if (gameMode !== 'story') return [];
@@ -1681,6 +1745,83 @@ export default function BuildScreen() {
     activeSessionId,
   ]);
 
+  // Solution B — remove a logged expense from the active Story day. Reverses the
+  // exact same state the log path mutates (runtime day-state + the three live
+  // budget mirrors), then re-runs the verifier so deleting an accidental Wants
+  // immediately unlocks the `max: 0 Wants` gates. targetIndex indexes the active
+  // day's expenseEntries (the array the Today's Expenses modal renders).
+  const handleDeleteExpense = useCallback((targetIndex) => {
+    if (gameMode !== 'story') return;
+
+    const activeDay = getActiveStoryDay();
+    const currentEntries = dailyTaskRuntimeByDayRef.current?.[activeDay]?.expenseEntries || [];
+    const entry = currentEntries[targetIndex];
+    if (!entry) return;
+
+    const amount = Number(entry.amount) || 0;
+    const category = entry.category; // already title-case normalized at log time
+    const budgetType = CATEGORY_BUDGET_MAP[category] || 'wants';
+    const dbId = entry.dbId || null; // Supabase row id, stamped on after insert resolved
+
+    // 1) Reverse the per-day runtime — the source of truth for task validation.
+    updateDailyTaskRuntimeForActiveDay((dayState) => {
+      dayState.expenseEntries.splice(targetIndex, 1);
+      dayState.expenseCount = Math.max(0, (dayState.expenseCount || 0) - 1);
+      dayState.expenseTotal = Math.max(0, (dayState.expenseTotal || 0) - amount);
+      dayState.categoryCounts[category] = Math.max(0, (dayState.categoryCounts[category] || 0) - 1);
+      dayState.categoryTotals[category] = Math.max(0, (dayState.categoryTotals[category] || 0) - amount);
+      if ((dayState.travelCount || 0) > 0 && budgetType === 'needs') {
+        dayState.needsAfterTravelCount = Math.max(0, (dayState.needsAfterTravelCount || 0) - 1);
+      }
+    });
+
+    // 2) Reverse the live budget mirrors: Today's Spending + 50/30/20 buckets.
+    setCategorySpending((prev) => ({
+      ...prev,
+      [category]: Math.max(0, (prev[category] || 0) - amount),
+    }));
+    setBudgetCategories((prev) => ({
+      ...prev,
+      [budgetType]: {
+        ...prev[budgetType],
+        spent: Math.max(0, (prev[budgetType].spent || 0) - amount),
+      },
+    }));
+    setWeeklySpending((prev) => Math.max(0, prev - amount));
+
+    // 3) Re-validate against the now-smaller array (reads the freshest runtime via
+    //    the ref, same as the log path) so newly-satisfiable gates unlock at once.
+    evaluateActiveStoryDayTasks();
+
+    // 4) Backend integrity: delete the matching Supabase row in the background.
+    //    Optimistic — the local state above already reflects the removal, so the UI
+    //    never waits on the network. Story-mode rows don't live in
+    //    DataContext.expenses, so DataContext.deleteExpense would no-op; delete the
+    //    row directly, scoped by user_id so RLS only ever clears the player's own row.
+    //    (fetchTodaySpending is a stable-closure fire-and-forget, kept out of deps.)
+    //    No dbId means the insert never landed (sync-failed dismissal or a still-
+    //    pending row) — there's nothing to delete, so steps 1-3 stand alone.
+    if (dbId && user?.id) {
+      (async () => {
+        try {
+          const { error } = await supabase
+            .from('expenses')
+            .delete()
+            .eq('id', dbId)
+            .eq('user_id', user.id);
+          if (error) {
+            console.warn('⚠️ Failed to delete expense row from Supabase:', error.message);
+          } else {
+            // Row is gone — reconcile Today's Spending from the source of truth.
+            fetchTodaySpending();
+          }
+        } catch (err) {
+          console.warn('⚠️ Supabase expense delete threw:', err?.message || err);
+        }
+      })();
+    }
+  }, [gameMode, getActiveStoryDay, updateDailyTaskRuntimeForActiveDay, evaluateActiveStoryDayTasks, user?.id]);
+
   useEffect(() => {
     if (gameMode !== 'story' || !activeSessionId) return;
     if (isHydratingDailyTaskStateRef.current) return;
@@ -1731,10 +1872,21 @@ export default function BuildScreen() {
   }, [gameMode, showLevelComplete, showDailyTaskPopup]);
 
 
-  // Handle layout to get actual content dimensions
+  // Handle layout to get actual content dimensions.
+  // Orientation is locked to portrait, so width never changes after the first
+  // measure. A same-width layout with a SHORTER height can only be the keyboard
+  // resizing the activity (adjustResize) — we ignore those so the game keeps a
+  // stable coordinate system. A new width (first measure / true layout change)
+  // or a taller height (keyboard dismissed) resets the baseline. (Bug 2)
   const handleContentLayout = (event) => {
     const { width: w, height: h } = event.nativeEvent.layout;
+    const base = contentBaselineRef.current;
+    if (w === base.width && h < base.height) {
+      console.log('📐 Ignoring keyboard-driven content shrink:', w, 'x', h, '(keeping', base.width, 'x', base.height + ')');
+      return;
+    }
     console.log('📐 Content area size:', w, 'x', h);
+    contentBaselineRef.current = { width: w, height: h };
     setContentSize({ width: w, height: h });
   };
 
@@ -1784,6 +1936,23 @@ export default function BuildScreen() {
     const size = collisionSystem.tileSize * scale;
     return size > 0 ? size : CHARACTER_SIZE;
   }, [contentSize.width, contentSize.height]);
+
+  // Defensive safety net (Bug 2): if the player's current tile is non-passable
+  // — e.g. a transient resize remapped the grid before handleContentLayout pinned
+  // it — snap to the nearest passable, non-NPC tile so taps can't get stuck.
+  // No-op when already on a valid tile.
+  const snapToPassableTileIfStuck = useCallback(() => {
+    if (!collisionSystem.initialized) return;
+    const here = characterPositionRef.current;
+    if (!here) return;
+    const tile = collisionSystem.pixelsToTiles(here.x, here.y, contentSize.width, contentSize.height);
+    if (collisionSystem.isPassable(tile.x, tile.y) && !isNPCTile(tile.x, tile.y)) return;
+    const safe = findNearestPassableExcludingNPCs(here.x, here.y);
+    const halfChar = getCharSize() / 2;
+    commitCharacterPosition(safe);
+    setAnimatedPosition(safe.x - halfChar, safe.y - halfChar);
+    console.log('🧭 Snapped player off non-passable tile after modal close:', safe);
+  }, [contentSize.width, contentSize.height, isNPCTile, findNearestPassableExcludingNPCs, getCharSize, commitCharacterPosition, setAnimatedPosition]);
 
   // Story Mode map restrictions by user profile (Student vs Employee)
   useEffect(() => {
@@ -2147,16 +2316,23 @@ export default function BuildScreen() {
     if (!user?.id) return; // Guard: don't overwrite state when auth is transiently unavailable
 
     try {
-      const startDateStr = storyStartDate.toISOString().split('T')[0];
-      const endDateStr = storyEndDate.toISOString().split('T')[0];
+      // Scope strictly to THIS session's real time window. expenses.date is a full
+      // timestamptz, so we filter by the exact start/end MOMENTS — not a truncated
+      // calendar date. Date-only bounds caused a fresh attempt (Try Again / Replay)
+      // started later the same day to re-sum the PREVIOUS attempt's rows, silently
+      // overwriting the reset weeklySpending (e.g. ₱1560 left instead of the full
+      // weekly budget). Timestamp scoping excludes anything logged before this
+      // session began, so a retry truly starts at ₱0 without deleting history.
+      const startIso = storyStartDate.toISOString();
+      const endIso = storyEndDate.toISOString();
 
       const { data, error } = await supabase
         .from('expenses')
         .select('amount, date, category')
         .eq('user_id', user?.id)
         .eq('app_mode', 'story')
-        .gte('date', startDateStr)
-        .lte('date', endDateStr);
+        .gte('date', startIso)
+        .lte('date', endIso);
 
       if (data) {
         const expenseTotal = data.reduce((sum, expense) => sum + expense.amount, 0);
@@ -2524,6 +2700,11 @@ export default function BuildScreen() {
       dailyTaskRuntimeByDayRef.current = {};
       setActiveStoryDay(1);
       dailyTaskAnnouncedDayRef.current = null;
+      // Clear any goal allocations carried over from a prior attempt. fetchWeeklySpending
+      // re-adds allocations to weeklySpending (they aren't stored as expense rows), so a
+      // stale value here would re-inflate the spend slate. The 'goals' branch below
+      // re-seeds {emergency:0, wants:0} for Level 2.
+      setGoalAllocations({});
 
       // Anchor Day 1's "Today's Spending" window to the exact start moment.
       applyInGameDayStart(startDate.toISOString());
@@ -2888,8 +3069,8 @@ export default function BuildScreen() {
 
     // ── Tutorial mode: skip all DB saves, just mark conditions ──
     if (tutorialActive && gameMode === 'tutorial') {
-      // Mark arrival conditions
-      if (savedDestination === 'school') markTutorialCondition('arrived_at_school');
+      // Mark arrival conditions (workplace = School for Students, Office for Employees)
+      if (savedDestination === tutorialWorkplaceId) markTutorialCondition('arrived_at_school');
       if (savedDestination === 'mall_1f' || savedDestination.startsWith('mall')) markTutorialCondition('arrived_at_mall');
       console.log('🎓 Tutorial: Skipped transport expense save (practice mode)');
       return;
@@ -2929,6 +3110,11 @@ export default function BuildScreen() {
 
   // Record transport expense (non-blocking, matches Canteen pattern)
   const recordTransportExpense = async (description, amount, category, subCategory) => {
+    // Capture a stable log timestamp + active day so the background insert can
+    // stamp its Supabase row id back onto this exact runtime entry (for deletion).
+    const loggedAt = new Date().toISOString();
+    const loggedDay = gameMode === 'story' ? getActiveStoryDay() : null;
+
     // Optimistic local state updates (instant)
     setCategorySpending(prev => ({
       ...prev,
@@ -2960,7 +3146,8 @@ export default function BuildScreen() {
           amount,
           note: description,
           source: 'transport',
-          timestamp: new Date().toISOString(),
+          timestamp: loggedAt,
+          dbId: null, // filled once the Supabase insert resolves (see below)
         });
         if ((dayState.travelCount || 0) > 0 && CATEGORY_BUDGET_MAP[normalizedCategory] === 'needs') {
           dayState.needsAfterTravelCount = (dayState.needsAfterTravelCount || 0) + 1;
@@ -2988,8 +3175,15 @@ export default function BuildScreen() {
       if (!success) {
         console.error('❌ Transport: Failed to save expense');
         toast.error('Sync failed', 'Your transport expense may not have been saved.');
+        // No dbId will ever arrive — mark the optimistic row so it stops spinning
+        // and offers a dismiss instead (handleDeleteExpense reverses it locally).
+        markExpenseSyncFailedForDay(loggedDay, loggedAt);
       } else {
         console.log(`✅ Transport: Recorded ${description}: ₱${amount}`);
+
+        // Stamp the new Supabase row id onto the optimistic runtime entry so a
+        // later swipe/trash delete can remove it from the backend too.
+        attachExpenseDbIdForDay(loggedDay, loggedAt, success?.id);
 
         // Persist session spending to Supabase (fire-and-forget)
         if (activeSessionId && gameMode === 'story') {
@@ -3166,66 +3360,24 @@ export default function BuildScreen() {
 
     logMovement(`📍 Calculating path from tile (${fromTile.x}, ${fromTile.y}) to (${toTile.x}, ${toTile.y})`);
 
-    const path = [];
-    let currentX = fromTile.x;
-    let currentY = fromTile.y;
+    // A* over the tile grid. Routes around walls/corners instead of the old
+    // greedy walk that dead-stopped on the first obstacle. NPC-occupied tiles
+    // are vetoed the same way the walker treats them so the path stays valid.
+    // fallbackToClosest: if the exact tile is unreachable, walk as far toward
+    // it as possible so the tap always gives visible feedback.
+    const tilePath = collisionSystem.findPath(
+      fromTile.x,
+      fromTile.y,
+      toTile.x,
+      toTile.y,
+      { isBlocked: isNPCTile, fallbackToClosest: true }
+    );
 
-    // Simple pathfinding: move towards target one tile at a time
-    // This uses a greedy approach - always move towards the goal
-    const maxSteps = 100; // Prevent infinite loops
-    let steps = 0;
-
-    while ((currentX !== toTile.x || currentY !== toTile.y) && steps < maxSteps) {
-      steps++;
-
-      // Determine best direction to move
-      const dx = toTile.x - currentX;
-      const dy = toTile.y - currentY;
-
-      // Try to move in the primary direction first
-      let moved = false;
-      const directions = [];
-
-      // Prioritize movement based on larger distance
-      if (Math.abs(dx) >= Math.abs(dy)) {
-        if (dx > 0) directions.push({ x: 1, y: 0, name: 'right' });
-        if (dx < 0) directions.push({ x: -1, y: 0, name: 'left' });
-        if (dy > 0) directions.push({ x: 0, y: 1, name: 'down' });
-        if (dy < 0) directions.push({ x: 0, y: -1, name: 'up' });
-      } else {
-        if (dy > 0) directions.push({ x: 0, y: 1, name: 'down' });
-        if (dy < 0) directions.push({ x: 0, y: -1, name: 'up' });
-        if (dx > 0) directions.push({ x: 1, y: 0, name: 'right' });
-        if (dx < 0) directions.push({ x: -1, y: 0, name: 'left' });
-      }
-
-      // Try each direction
-      for (const dir of directions) {
-        const nextX = currentX + dir.x;
-        const nextY = currentY + dir.y;
-
-        // Check if the next tile is passable (also block NPC tiles)
-        if (collisionSystem.isPassable(nextX, nextY) && !isNPCTile(nextX, nextY)) {
-          // Check directional blocking from current tile
-          if (!collisionSystem.isDirectionBlocked(currentX, currentY, dir.name)) {
-            currentX = nextX;
-            currentY = nextY;
-
-            // Convert tile back to pixel coordinates
-            const pixelPos = collisionSystem.tilesToPixels(currentX, currentY, contentSize.width, contentSize.height);
-            path.push({ x: pixelPos.x, y: pixelPos.y, tileX: currentX, tileY: currentY });
-            moved = true;
-            break;
-          }
-        }
-      }
-
-      // If we couldn't move in any direction, stop pathfinding
-      if (!moved) {
-        logMovement(`🚫 Path blocked at tile (${currentX}, ${currentY})`);
-        break;
-      }
-    }
+    // Map tile steps -> the pixel/tile step objects moveOneStep consumes.
+    const path = tilePath.map(({ x, y }) => {
+      const pixelPos = collisionSystem.tilesToPixels(x, y, contentSize.width, contentSize.height);
+      return { x: pixelPos.x, y: pixelPos.y, tileX: x, tileY: y };
+    });
 
     logMovement(`📍 Path calculated: ${path.length} steps`);
     return path;
@@ -3423,6 +3575,18 @@ export default function BuildScreen() {
           return;
         }
 
+        // If the route is only partial (couldn't reach the adjacent tile),
+        // drop the tap target so we don't fire its action from afar — the
+        // character just walks as close as it can for feedback.
+        const goalTile = collisionSystem.pixelsToTiles(
+          nearestPassable.x, nearestPassable.y, contentSize.width, contentSize.height
+        );
+        const endStep = path[path.length - 1];
+        if (endStep.tileX !== goalTile.x || endStep.tileY !== goalTile.y) {
+          logMovement('↪️ Partial route — walking as close as possible, no action');
+          targetDestinationRef.current = null;
+        }
+
         // Start tile-by-tile movement
         movementPathRef.current = path;
         isMovingRef.current = true;
@@ -3446,6 +3610,14 @@ export default function BuildScreen() {
         logMovement('🚫 No valid path found or already at destination!');
         targetDestinationRef.current = null;
         return;
+      }
+
+      // Partial route (target boxed off by walls/NPCs): walk as far as we can
+      // for feedback, but don't trigger the tapped tile's action from afar.
+      const endStep = path[path.length - 1];
+      if (endStep.tileX !== tileCoords.x || endStep.tileY !== tileCoords.y) {
+        logMovement('↪️ Partial route — walking as close as possible, no action');
+        targetDestinationRef.current = null;
       }
 
       // Start tile-by-tile movement
@@ -3641,10 +3813,8 @@ export default function BuildScreen() {
       return;
     }
 
-    if (!expenseNote.trim() && !(SUBCATEGORIES[expenseCategory] || []).length) {
-      toast.error('Add a note', 'Describe what you bought.');
-      return;
-    }
+    // Note is optional — logging stays fast. Empty note falls back to the
+    // sub-category or category name downstream (see expenseData.note below).
 
     // Check if user is logged in
     if (!user?.id) {
@@ -3666,12 +3836,21 @@ export default function BuildScreen() {
     setExpenseSubCategory(null);
     setShowSubCategoryDropdown(false);
 
+    // Defensive: clear any lingering movement/interaction state so the map grid
+    // stays tappable after the modal closes (idle reset — character has arrived).
+    isMovingRef.current = false;
+    movementPathRef.current = [];
+    targetDestinationRef.current = null;
+    setIsWalking(false);
+    // Keyboard-resize safety net — re-seat the player if the grid moved under them.
+    snapToPassableTileIfStuck();
+
     // ── Tutorial mode: skip DB save, mark conditions ──
     if (tutorialActive && gameMode === 'tutorial') {
       // Practice run saves nothing, so nothing animates — a toast is the feedback.
       toast.success('Nice practice! 🎓', `Logged ₱${savedAmount} on ${savedCategory} — not saved.`);
-      // Mark tutorial conditions based on current map
-      if (currentMapId === 'school') markTutorialCondition('school_expense_logged');
+      // Mark tutorial conditions based on current map (workplace = School/Office by role)
+      if (currentMapId === tutorialWorkplaceId) markTutorialCondition('school_expense_logged');
       if (currentMapId.startsWith('mall')) markTutorialCondition('mall_expense_logged');
       console.log('🎓 Tutorial: Skipped expense save (practice mode)');
       return;
@@ -3682,6 +3861,10 @@ export default function BuildScreen() {
 
     const expenseAmountNum = parseFloat(savedAmount);
     const normalizedCategory = normalizeCategory(savedCategory);
+    // Stable log timestamp + active day so the background insert can stamp its
+    // Supabase row id back onto this exact runtime entry (for later deletion).
+    const loggedAt = new Date().toISOString();
+    const loggedDay = gameMode === 'story' ? getActiveStoryDay() : null;
 
     // ── Optimistic: update daily task runtime & evaluate INSTANTLY (before DB save) ──
     if (gameMode === 'story') {
@@ -3695,7 +3878,8 @@ export default function BuildScreen() {
           amount: expenseAmountNum,
           note: savedNote || savedSubCategory || savedCategory,
           source: 'map',
-          timestamp: new Date().toISOString(),
+          timestamp: loggedAt,
+          dbId: null, // filled once the Supabase insert resolves (see below)
         });
         if ((dayState.travelCount || 0) > 0 && CATEGORY_BUDGET_MAP[normalizedCategory] === 'needs') {
           dayState.needsAfterTravelCount = (dayState.needsAfterTravelCount || 0) + 1;
@@ -3725,8 +3909,15 @@ export default function BuildScreen() {
         console.error('❌ Failed to save expense in background');
         // Optionally show error after the fact
         toast.error('Sync failed', 'Your expense may not have been saved. Check your expenses list.');
+        // No dbId will ever arrive — mark the optimistic row so it stops spinning
+        // and offers a dismiss instead (handleDeleteExpense reverses it locally).
+        markExpenseSyncFailedForDay(loggedDay, loggedAt);
       } else {
         console.log('✅ Expense saved successfully via DataContext');
+
+        // Stamp the new Supabase row id onto the optimistic runtime entry so a
+        // later swipe/trash delete can remove it from the backend too.
+        attachExpenseDbIdForDay(loggedDay, loggedAt, success?.id);
 
         // Update category spending tracking (for all levels)
         setCategorySpending(prev => ({
@@ -4254,13 +4445,36 @@ export default function BuildScreen() {
       color: '#a78b7c',
       fontSize: 12,
     },
+    // Spacing/rounding now lives on the swipe container so the revealed red
+    // Delete panel clips to the same rounded rect and aligns row-for-row.
+    expenseSwipeContainer: {
+      marginBottom: 10,
+      borderRadius: 14,
+      overflow: 'hidden',
+    },
     expenseListRow: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: '#1e293b',
       padding: 14,
-      marginBottom: 10,
-      borderRadius: 14,
+    },
+    expenseDeleteAction: {
+      backgroundColor: '#dc2626',
+      width: 88,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    expenseDeleteLabel: {
+      color: '#ffffff',
+      fontSize: 11,
+      fontFamily: FONTS.bodySemiBold,
+      marginTop: 3,
+    },
+    expenseTrashButton: {
+      marginLeft: 12,
+      padding: 4,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     expenseListIconWrap: {
       width: 40,
@@ -4502,6 +4716,12 @@ export default function BuildScreen() {
       height: '100%',
     },
     contentContainer: {
+      flex: 1,
+    },
+    // Wraps the map so absolute-positioned mode overlays (tutorial hint) anchor
+    // to the map's top edge instead of the screen's. Same flex:1 the map root
+    // already uses, so Story/custom layout is unchanged.
+    mapWrapper: {
       flex: 1,
     },
     character: {
@@ -5627,6 +5847,16 @@ export default function BuildScreen() {
       borderRadius: 24,
       padding: screenWidth * 0.05,
       maxHeight: '85%',
+    },
+    // Scrollable body so the Car → fuel step (quick-amounts + confirm) stays
+    // reachable when the keyboard is up. flexShrink lets it scroll within the
+    // card's maxHeight; flexGrow:0 keeps it compact when content is short.
+    transportScroll: {
+      flexGrow: 0,
+      flexShrink: 1,
+    },
+    transportScrollContent: {
+      paddingBottom: 8,
     },
     transportHeader: {
       alignItems: 'center',
@@ -6826,28 +7056,50 @@ export default function BuildScreen() {
   // Koin Tutorial Styles - In-Game Interactive Tutorial
   const tutorialStyles = StyleSheet.create({
     // ===== Tutorial header (replaces normal header in tutorial mode) =====
-    // Unified, semi-transparent container with rounded bottom corners.
-    // Sits inside SafeAreaView (edges top), so the notch is already respected.
+    // IN-FLOW, FIXED-HEIGHT bar holding the title row + the per-step hint box.
+    // Lives in the normal flex column inside the root <SafeAreaView edges={['top']}>,
+    // so the status bar is already cleared (do NOT nest another SafeAreaView here —
+    // that would double-apply the top inset).
+    //
+    // Why the height is HARD-LOCKED: the per-step hint is numberOfLines={3} and its
+    // text changes every step. If the header could grow/shrink with that text, the
+    // in-flow map View below would resize at the SAME width → handleContentLayout's
+    // baseline guard ignores same-width shrinks → contentSize goes stale → the
+    // CollisionSystem grid (keyed off contentSize) stops matching the rendered map
+    // rect → out-of-bounds tiles + misaligned sprite. A LATER attempt floated the
+    // hint absolutely over the map to free the header height, but that overlay
+    // covered top-row interactables (couldn't tap the Dorm closet). So: hint sits
+    // IN-FLOW inside this header, and the header reserves a fixed 3-line height —
+    // text wraps inside without resizing → map rect (and collision grid) constant.
     tutorialHeader: {
-      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      // LOCKED height — holds BOTH the title row AND the per-step hint box.
+      // Reserved big enough for a 3-line hint (numberOfLines={3}) so the text
+      // can change/wrap freely WITHOUT the header ever resizing. Constant height
+      // → the flex:1 map below never shrinks → handleContentLayout never fires a
+      // false shrink → collision grid stays intact. Single knob: bump this ratio
+      // if a 3-line hint clips on small-screen / large-font devices.
+      height: Math.round(screenHeight * 0.175),
+      paddingTop: Math.round(screenHeight * 0.012),
       paddingHorizontal: screenWidth * 0.04,
-      paddingTop: screenHeight * 0.012,
-      paddingBottom: screenHeight * 0.014,
-      borderBottomLeftRadius: 18,
-      borderBottomRightRadius: 18,
-      borderBottomWidth: 1,
-      borderBottomColor: 'rgba(255, 152, 0, 0.35)',
+      paddingBottom: 12,
+      backgroundColor: '#1a1a2e',
+      borderBottomLeftRadius: 16,
+      borderBottomRightRadius: 16,
     },
-    // Top row: text left, icons right.
+    // Top row: Home button on the LEFT (like Story Mode), then title/location.
+    // The top-RIGHT corner is intentionally left empty — the global
+    // KoinTutorialOverlay pins its minimized pig + hourglass badge there
+    // (top:65/right:25), so any interactive icon placed there gets covered.
     tutorialRow1: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: 8,
+      gap: 12,
     },
     koinMini: {
       width: Math.round(screenWidth * 0.095),
       height: Math.round(screenWidth * 0.095),
+      marginBottom: -screenHeight * 0.025,
+      zIndex: 10,
     },
     tutorialTextArea: {
       flex: 1,
@@ -6895,6 +7147,23 @@ export default function BuildScreen() {
       fontSize: Math.round(screenWidth * 0.027),
       fontFamily: FONTS.bodySemiBold,
       color: '#FFB74D',
+    },
+    // In-flow Koin hint box — lives INSIDE the fixed-height tutorialHeader,
+    // directly below the title row. NOT absolute: it no longer overlays the map,
+    // so it can never cover top-row interactables (Dorm closet etc). Its variable
+    // text wraps inside the header's locked height, so the map never resizes.
+    tutorialHintBox: {
+      marginTop: 10,
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: 'rgba(0, 0, 0, 0.78)',
+      borderRadius: 16,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      borderWidth: 1,
+      borderColor: 'rgba(255, 152, 0, 0.4)',
+      zIndex: 100,
+      elevation: 10
     },
     // Bottom row: centered instruction text that wraps cleanly.
     tutorialRow2: {
@@ -7143,8 +7412,21 @@ export default function BuildScreen() {
       {/* Header — tutorial mode shows simplified bar (Koin dialogue handled by KoinTutorialOverlay) */}
       {tutorialActive && gameMode === 'tutorial' ? (
         <View style={tutorialStyles.tutorialHeader}>
-          {/* Top row: title + location on the left, status icons pushed right */}
+          {/* Home button on the LEFT (clear of the global Koin pig in the
+              top-right corner), then title + location. */}
           <View style={tutorialStyles.tutorialRow1}>
+            <TouchableOpacity
+              style={tutorialStyles.tutorialIconBadge}
+              onPress={() => {
+                setTutorialActive(false);
+                cancelTutorial();
+                setTutorialStep(0);
+                setGameMode(null);
+                setShowMainMenu(true);
+              }}
+            >
+              <Ionicons name="home" size={16} color="#FFF" />
+            </TouchableOpacity>
             <View style={tutorialStyles.tutorialTextArea}>
               <Text style={tutorialStyles.tutorialTitle} numberOfLines={1}>
                 🎓 Tutorial Mode
@@ -7153,37 +7435,18 @@ export default function BuildScreen() {
                 {currentMap.icon} {currentMap.name}
               </Text>
             </View>
-            <View style={tutorialStyles.tutorialRightIcons}>
-              <View style={tutorialStyles.tutorialIconBadge}>
-                <Ionicons name="hourglass-outline" size={16} color="#FF9800" />
-              </View>
-              <TouchableOpacity
-                style={tutorialStyles.tutorialIconBadge}
-                onPress={() => {
-                  setTutorialActive(false);
-                  cancelTutorial();
-                  setTutorialStep(0);
-                  setGameMode(null);
-                  setShowMainMenu(true);
-                }}
-              >
-                <Ionicons name="home" size={16} color="#FFF" />
-              </TouchableOpacity>
-            </View>
           </View>
 
-          {/* Middle row: centered status badge */}
-          <View style={tutorialStyles.tutorialBadgeRow}>
+          {/* Per-step hint — IN-FLOW inside the locked-height header (not over the
+              map). 3 reserved lines, so the text wraps here without resizing the
+              header → map rect & collision grid stay constant. */}
+          <View style={tutorialStyles.tutorialHintBox}>
             <View style={tutorialStyles.tutorialBadge}>
               <Text style={tutorialStyles.tutorialBadgeText}>
                 Complete the action to continue
               </Text>
             </View>
-          </View>
-
-          {/* Bottom row: centered, readable instruction text that wraps cleanly */}
-          <View style={tutorialStyles.tutorialRow2}>
-            <Text style={tutorialStyles.tutorialHint} numberOfLines={3}>
+            <Text style={tutorialStyles.tutorialHint} numberOfLines={4}>
               💡 {TUTORIAL_STEPS[tutorialStep]?.message || 'Follow Koin\'s instructions!'}
             </Text>
           </View>
@@ -7389,7 +7652,9 @@ export default function BuildScreen() {
       )}
 
       {/* Map Content */}
-      {renderMapContent()}
+      <View style={styles.mapWrapper}>
+        {renderMapContent()}
+      </View>
 
       {/* Floating Action Button for Quick Expense Entry
       <TouchableOpacity
@@ -7840,6 +8105,15 @@ export default function BuildScreen() {
                     setNotebookSubCategory(null);
                     setShowNotebookSubCategoryDropdown(false);
 
+                    // Defensive: clear lingering movement/interaction state so the
+                    // map grid stays tappable after the modal closes.
+                    isMovingRef.current = false;
+                    movementPathRef.current = [];
+                    targetDestinationRef.current = null;
+                    setIsWalking(false);
+                    // Keyboard-resize safety net — re-seat player if the grid moved.
+                    snapToPassableTileIfStuck();
+
                     // ── Tutorial mode: skip DB save, mark condition ──
                     if (tutorialActive && gameMode === 'tutorial') {
                       // Practice saves nothing, so nothing animates — toast is the feedback.
@@ -7870,6 +8144,11 @@ export default function BuildScreen() {
                       setWeeklySpending(prev => prev + savedAmount);
                     }
 
+                    // Stable log timestamp + active day so the background insert can
+                    // stamp its Supabase row id back onto this exact runtime entry.
+                    const loggedAt = new Date().toISOString();
+                    const loggedDay = gameMode === 'story' ? getActiveStoryDay() : null;
+
                     // ── Optimistic: update daily task runtime & evaluate INSTANTLY (before DB save) ──
                     if (gameMode === 'story') {
                       const normalizedCategory = normalizeCategory(savedCategory);
@@ -7883,7 +8162,8 @@ export default function BuildScreen() {
                           amount: savedAmount,
                           note: savedNote || savedSubCategory || savedCategory,
                           source: 'notebook',
-                          timestamp: new Date().toISOString(),
+                          timestamp: loggedAt,
+                          dbId: null, // filled once the Supabase insert resolves (see below)
                         });
                         if ((dayState.travelCount || 0) > 0 && CATEGORY_BUDGET_MAP[normalizedCategory] === 'needs') {
                           dayState.needsAfterTravelCount = (dayState.needsAfterTravelCount || 0) + 1;
@@ -7910,8 +8190,15 @@ export default function BuildScreen() {
                       if (!success) {
                         console.error('❌ Notebook: Failed to save expense');
                         toast.error('Sync failed', 'Your expense may not have been saved. Check your expenses list.');
+                        // No dbId will ever arrive — mark the optimistic row so it stops
+                        // spinning and offers a dismiss (handleDeleteExpense reverses locally).
+                        markExpenseSyncFailedForDay(loggedDay, loggedAt);
                       } else {
                         console.log('✅ Notebook: Expense saved successfully');
+
+                        // Stamp the new Supabase row id onto the optimistic runtime
+                        // entry so a later swipe/trash delete also clears the backend.
+                        attachExpenseDbIdForDay(loggedDay, loggedAt, success?.id);
 
                         if (gameMode === 'story' && Math.abs(savedAmount - 1) < 0.0001) {
                           const testAchievement = AchievementService.getAchievementDefinitions().test_hello_world;
@@ -8134,7 +8421,7 @@ export default function BuildScreen() {
             onPress={() => setIsExpenseListModalVisible(false)}
             style={styles.historyBackdrop}
           />
-          <View style={styles.historySheet}>
+          <GestureHandlerRootView style={styles.historySheet}>
             <View style={styles.historyHeaderRow}>
               <Text style={styles.historyTitle}>
                 Today's Expenses
@@ -8160,26 +8447,94 @@ export default function BuildScreen() {
                   const timeStr = entry.timestamp
                     ? new Date(entry.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
                     : '';
+                  // timestamp is stamped at log time; pairing it with the index keeps
+                  // React keys stable for this small, ordered, per-day list.
+                  const rowKey = `${entry.timestamp || 'na'}-${index}`;
+                  // Race guard: until the background insert resolves and stamps a
+                  // dbId, deleting would orphan the soon-to-exist Supabase row, so block
+                  // both delete affordances and show a spinner. If the insert permanently
+                  // failed there's no backend row to orphan — re-enable delete and show a
+                  // tap-to-dismiss error instead of a spinner that never resolves.
+                  const syncFailed = !!entry.syncFailed;
+                  const isSyncing = !entry.dbId && !syncFailed;
                   return (
-                    <View key={index} style={styles.expenseListRow}>
-                      <View style={styles.expenseListIconWrap}>
-                        <Ionicons name={iconName} size={20} color="#ffb68b" />
-                      </View>
-                      <View style={styles.expenseListCenter}>
-                        <Text style={styles.expenseListCategory} numberOfLines={1}>
-                          {entry.category}
+                    <ReanimatedSwipeable
+                      key={rowKey}
+                      friction={2}
+                      rightThreshold={40}
+                      overshootRight={false}
+                      enabled={!isSyncing}
+                      containerStyle={styles.expenseSwipeContainer}
+                      renderRightActions={isSyncing ? undefined : () => (
+                        <TouchableOpacity
+                          style={styles.expenseDeleteAction}
+                          activeOpacity={0.85}
+                          onPress={() => handleDeleteExpense(index)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Delete ${entry.category} expense`}
+                        >
+                          <Ionicons name="trash" size={22} color="#ffffff" />
+                          <Text style={styles.expenseDeleteLabel}>Delete</Text>
+                        </TouchableOpacity>
+                      )}
+                    >
+                      <View style={styles.expenseListRow}>
+                        <View style={styles.expenseListIconWrap}>
+                          <Ionicons name={iconName} size={20} color="#ffb68b" />
+                        </View>
+                        <View style={styles.expenseListCenter}>
+                          <Text style={styles.expenseListCategory} numberOfLines={1}>
+                            {entry.category}
+                          </Text>
+                          <Text style={styles.expenseListNote} numberOfLines={1}>
+                            {entry.note || entry.category}
+                          </Text>
+                          {timeStr ? (
+                            <Text style={styles.expenseListTime}>{timeStr}</Text>
+                          ) : null}
+                        </View>
+                        <Text style={styles.expenseListAmount}>
+                          ₱{(Number(entry.amount) || 0).toFixed(2)}
                         </Text>
-                        <Text style={styles.expenseListNote} numberOfLines={1}>
-                          {entry.note || entry.category}
-                        </Text>
-                        {timeStr ? (
-                          <Text style={styles.expenseListTime}>{timeStr}</Text>
-                        ) : null}
+                        {/* Right-edge control, three states sharing one footprint so the
+                            row never reflows between them:
+                            • syncing  → grey spinner, no touch target (can't delete yet)
+                            • failed   → amber alert, tap dismisses (escape hatch; the local
+                                         reversal runs, no backend row exists to delete)
+                            • synced   → tappable trash (mirrors the swipe shortcut) */}
+                        {isSyncing ? (
+                          <View
+                            style={styles.expenseTrashButton}
+                            accessibilityRole="image"
+                            accessibilityLabel={`Saving ${entry.category} expense`}
+                          >
+                            <ActivityIndicator size="small" color="#a78b7c" />
+                          </View>
+                        ) : syncFailed ? (
+                          <TouchableOpacity
+                            style={styles.expenseTrashButton}
+                            activeOpacity={0.7}
+                            onPress={() => handleDeleteExpense(index)}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${entry.category} expense didn't save — tap to dismiss`}
+                          >
+                            <Ionicons name="alert-circle" size={20} color="#fbbf24" />
+                          </TouchableOpacity>
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.expenseTrashButton}
+                            activeOpacity={0.7}
+                            onPress={() => handleDeleteExpense(index)}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Delete ${entry.category} expense`}
+                          >
+                            <Ionicons name="trash-outline" size={18} color="#f87171" />
+                          </TouchableOpacity>
+                        )}
                       </View>
-                      <Text style={styles.expenseListAmount}>
-                        ₱{(Number(entry.amount) || 0).toFixed(2)}
-                      </Text>
-                    </View>
+                    </ReanimatedSwipeable>
                   );
                 })}
               </ScrollView>
@@ -8191,7 +8546,7 @@ export default function BuildScreen() {
                 </Text>
               </View>
             )}
-          </View>
+          </GestureHandlerRootView>
         </View>
       </Modal>
 
@@ -8549,7 +8904,7 @@ export default function BuildScreen() {
               <View style={{ backgroundColor: '#FFF3E0', borderRadius: 10, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#FF9800' }}>
                 <Text style={{ fontSize: 13, color: '#E65100', textAlign: 'center', fontFamily: FONTS.bodySemiBold }}>
                   {TUTORIAL_STEPS[tutorialStep]?.id === 'exit_door'
-                    ? '🎓 Choose School to continue the tutorial!'
+                    ? `🎓 Choose ${tutorialWorkplaceName} to continue the tutorial!`
                     : TUTORIAL_STEPS[tutorialStep]?.id === 'go_to_mall'
                       ? '🎓 Choose the Mall to continue!'
                       : '🎓 Pick a destination!'}
@@ -8609,6 +8964,12 @@ export default function BuildScreen() {
               </Text>
             </View>
 
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              style={transportStyles.transportScroll}
+              contentContainerStyle={transportStyles.transportScrollContent}
+            >
             {/* Tutorial guidance banner inside transport modal */}
             {tutorialActive && gameMode === 'tutorial' && (
               <View style={{ backgroundColor: '#FFF3E0', borderRadius: 10, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#FF9800' }}>
@@ -8840,6 +9201,7 @@ export default function BuildScreen() {
                 )}
               </View>
             )}
+            </ScrollView>
 
             {/* Cancel button */}
             <TouchableOpacity

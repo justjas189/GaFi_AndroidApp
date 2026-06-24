@@ -111,7 +111,7 @@ const TabNavigator = () => {
       })}
     >
       <Tab.Screen name="Game" component={GameScreen} />
-      <Tab.Screen name="Custom" component={CustomModeDashboard} />
+      {/* <Tab.Screen name="Custom" component={CustomModeDashboard} /> */}
       <Tab.Screen name="Expenses" component={ExpenseScreen} />
       <Tab.Screen name="Predictions" component={DataPredictionScreen} />
       <Tab.Screen name="Explore" component={ExploreScreen} />

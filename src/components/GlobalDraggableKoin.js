@@ -54,14 +54,21 @@ const GlobalDraggableKoin = () => {
   // from the PanResponder's first-render closure (panResponder is built once
   // via useRef, so it captured render-0's stale `showChatModal`).
   const showChatModalRef = useRef(false);
+  // Same trap as showChatModalRef: openChat runs inside the once-built
+  // PanResponder, so a bare `isMinimized` read is frozen at render-0's `false`.
+  // This mirror gives openChat the CURRENT minimized state for the two-tap gate.
+  const isMinimizedRef = useRef(false);
 
   // Auto-hide timer
   const hideTimerRef = useRef(null);
 
-  // Keep the ref mirror in sync every time the real state changes.
+  // Keep the ref mirrors in sync every time the real state changes.
   useEffect(() => {
     showChatModalRef.current = showChatModal;
   }, [showChatModal]);
+  useEffect(() => {
+    isMinimizedRef.current = isMinimized;
+  }, [isMinimized]);
   
   // Create pan responder for dragging
   const panResponder = useRef(
@@ -203,17 +210,29 @@ const GlobalDraggableKoin = () => {
     ]).start();
   };
   
-  // Handle bubble tap → ALWAYS open chat (restore visuals first if minimized).
+  // Handle bubble tap → TWO-TAP system.
+  //   Tap 1 (minimized): wake Koin only (restore scale/opacity), DON'T open chat.
+  //   Tap 2 (awake):     open the chat modal normally.
   // `source` tells us in Metro which path fired: TouchableOpacity vs PanResponder.
+  // IMPORTANT: read isMinimizedRef.current, NOT the `isMinimized` closure — this
+  // fn runs inside the once-built PanResponder where `isMinimized` is stale false.
   const openChat = (source = 'touchable') => {
+    const minimized = isMinimizedRef.current;
     console.log(
-      `[Koin] TAP registered (source=${source}) | isMinimized=${isMinimized} | showChatModal(before)=${showChatModal}`
+      `[Koin] TAP registered (source=${source}) | isMinimized=${minimized} | showChatModal(before)=${showChatModal}`
     );
 
-    if (isMinimized) {
+    // ── Tap 1: minimized → wake only, do not open chat ──────────────
+    // restoreBubble() flips isMinimized→false AND calls setLastActivity,
+    // which retriggers the auto-hide effect → fresh full 10s to tap again.
+    if (minimized) {
+      console.log('[Koin] minimized → waking Koin (no chat open); next tap opens chat');
       restoreBubble();
+      setLastActivity(Date.now());
+      return;
     }
 
+    // ── Tap 2: awake → open chat normally ───────────────────────────
     setLastActivity(Date.now());
 
     // Quick scale animation for feedback

@@ -81,7 +81,7 @@ export const GAME_TUTORIAL_STEPS = [
     id: 'exit_door',
     koinDialogue: [
       "Awesome! You just logged your first expense!",
-      "Now let's explore the world. Walk to the Exit Door and choose School.",
+      "Now let's explore the world. Walk to the Exit Door and head to your workplace.",
       "You'll also learn about transport expenses along the way!"
     ],
     conditionKey: 'arrived_at_school',
@@ -92,9 +92,9 @@ export const GAME_TUTORIAL_STEPS = [
   {
     id: 'school_intro',
     koinDialogue: [
-      "Welcome to School Campus! 🏫",
-      "See the NPCs here? You can talk to the Librarian to buy school supplies, or the Canteen staff to buy food.",
-      "Walk to either one and log a practice expense!"
+      "Welcome to your workplace! 🏫",
+      "See the NPCs here? Walk up to any staff member to buy something — food, supplies, you name it.",
+      "Approach one of them and log a practice expense!"
     ],
     conditionKey: 'school_expense_logged',
     nextAlwaysEnabled: false,
@@ -384,9 +384,14 @@ export const TutorialProvider = ({ children }) => {
       return next;
     });
 
-    // If the current step was waiting for this condition, celebrate and advance
+    // If the current step is gated on this condition, celebrate and advance.
+    // We advance regardless of whether Koin is mid-dialogue (SPEAKING) or already
+    // minimized (WAITING) — the only state we skip is CELEBRATING, to avoid a
+    // double-trigger. This prevents the overlay from getting stuck full-screen
+    // (pointerEvents:'auto') over the map when an action completes while Koin is
+    // still talking, which previously froze map taps after a practice log.
     const step = getCurrentStep();
-    if (step && step.conditionKey === conditionKey && koinState === KOIN_STATE.WAITING) {
+    if (step && step.conditionKey === conditionKey && koinState !== KOIN_STATE.CELEBRATING) {
       setKoinState(KOIN_STATE.CELEBRATING);
       // After brief celebration, advance to next step
       setTimeout(() => {

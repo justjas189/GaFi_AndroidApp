@@ -538,7 +538,7 @@ const styles = StyleSheet.create({
   },
   minimizedKoin: {
     position: 'absolute',
-    top: 65,
+    top: 30,
     right: 25,
     width: 50,
     height: 50,

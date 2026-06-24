@@ -7,7 +7,6 @@ import {
   ScrollView,
   Switch,
   Linking,
-  Share,
   Modal,
   TextInput,
   ActivityIndicator,
@@ -24,12 +23,12 @@ import { IS_DEVELOPMENT } from '../../utils/appEnvironment';
 import { FONTS } from '../../theme/typography';
 import { toast } from '../../utils/toast';
 import { useConfirm } from '../../components/feedback/ConfirmProvider';
+import ExportModal from '../../components/ExportModal';
 
 const SettingsScreen = ({ navigation }) => {
   const { logout, userInfo } = useContext(AuthContext);
   const { expenses } = useContext(DataContext);
   const { theme, isDarkMode, toggleTheme } = useContext(ThemeContext);
-  const [exportingData, setExportingData] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deletingAccount, setDeletingAccount] = useState(false);
@@ -74,68 +73,14 @@ const SettingsScreen = ({ navigation }) => {
     }
   };
 
-  const handleExportData = async () => {
+  const handleExportData = () => {
     if (!expenses || expenses.length === 0) {
       toast.info('Nothing to export', 'You have no expense data yet.');
       return;
     }
-    // Three-way choice (CSV / TXT / Cancel) isn't a yes/no confirm — open the
-    // themed format picker instead of a native action sheet.
+    // Open the date-range + format flow; ExportModal owns filtering, file
+    // creation, and the native share sheet.
     setShowExportModal(true);
-  };
-
-  const pickExportFormat = (format) => {
-    setShowExportModal(false);
-    exportAs(format);
-  };
-
-  const exportAs = async (format) => {
-    try {
-      setExportingData(true);
-
-      if (format === 'csv') {
-        const header = 'Date,Category,Amount,Description\n';
-        const rows = expenses
-          .map((e) => {
-            const date = new Date(e.date || e.created_at).toLocaleDateString();
-            const category = (e.category || 'Uncategorized').replace(/,/g, ' ');
-            const amount = parseFloat(e.amount || 0).toFixed(2);
-            const description = (e.description || e.note || '').replace(/,/g, ' ').replace(/\n/g, ' ');
-            return `${date},${category},${amount},${description}`;
-          })
-          .join('\n');
-
-        await Share.share({
-          message: header + rows,
-          title: 'GaFI Expense Export (CSV)',
-        });
-      } else {
-        // TXT format – readable plain text
-        const lines = expenses
-          .map((e, i) => {
-            const date = new Date(e.date || e.created_at).toLocaleDateString();
-            const category = e.category || 'Uncategorized';
-            const amount = parseFloat(e.amount || 0).toFixed(2);
-            const description = e.description || e.note || 'No description';
-            return `${i + 1}. [${date}] ${category} — ₱${amount}\n   ${description}`;
-          })
-          .join('\n\n');
-
-        const txt = `GaFI Expense Report\n${'='.repeat(30)}\nTotal entries: ${expenses.length}\n\n${lines}\n`;
-
-        await Share.share({
-          message: txt,
-          title: 'GaFI Expense Export (TXT)',
-        });
-      }
-    } catch (error) {
-      if (error.message !== 'User did not share') {
-        console.error('Export error:', error);
-        toast.error('Export failed', 'Could not export your data. Try again.');
-      }
-    } finally {
-      setExportingData(false);
-    }
   };
 
   const handleClearData = async () => {
@@ -470,7 +415,6 @@ const SettingsScreen = ({ navigation }) => {
             style={[styles.settingItem, { backgroundColor: theme.colors.card }]}
             onPress={handleExportData}
             activeOpacity={0.7}
-            disabled={exportingData}
           >
             <View style={styles.settingItemLeft}>
               <View style={[styles.settingIconContainer, { backgroundColor: '#2196F320' }]}>
@@ -478,7 +422,7 @@ const SettingsScreen = ({ navigation }) => {
               </View>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingText, { color: theme.colors.text }]}>Export Data</Text>
-                <Text style={[styles.settingValue, { color: theme.colors.text }]}>Share your expense history</Text>
+                <Text style={[styles.settingValue, { color: theme.colors.text }]}>By date range, as CSV or TXT</Text>
               </View>
             </View>
             <Ionicons name="chevron-forward" size={20} color={theme.colors.text} />
@@ -690,56 +634,13 @@ const SettingsScreen = ({ navigation }) => {
         </View>
       </Modal>
 
-      {/* ── Export Format Picker ── */}
-      <Modal
+      {/* ── Export flow (date range → format → share) ── */}
+      <ExportModal
         visible={showExportModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowExportModal(false)}
-        statusBarTranslucent
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.colors.background }]}>
-            <Ionicons
-              name="download-outline"
-              size={44}
-              color={theme.colors.primary}
-              style={{ alignSelf: 'center', marginBottom: 12 }}
-            />
-            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Export format</Text>
-            <Text style={[styles.modalDescription, { color: theme.colors.textSecondary }]}>
-              Choose how to share your expense history.
-            </Text>
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.exportOptionBtn, { backgroundColor: theme.colors.primary }]}
-                onPress={() => pickExportFormat('csv')}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="grid-outline" size={18} color="#fff" />
-                <Text style={styles.exportOptionText}>CSV</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.exportOptionBtn, { backgroundColor: theme.colors.primary }]}
-                onPress={() => pickExportFormat('txt')}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="document-text-outline" size={18} color="#fff" />
-                <Text style={styles.exportOptionText}>TXT</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalCancelBtn, { backgroundColor: theme.colors.card, marginTop: 12 }]}
-                onPress={() => setShowExportModal(false)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.modalCancelText, { color: theme.colors.text }]}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setShowExportModal(false)}
+        expenses={expenses}
+        theme={theme}
+      />
     </SafeAreaView>
   );
 };
@@ -934,22 +835,6 @@ const styles = StyleSheet.create({
   modalDeleteText: {
     fontFamily: FONTS.bodySemiBold,
     fontSize: 16,
-  },
-
-  // Export format picker
-  exportOptionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
-  exportOptionText: {
-    fontFamily: FONTS.bodySemiBold,
-    fontSize: 16,
-    color: '#fff',
   },
 });
 

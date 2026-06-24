@@ -6,7 +6,7 @@
     "financialConcept": "Division (50/30/20 Rule)",
     "koinDialogue": "Welcome to budgeting! The golden rule is Division. Before you spend, split your money: Needs, Wants, and Savings. Let's log your basics today to set a baseline.",
     "tasks": [
-      "Log exactly 2 Needs expenses & 1 Wants expense.",
+      "Log at least 2 Needs expenses & 1 Wants expense.",
       "Travel to School/Office and record a Transport expense.",
       "End day with Needs <= 50% and Wants <= 30%."
     ]
@@ -74,7 +74,7 @@
     "financialConcept": "Simple Interest (Linear growth)",
     "koinDialogue": "Let's put your money to work! Simple Interest pays you a flat rate on your original savings. Keep your spending strictly to basics today to lock in your principal amount.",
     "tasks": [
-      "Log exactly 1 Needs expense today. No Wants allowed.",
+      "Log at least 1 Needs expense today. No Wants allowed.",
       "Keep total spending under 20% of your weekly budget."
     ]
   },
@@ -96,7 +96,7 @@
     "financialConcept": "Temptation Test (Discipline)",
     "koinDialogue": "Head to the Mall! The secret to compound growth is patience and avoiding the temptation to drain your account. Let's practice controlled exposure.",
     "tasks": [
-      "Visit the Mall and log exactly 1 Needs expense (e.g., Groceries).",
+      "Visit the Mall and log at least 1 Needs expense (e.g., Groceries).",
       "Log 0 Wants for the entire day."
     ]
   },

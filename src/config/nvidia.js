@@ -1,5 +1,7 @@
 // NVIDIA API configuration for Llama model
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { fetch as expoFetch } from 'expo/fetch';
+import { Buffer } from 'buffer';
 import DebugUtils from '../utils/DebugUtils';
 import { BudgetAlertManager } from '../services/BudgetAlertManager';
 
@@ -205,6 +207,174 @@ export const getChatCompletion = async (messages, options = {}) => {
     // Return a basic fallback response
     return "I'm having trouble connecting to my AI services, but I can still help with basic expense tracking. Please try again or use simpler commands.";
   }
+};
+
+// Strip any internal reasoning blocks reasoning models may leak inline so the
+// end-user never sees chain-of-thought. Mirrors the strips in getChatCompletion.
+const stripThinking = (text) => {
+  if (!text) return '';
+  return text
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+    .replace(/<thought>[\s\S]*?<\/thought>/gi, '')
+    .replace(/<scratchpad>[\s\S]*?<\/scratchpad>/gi, '')
+    .trim();
+};
+
+// Append two Uint8Arrays. Used to carry incomplete bytes across stream chunks.
+const concatBytes = (a, b) => {
+  const out = new Uint8Array(a.length + b.length);
+  out.set(a, 0);
+  out.set(b, a.length);
+  return out;
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// STREAMING chat completion — Gemini-style typewriter.
+//
+// Why expo/fetch (not core fetch): React Native's built-in fetch is XHR-backed
+// and buffers the ENTIRE body before resolving — it cannot stream. expo/fetch
+// (shipped with Expo SDK 54, already a dep) is WinterCG-compliant and exposes a
+// real ReadableStream via response.body.getReader(), so we read OpenAI-style
+// Server-Sent Events (`data: {json}\n\n`) as they land and push each token to
+// onToken. Pure JS over the already-bundled expo package → NO native module,
+// NO rebuild, the hand-managed android/ is untouched.
+//
+// Returns the FULL accumulated (thinking-stripped) text — same shape as
+// getChatCompletion — so the caller's history bookkeeping is unchanged. Throws
+// on hard failure so the caller can fall back. "Thinking" is intentionally
+// disabled here for instant first-token latency.
+//
+//   callbacks.onToken(piece) — called with each visible delta as it arrives
+//   callbacks.signal         — optional AbortSignal to cancel mid-stream
+// ═══════════════════════════════════════════════════════════════════════
+export const getChatCompletionStream = async (messages, options = {}, callbacks = {}) => {
+  const startTime = Date.now();
+  const { onToken, signal } = callbacks;
+  const {
+    temperature = 0.7,
+    top_p = 0.95,
+    max_tokens = 1024,
+    frequency_penalty = 0,
+    presence_penalty = 0,
+  } = options;
+
+  let lastError = null;
+
+  // Try each model in order; a DEGRADED model fails fast with HTTP 400 BEFORE
+  // any token, so we can safely fall through to the next one.
+  for (const modelId of NVIDIA_MODELS) {
+    let emitted = 0; // visible tokens pushed for THIS model
+
+    try {
+      const response = await expoFetch(`${NVIDIA_BASE_URL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${NVIDIA_API_KEY}`,
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
+        },
+        body: JSON.stringify({
+          model: modelId,
+          messages,
+          temperature,
+          top_p,
+          frequency_penalty,
+          presence_penalty,
+          max_tokens,
+          stream: true,
+        }),
+        signal,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        // DEGRADED → silently try the next fallback model.
+        if (response.status === 400 && errorData.includes('DEGRADED')) {
+          DebugUtils.log('NVIDIA_API', `Stream: model ${modelId} DEGRADED, trying next fallback...`);
+          lastError = new Error(`Model ${modelId} is DEGRADED`);
+          continue;
+        }
+        if (response.status === 401) throw new Error('NVIDIA API authentication failed - API key may be invalid or expired');
+        if (response.status === 429) throw new Error('NVIDIA API rate limit exceeded - please try again later');
+        if (response.status === 500) throw new Error('NVIDIA API server error - please try again later');
+        throw new Error(`NVIDIA API error: ${response.status} - ${response.statusText}`);
+      }
+
+      // Some runtimes can't surface a stream body — degrade to a single JSON
+      // read and emit it in one shot so the caller still gets an answer.
+      if (!response.body || typeof response.body.getReader !== 'function') {
+        const data = await response.json();
+        const content = stripThinking(data?.choices?.[0]?.message?.content || '');
+        if (content) { onToken?.(content); }
+        if (!content) throw new Error('Non-stream fallback returned empty content');
+        return content;
+      }
+
+      const reader = response.body.getReader();
+      let pending = new Uint8Array(0); // bytes not yet terminated by a newline
+      let full = '';
+      let streamDone = false;
+
+      while (!streamDone) {
+        const { done: readerDone, value } = await reader.read();
+        if (readerDone) break;
+        if (value && value.length) pending = concatBytes(pending, value);
+
+        // Decode only COMPLETE lines (split on the 0x0A newline byte). A UTF-8
+        // sequence never contains 0x0A, so a complete line can't split ₱ / an
+        // emoji / a Tagalog character across a chunk boundary → no mojibake.
+        let nl;
+        while ((nl = pending.indexOf(0x0A)) !== -1) {
+          const lineBytes = pending.subarray(0, nl);
+          pending = pending.subarray(nl + 1);
+          const line = Buffer.from(lineBytes).toString('utf8').trim();
+          if (!line || !line.startsWith('data:')) continue; // skip blanks + ': ' keepalives
+
+          const payload = line.slice(5).trim();
+          if (payload === '[DONE]') { streamDone = true; break; }
+
+          try {
+            const json = JSON.parse(payload);
+            const delta = json.choices?.[0]?.delta || {};
+            // ONLY the visible answer. delta.reasoning_content is internal
+            // chain-of-thought and must never reach the user.
+            const piece = delta.content || '';
+            if (piece) {
+              full += piece;
+              emitted += 1;
+              onToken?.(piece);
+            }
+          } catch (_) {
+            // Malformed/partial JSON on a line — ignore; the stream recovers.
+          }
+        }
+      }
+
+      const responseTime = Date.now() - startTime;
+      DebugUtils.log('NVIDIA_API', 'Stream completed', {
+        model: modelId,
+        responseTime,
+        contentLength: full.length,
+      });
+
+      const clean = stripThinking(full);
+      if (!clean) throw new Error('Stream returned empty content');
+      return clean;
+
+    } catch (modelError) {
+      lastError = modelError;
+      // Abort = user closed/cancelled the chat — bubble up, do NOT try more models.
+      if (modelError?.name === 'AbortError') throw modelError;
+      // Already streamed visible tokens — retrying another model would duplicate
+      // text on screen. Propagate so the caller keeps the partial.
+      if (emitted > 0) throw modelError;
+      // DEGRADED was handled via `continue` above; any other pre-token error
+      // from a non-DEGRADED model should not silently try more models either.
+      if (modelError.message && !modelError.message.includes('DEGRADED')) throw modelError;
+    }
+  }
+
+  throw lastError || new Error('All NVIDIA models are currently unavailable (DEGRADED)');
 };
 
 // ═══════════════════════════════════════════════════════════════════════

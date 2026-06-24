@@ -24,6 +24,74 @@ import MallFloorTilesetsData from '../../assets/Game_Graphics/maps/Mall/Tilesets
 import SchoolTilesetsData from '../../assets/Game_Graphics/maps/School/Tilesets.json';
 import OfficeTilesetsData from '../../assets/Game_Graphics/maps/Office/Tilesets.json';
 
+/**
+ * Tiny binary min-heap of integer payloads ordered by a numeric priority.
+ * Used as the A* open set so node selection stays O(log n) on large grids
+ * instead of the O(n) linear scan a plain array would need.
+ *
+ * Two parallel arrays (payloads + priorities) avoid per-node object churn.
+ */
+class MinHeap {
+  constructor() {
+    this.items = []; // payloads (tile indices)
+    this.prio = [];  // matching priorities (fScores)
+    this.size = 0;
+  }
+
+  push(item, priority) {
+    const n = this.size++;
+    this.items[n] = item;
+    this.prio[n] = priority;
+    this._siftUp(n);
+  }
+
+  pop() {
+    const { items, prio } = this;
+    const top = items[0];
+    const last = --this.size;
+    if (last > 0) {
+      items[0] = items[last];
+      prio[0] = prio[last];
+      this._siftDown(0);
+    }
+    return top;
+  }
+
+  _siftUp(n) {
+    const { items, prio } = this;
+    const item = items[n];
+    const p = prio[n];
+    while (n > 0) {
+      const parent = (n - 1) >> 1;
+      if (prio[parent] <= p) break;
+      items[n] = items[parent];
+      prio[n] = prio[parent];
+      n = parent;
+    }
+    items[n] = item;
+    prio[n] = p;
+  }
+
+  _siftDown(n) {
+    const { items, prio } = this;
+    const size = this.size;
+    const item = items[n];
+    const p = prio[n];
+    const half = size >> 1;
+    while (n < half) {
+      let child = 2 * n + 1;
+      const right = child + 1;
+      if (right < size && prio[right] < prio[child]) child = right;
+      if (prio[child] >= p) break;
+      items[n] = items[child];
+      prio[n] = prio[child];
+      n = child;
+    }
+    items[n] = item;
+    prio[n] = p;
+  }
+}
+
 class CollisionSystem {
   constructor() {
     this.mapData = null;
@@ -500,6 +568,169 @@ class CollisionSystem {
 
     // No passable position found, return original
     return { x: targetX, y: targetY };
+  }
+
+  /**
+   * Find a walkable path between two TILE coordinates using A* search.
+   *
+   * Returns an ordered array of tile steps from the tile AFTER the start up
+   * to and including the target: [{ x, y }, ...]. The start tile is omitted
+   * (it's where the character already is). Returns [] when no path exists,
+   * when start === target, or when the target is unreachable/blocked.
+   *
+   * Movement is 4-directional and obeys the SAME rules the character moves
+   * by, so every returned step is actually traversable:
+   *   - destination tile must be passable (isPassable)
+   *   - source tile must not block exit in that direction (isDirectionBlocked)
+   *   - optional isBlocked(x, y) veto for transient occupants (e.g. NPCs),
+   *     keeping this module decoupled from game state.
+   *
+   * A* with a Manhattan heuristic + binary-heap open set keeps this cheap
+   * enough to run synchronously on a tap without stalling the JS thread,
+   * and maxNodes hard-caps the work so a pathological map can never freeze it.
+   *
+   * @param {number} startX  start tile X
+   * @param {number} startY  start tile Y
+   * @param {number} targetX target tile X
+   * @param {number} targetY target tile Y
+   * @param {object} [options]
+   * @param {(x:number, y:number) => boolean} [options.isBlocked] extra per-tile veto
+   * @param {number} [options.maxNodes] safety cap on explored nodes (default 5000)
+   * @param {boolean} [options.fallbackToClosest] when the exact target can't be
+   *   reached, return the route to the closest reachable tile instead of []
+   *   (so the character walks as far as it can — visible input feedback).
+   *   The endpoint may not be the requested target; callers should compare.
+   * @returns {Array<{x: number, y: number}>}
+   */
+  findPath(startX, startY, targetX, targetY, options = {}) {
+    if (!this.initialized) return [];
+
+    const { isBlocked, maxNodes = 5000, fallbackToClosest = false } = options;
+
+    // Already there.
+    if (startX === targetX && startY === targetY) return [];
+
+    // Can we stand on the exact target tile? (off-map / wall / NPC => no)
+    const targetReachable =
+      targetX >= 0 && targetX < this.mapWidth &&
+      targetY >= 0 && targetY < this.mapHeight &&
+      this.isPassable(targetX, targetY) &&
+      !(isBlocked && isBlocked(targetX, targetY));
+
+    // Exact target unreachable and caller doesn't want a partial route:
+    // preserve the original contract and bail before searching.
+    if (!targetReachable && !fallbackToClosest) return [];
+
+    const W = this.mapWidth;
+    const H = this.mapHeight;
+    const size = W * H;
+
+    // Flat typed arrays keyed by tile index — far cheaper than a Map of objects.
+    const gScore = new Float64Array(size).fill(Infinity);
+    const cameFrom = new Int32Array(size).fill(-1);
+    const closed = new Uint8Array(size);
+
+    const startIdx = startY * W + startX;
+    // Only match an in-bounds, standable target; -1 disables the equality test
+    // so an off-map tap still searches and (with fallback) walks closest.
+    const targetIdx = targetReachable ? targetY * W + targetX : -1;
+    gScore[startIdx] = 0;
+
+    const heuristic = (x, y) => Math.abs(x - targetX) + Math.abs(y - targetY);
+
+    const open = new MinHeap();
+    open.push(startIdx, heuristic(startX, startY));
+
+    // Best (closest-to-target) tile actually reached, for the partial fallback.
+    // Seeded with the start so a fully boxed-in start yields no movement.
+    let bestIdx = startIdx;
+    let bestH = heuristic(startX, startY);
+    let bestG = 0;
+
+    // 4-neighbour offsets paired with the direction name used to check
+    // whether leaving the SOURCE tile that way is blocked.
+    const NEIGHBORS = [
+      { dx: 0, dy: -1, dir: 'up' },
+      { dx: 0, dy: 1, dir: 'down' },
+      { dx: -1, dy: 0, dir: 'left' },
+      { dx: 1, dy: 0, dir: 'right' },
+    ];
+
+    let explored = 0;
+
+    while (open.size > 0) {
+      const currentIdx = open.pop();
+
+      if (currentIdx === targetIdx) {
+        return this._reconstructPath(cameFrom, startIdx, targetIdx, W);
+      }
+
+      // Lazy deletion: stale heap entries (re-pushed with a better cost) skipped.
+      if (closed[currentIdx]) continue;
+      closed[currentIdx] = 1;
+
+      if (++explored > maxNodes) break; // never freeze the JS thread
+
+      const cx = currentIdx % W;
+      const cy = (currentIdx - cx) / W;
+      const baseG = gScore[currentIdx];
+
+      // Track the closest reachable tile (min heuristic; ties -> shorter walk).
+      const cH = heuristic(cx, cy);
+      if (cH < bestH || (cH === bestH && baseG < bestG)) {
+        bestH = cH;
+        bestG = baseG;
+        bestIdx = currentIdx;
+      }
+
+      for (let i = 0; i < NEIGHBORS.length; i++) {
+        const { dx, dy, dir } = NEIGHBORS[i];
+        const nx = cx + dx;
+        const ny = cy + dy;
+
+        if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+
+        const nIdx = ny * W + nx;
+        if (closed[nIdx]) continue;
+
+        // Same gate the walker uses, so the path is guaranteed traversable.
+        if (!this.isPassable(nx, ny)) continue;
+        if (this.isDirectionBlocked(cx, cy, dir)) continue;
+        if (isBlocked && isBlocked(nx, ny)) continue;
+
+        const tentativeG = baseG + 1;
+        if (tentativeG < gScore[nIdx]) {
+          gScore[nIdx] = tentativeG;
+          cameFrom[nIdx] = currentIdx;
+          open.push(nIdx, tentativeG + heuristic(nx, ny));
+        }
+      }
+    }
+
+    // Exact target never reached. Walk to the closest tile we got to so the
+    // tap still produces visible movement; [] only if start was already it.
+    if (fallbackToClosest && bestIdx !== startIdx) {
+      return this._reconstructPath(cameFrom, startIdx, bestIdx, W);
+    }
+
+    return []; // no route
+  }
+
+  /**
+   * Walk cameFrom links target -> start and return the forward tile steps,
+   * excluding the start tile. Internal helper for findPath.
+   */
+  _reconstructPath(cameFrom, startIdx, targetIdx, W) {
+    const path = [];
+    let cur = targetIdx;
+    while (cur !== startIdx && cur !== -1) {
+      const x = cur % W;
+      const y = (cur - x) / W;
+      path.push({ x, y });
+      cur = cameFrom[cur];
+    }
+    path.reverse();
+    return path;
   }
 
   /**

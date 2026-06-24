@@ -19,8 +19,10 @@ import {
   Modal,
   FlatList,
   TextInput,
+  Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import ReAnimated, { FadeIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import Markdown from 'react-native-markdown-display';
 import { useTheme } from '../context/ThemeContext';
@@ -28,7 +30,7 @@ import { navigationRef } from '../navigation/navigationRef';
 import { DataContext } from '../context/DataContext';
 import { AuthContext } from '../context/AuthContext';
 import { useChat } from '../context/ChatContext';
-import { getChatCompletion, getUserTypeContext } from '../config/nvidia';
+import { getChatCompletionStream, getUserTypeContext } from '../config/nvidia';
 import DebugUtils from '../utils/DebugUtils';
 import MascotImage from './MascotImage';
 
@@ -100,6 +102,90 @@ const ChatInputBar = ({ colors, onSend, isTyping, bottomInset }) => {
 };
 
 // ──────────────────────────────────────────────
+// Blinking caret shown at the tail of a streaming reply (Gemini-style). Module
+// scope so its identity is stable, and inline (an Animated.Text nested inside
+// Text) so it sits right after the last streamed character. Native-driver
+// opacity loop only — no Reanimated worklet (keeps it crash-proof here).
+// ──────────────────────────────────────────────
+const BlinkingCaret = ({ color }) => {
+  const opacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0, duration: 480, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 480, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [opacity]);
+
+  return <Animated.Text style={[styles.caret, { color, opacity }]}>▋</Animated.Text>;
+};
+
+// ──────────────────────────────────────────────
+// Gemini-style liquid fade-in for streamed text.
+//
+// WHY NOT nested <Text>: on Android every nested <Text> is flattened into ONE
+// native Spannable, so a child <Animated.Text> has no view of its own and its
+// opacity literally cannot animate — the text just snaps in. The ONLY way to
+// fade words individually is to give each word its own VIEW. So every word is a
+// <ReAnimated.Text> flex item, and lines are real rows that wrap.
+//
+// WHY Reanimated (not core Animated): mid-stream the JS thread is saturated
+// parsing SSE + flushing state. A core Animated.timing has to be *started* from
+// that congested JS thread, so the fade stutters or skips. Reanimated's
+// `entering={FadeIn}` is registered declaratively and runs on the UI thread the
+// instant the view mounts — immune to JS lag (req 2 + 3).
+//
+// WORD_FADE_MS — per-word fade length. ~250ms reads as "liquid" without lag.
+// ──────────────────────────────────────────────
+const WORD_FADE_MS = 180;
+
+// One line → flex-wrap row of word views. A word token carries its OWN trailing
+// space (regex `\S+\s*`), so inter-word spacing is preserved without stray
+// space-only flex items (Gemini's flexWrap bug) and `\n` is never embedded in a
+// word (it's a row boundary, so paragraphs survive — req 4 layout integrity).
+const splitWords = (line) => line.match(/\S+\s*/g) || [];
+
+// Renders a live-streaming reply as stacked rows of fading words + a caret.
+// Keys are `${lineIndex}:${wordIndex}` — STABLE as text grows (words/lines only
+// append), so existing word views never remount and `entering` fires exactly
+// once each. The final partial word ("wor"→"world") keeps its key, so it grows
+// in place without re-fading.
+const StreamingText = ({ text, textStyle, caretColor }) => {
+  const lines = useMemo(() => text.split('\n'), [text]);
+  const lastLine = lines.length - 1;
+
+  return (
+    <View>
+      {lines.map((line, li) => {
+        const words = splitWords(line);
+        // Blank line = paragraph gap. Keep a single-space row for the height.
+        if (words.length === 0 && li !== lastLine) {
+          return <Text key={`l${li}`} style={textStyle}>{' '}</Text>;
+        }
+        return (
+          <View key={`l${li}`} style={styles.streamRow}>
+            {words.map((w, wi) => (
+              <ReAnimated.Text
+                key={`${li}:${wi}`}
+                entering={FadeIn.duration(WORD_FADE_MS)}
+                style={textStyle}
+              >
+                {w}
+              </ReAnimated.Text>
+            ))}
+            {li === lastLine && <BlinkingCaret color={caretColor} />}
+          </View>
+        );
+      })}
+    </View>
+  );
+};
+
+// ──────────────────────────────────────────────
 // Screen context map — keys are the ACTUAL React Navigation route names from
 // MainNavigator.js. Koin reads the active route at send-time and injects the
 // matching guide into the system prompt, so "What do I do here?" is answered
@@ -115,9 +201,9 @@ const ChatInputBar = ({ colors, onSend, isTyping, bottomInset }) => {
 const SCREEN_CONTEXTS = {
   'Game': {
     name: 'Game (Story Mode)',
-    description: 'The interactive walking game and one of the 6 main tabs. The user controls a character with the on-screen joystick, walks around the campus map, and visits locations (canteen, shops) to log real expenses in-game. Story Mode teaches budgeting across 3 progressive levels of daily money tasks.',
-    actions: ['Play Story Mode levels', 'Move with the joystick', 'Visit the canteen to log a food expense', 'Complete the day\'s tasks', 'Finish the end-of-day report'],
-    tips: ['Tap a location to interact with it', 'Clear all 3 Story levels to unlock Custom Mode', 'Logging in-game expenses counts toward your real tracking'],
+    description: 'The interactive walking game and one of the 6 main tabs. The user moves their character by tapping anywhere on the map (tap-to-move pathfinding — there is no joystick), walks around the map, and visits locations (canteen, shops) to log real expenses in-game. The map matches the user type (e.g. a school for students, an office for employees), so refer to it generally as "the map" rather than a specific place. Story Mode teaches budgeting across 3 progressive levels of daily money tasks.',
+    actions: ['Play Story Mode levels', 'Tap anywhere on the map to move your character', 'Visit the canteen to log a food expense', 'Complete the day\'s tasks', 'Finish the end-of-day report'],
+    tips: ['Tap anywhere on the map to walk there; tap a location to interact with it', 'Clear all 3 Story levels to unlock Custom Mode', 'Logging in-game expenses counts toward your real tracking'],
   },
   'Custom': {
     name: 'Custom Mode',
@@ -265,6 +351,14 @@ const ChatModal = forwardRef(({ visible, onClose }, ref) => {
 
   const flatListRef = useRef(null);
 
+  // Id of the koin bubble currently being streamed token-by-token (null when
+  // idle). Drives the inline caret + locks the input while a reply is in flight.
+  const [streamingMessageId, setStreamingMessageId] = useState(null);
+
+  // Cancels an in-flight stream when the sheet closes or a new chat starts, so
+  // tokens never write into a bubble that's gone.
+  const abortRef = useRef(null);
+
   // Keyboard height drives sheet height + bottom offset so the input bar always
   // clears the keyboard (native Modal doesn't auto-resize for the keyboard).
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -364,15 +458,18 @@ const ChatModal = forwardRef(({ visible, onClose }, ref) => {
 
   // "New chat" — wipe the global conversation and re-seed for the live screen.
   const handleNewChat = () => {
+    abortRef.current?.abort(); // kill any in-flight stream before wiping
     const screenName = getLiveScreen();
     setCurrentScreen(screenName);
     resetChat();
+    setStreamingMessageId(null);
     seedWelcome(screenName);
   };
 
   // Single close path — dismiss keyboard, then tell the parent to flip visible=false.
   // Used by backdrop tap, close button, and Android hardware back (onRequestClose).
   const handleClose = useCallback(() => {
+    abortRef.current?.abort(); // stop streaming into a bubble we're about to hide
     Keyboard.dismiss();
     onClose();
   }, [onClose]);
@@ -487,7 +584,7 @@ const ChatModal = forwardRef(({ visible, onClose }, ref) => {
     const screenContext = SCREEN_CONTEXTS[screenName] || SCREEN_CONTEXTS['Game'];
 
     const welcomeTemplates = {
-      'Game': `You're in the Game tab! 🎮 Use the joystick to walk around and visit the canteen or shops to log expenses in-game. Playing Story Mode? Ask me how to clear the day's tasks!`,
+      'Game': `You're in the Game tab! 🎮 Tap anywhere on the map to walk around, then visit the canteen or shops to log expenses in-game. Playing Story Mode? Ask me how to clear the day's tasks!`,
       'Custom': `You're in Custom Mode! 🎯 You've saved ₱${financial.totalSaved.toLocaleString()} so far and used ${financial.budgetPercentage}% of your ₱${financial.monthlyBudget.toLocaleString()} budget. Want help with your budget split or a savings goal?`,
       'CustomModeDashboard': `You're in Custom Mode! 🎯 Budgeting, Goals, and Saving all live here. You've saved ₱${financial.totalSaved.toLocaleString()} total${financial.goalsActive > 0 ? ` across ${financial.goalsActive} active goal${financial.goalsActive > 1 ? 's' : ''}` : ''}. Want help setting a realistic savings goal?`,
       'Expenses': `You're on the Expenses tab! 📊 You have ${financial.expenseCount} transactions totaling ₱${financial.totalSpent.toLocaleString()}. Ask me "What did I spend this week?" or "Show my top category"!`,
@@ -678,7 +775,8 @@ YOUR PERSONALITY:
   // Send message with NVIDIA AI
   // ──────────────────────────────────────────────
   const sendMessage = useCallback(async (messageText) => {
-    if (!messageText || isTyping) return;
+    // streamingMessageId guards against a second send while a reply streams in.
+    if (!messageText || isTyping || streamingMessageId) return;
 
     const userMessage = {
       id: Date.now().toString(),
@@ -703,6 +801,48 @@ YOUR PERSONALITY:
     const liveScreen = getLiveScreen();
     setCurrentScreen(liveScreen);
 
+    // Cancel handle for this request (close / new-chat aborts it).
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    // ── Local streaming state (plain closures — no stale-state traps) ──
+    let acc = '';            // full text accumulated so far
+    let koinMsgId = null;    // id of the streaming bubble (set on first token)
+    let started = false;     // has the first visible token arrived?
+    let lastFlush = 0;       // throttle clock for state updates
+
+    // Push the latest text into the streaming bubble, but cap re-renders to
+    // ~25/sec so a fast token stream stays buttery (vercel-react-native: avoid
+    // thrashing the list). force=true always flushes (used on finalize).
+    const flushText = (force) => {
+      const now = Date.now();
+      if (!force && now - lastFlush < 40) return;
+      lastFlush = now;
+      setMessages(prev => prev.map(m => (m.id === koinMsgId ? { ...m, text: acc } : m)));
+    };
+
+    // Called for every visible delta from the model.
+    const onToken = (piece) => {
+      acc += piece;
+      if (!started) {
+        // First token: swap the "Koin is thinking…" footer for a live bubble.
+        started = true;
+        koinMsgId = (Date.now() + 1).toString();
+        setIsTyping(false);
+        setStreamingMessageId(koinMsgId);
+        setMessages(prev => [...prev, {
+          id: koinMsgId,
+          text: acc,
+          sender: 'koin',
+          timestamp: new Date(),
+          type: 'streaming',
+        }]);
+        lastFlush = Date.now();
+      } else {
+        flushText(false);
+      }
+    };
+
     try {
       const systemPrompt = buildSystemPrompt(liveScreen);
 
@@ -718,52 +858,74 @@ YOUR PERSONALITY:
         { role: 'user', content: userQuestion }
       ];
 
-      DebugUtils.log('KOIN_CHAT', 'Sending to NVIDIA API', {
+      DebugUtils.log('KOIN_CHAT', 'Streaming from NVIDIA API', {
         screen: liveScreen,
         questionLength: userQuestion.length,
         historyLength: currentHistory.length,
         historyPreview: currentHistory.slice(-4).map(m => `${m.role}: ${m.content.substring(0, 40)}...`)
       });
 
-      let response = await getChatCompletion(apiMessages, {
-        temperature: 0.7,
-        max_tokens: 1024,
-        frequency_penalty: 0.5,
-        presence_penalty: 0.3
-      });
+      const finalText = await getChatCompletionStream(
+        apiMessages,
+        { temperature: 0.7, max_tokens: 1024, frequency_penalty: 0.5, presence_penalty: 0.3 },
+        { onToken, signal: controller.signal }
+      );
 
-      // Strip any <thinking>...</thinking> blocks that reasoning models may leak
-      response = response.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
-      response = response.replace(/<thought>[\s\S]*?<\/thought>/gi, '').trim();
-      response = response.replace(/<scratchpad>[\s\S]*?<\/scratchpad>/gi, '').trim();
+      const clean = (finalText || acc).trim();
+      if (!started || !clean) {
+        // Nothing ever streamed → treat as a failure → smart fallback below.
+        throw new Error('Empty stream');
+      }
+
+      // Finalize: flush the complete text and promote the bubble from raw
+      // "streaming" plain text to a formatted markdown "ai" message.
+      acc = clean;
+      flushText(true);
+      setMessages(prev => prev.map(m => (m.id === koinMsgId ? { ...m, text: clean, type: 'ai' } : m)));
 
       setConversationHistory(prev => [
         ...prev,
         { role: 'user', content: userQuestion },
-        { role: 'assistant', content: response }
+        { role: 'assistant', content: clean }
       ]);
 
-      setMessages(prev => [...prev, {
-        id: (Date.now() + 1).toString(),
-        text: response,
-        sender: 'koin',
-        timestamp: new Date(),
-        type: 'ai'
-      }]);
-
     } catch (error) {
-      DebugUtils.error('KOIN_CHAT', 'AI response failed', error);
+      // User closed / reset mid-stream — drop the partial bubble, stay silent.
+      if (error?.name === 'AbortError') {
+        if (koinMsgId) setMessages(prev => prev.filter(m => m.id !== koinMsgId));
+        return; // finally still runs
+      }
 
-      const fallbackResponse = generateSmartFallback(userQuestion, liveScreen);
-      setMessages(prev => [...prev, {
-        id: (Date.now() + 1).toString(),
-        text: fallbackResponse,
-        sender: 'koin',
-        timestamp: new Date(),
-        type: 'fallback'
-      }]);
+      DebugUtils.error('KOIN_CHAT', 'AI stream failed', error);
+
+      if (started && acc.trim()) {
+        // Network dropped MID-generation but we already have a usable partial —
+        // keep it on screen (badged offline) and record it so the next turn
+        // stays coherent, rather than throwing the user's answer away.
+        const partial = acc.trim();
+        setMessages(prev => prev.map(m => (m.id === koinMsgId
+          ? { ...m, text: partial, type: 'fallback' }
+          : m)));
+        setConversationHistory(prev => [
+          ...prev,
+          { role: 'user', content: userQuestion },
+          { role: 'assistant', content: partial }
+        ]);
+      } else {
+        // Failed before any token — use the local smart responder.
+        const fallbackResponse = generateSmartFallback(userQuestion, liveScreen);
+        setMessages(prev => [...prev, {
+          id: (Date.now() + 1).toString(),
+          text: fallbackResponse,
+          sender: 'koin',
+          timestamp: new Date(),
+          type: 'fallback'
+        }]);
+      }
     } finally {
+      abortRef.current = null;
       setIsTyping(false);
+      setStreamingMessageId(null);
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
@@ -774,7 +936,7 @@ YOUR PERSONALITY:
     // chat of a session injected ₱0 into the prompt — Koin then "hallucinated" ₱0
     // until an unrelated re-render swapped the closure. This is why the bug looked
     // screen-specific (Custom = first chat) rather than order-specific.
-  }, [isTyping, expenses, budget, savings, userInfo, setMessages, setIsTyping, setConversationHistory, conversationHistoryRef]);
+  }, [isTyping, streamingMessageId, expenses, budget, savings, userInfo, setMessages, setIsTyping, setConversationHistory, conversationHistoryRef]);
 
   // ──────────────────────────────────────────────
   // Smart fallback when AI fails
@@ -881,6 +1043,15 @@ YOUR PERSONALITY:
             <Text style={[styles.messageText, { color: '#FFFFFF' }]}>
               {item.text}
             </Text>
+          ) : item.type === 'streaming' ? (
+            // Live typewriter: words fade in individually (partial markdown
+            // mid-stream looks broken, so plain text + inline caret here).
+            // Reformats to markdown once the bubble finalizes to type 'ai'.
+            <StreamingText
+              text={item.text}
+              textStyle={[styles.messageText, { color: colors.text }]}
+              caretColor={colors.primary}
+            />
           ) : (
             <Markdown
               style={{
@@ -1083,7 +1254,7 @@ YOUR PERSONALITY:
           <ChatInputBar
             colors={colors}
             onSend={sendMessage}
-            isTyping={isTyping}
+            isTyping={isTyping || streamingMessageId !== null}
             bottomInset={keyboardHeight > 0 ? 0 : insets.bottom}
           />
         </View>
@@ -1217,6 +1388,17 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: 15,
     lineHeight: 22,
+  },
+  // Streaming reply line: words are individual flex items that wrap like text.
+  streamRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-end',
+  },
+  caret: {
+    fontSize: 14,
+    lineHeight: 22,
+    fontWeight: '700',
   },
   aiBadge: {
     flexDirection: 'row',

@@ -11,9 +11,15 @@ export default {
     userInterfaceStyle: "automatic",
     scheme: "gafi",
     splash: {
-      image: "./assets/splash.png",
+      // NOTE: This block only applies when `expo prebuild` regenerates native
+      // files. This is a bare workflow with a committed android/ dir (no prebuild),
+      // so the LIVE Android splash is driven by the native files, NOT this config:
+      //   android/app/src/main/res/values/colors.xml  -> @color/splashscreen_background
+      //   android/app/src/main/res/drawable-*/splashscreen_logo.png
+      // These values are kept in sync with those native files.
+      image: "./assets/GaFi_Logo_Mark.png",
       resizeMode: "contain",
-      backgroundColor: "#FF6B00"
+      backgroundColor: "#1C1C1C"
     },
     assetBundlePatterns: [
       "**/*"

@@ -25,10 +25,12 @@ export const WANTS_CATEGORIES = [
 
 const DAILY_TASK_RULES = {
   '1_1_1': {
+    // Forgiving thresholds: use min (>=) not exact (===) so an extra logged
+    // expense can't soft-lock the day. Over-spend is still gated by 1_1_3 ratios.
     type: 'all_of',
     conditions: [
-      { type: 'expense_count', exact: 2, categoryGroup: 'needs' },
-      { type: 'expense_count', exact: 1, categoryGroup: 'wants' },
+      { type: 'expense_count', min: 2, categoryGroup: 'needs' },
+      { type: 'expense_count', min: 1, categoryGroup: 'wants' },
     ],
   },
   '1_1_2': {
@@ -115,9 +117,11 @@ const DAILY_TASK_RULES = {
   },
   // Level 3 — Saving (Days 7 - 10)
   '3_7_1': {
+    // Needs uses min (>=) to avoid soft-lock; spend stays disciplined via the
+    // 20% weekly-budget cap in 3_7_2. Wants keeps a max:0 ceiling (the lesson).
     type: 'all_of',
     conditions: [
-      { type: 'expense_count', exact: 1, categoryGroup: 'needs' },
+      { type: 'expense_count', min: 1, categoryGroup: 'needs' },
       { type: 'expense_count', max: 0, categoryGroup: 'wants' },
     ],
   },
@@ -137,10 +141,11 @@ const DAILY_TASK_RULES = {
     max: 0.15,
   },
   '3_9_1': {
+    // Needs uses min (>=) to avoid soft-lock; 3_9_2 still enforces zero Wants.
     type: 'all_of',
     conditions: [
       { type: 'mall_visited' },
-      { type: 'expense_count', exact: 1, categoryGroup: 'needs' },
+      { type: 'expense_count', min: 1, categoryGroup: 'needs' },
     ],
   },
   '3_9_2': {
