@@ -11,6 +11,7 @@ import { collisionSystem } from '../../utils/CollisionSystem';
 import { AchievementService } from '../../services/AchievementService';
 import AnimatedBar from '../../components/AnimatedBar';
 import gameDatabaseService from '../../services/GameDatabaseService';
+import EconomyService, { SPROUTS_REWARDS } from '../../services/EconomyService';
 import { normalizeCategory } from '../../utils/categoryUtils';
 import { getCategoryIcon } from '../../utils/categoryIcons';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -35,6 +36,7 @@ import { useGameAudio } from '../../context/AudioContext';
 import { FONTS } from '../../theme/typography';
 import { toast } from '../../utils/toast';
 import { useConfirm } from '../../components/feedback/ConfirmProvider';
+import { CHARACTER_SPRITES } from '../../data/cosmetics';
 
 const { width: INITIAL_WIDTH, height: INITIAL_HEIGHT } = Dimensions.get('window');
 const CHARACTER_SIZE = 48;
@@ -967,93 +969,10 @@ export default function BuildScreen() {
     { id: 'Other', name: 'Other', icon: '📦', color: '#795548' },
   ];
 
-  // Character sprite configurations - including purchasable skins
-  const CHARACTER_SPRITES = {
-    girl: {
-      name: 'Maya',
-      description: 'A bright student with big dreams',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/GirlWalk.png'),
-      icon: '👧',
-      color: '#FF69B4',
-    },
-    jasper: {
-      name: 'Jasper',
-      description: 'A determined young saver',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/JasperWalk.png'),
-      icon: '👦',
-      color: '#4A90D9',
-    },
-    businessman: {
-      name: 'Business Marco',
-      description: 'A professional look for the serious saver',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Businessman.png'),
-      icon: '👔',
-      color: '#2C3E50',
-    },
-    businesswoman: {
-      name: 'Business Elena',
-      description: 'Power suit for the ambitious achiever',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Businesswoman.png'),
-      icon: '👩‍💼',
-      color: '#8E44AD',
-    },
-    budget_trainer: {
-      name: 'Budget Trainer',
-      description: 'Gotta save \'em all! A trainer of budgets',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Budget Trainer.png'),
-      icon: '🧢',
-      color: '#E53935',
-    },
-    martial_artist: {
-      name: 'Martial Artist',
-      description: 'Disciplined finances, disciplined life',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Martial Artist.png'),
-      icon: '🥋',
-      color: '#FFC107',
-    },
-    chef_stephen: {
-      name: 'Chef Stephen',
-      description: 'Cooking up smart savings recipes',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Chef Stephen.png'),
-      icon: '👨‍🍳',
-      color: '#FF7043',
-    },
-    detective_carol: {
-      name: 'Detective Carol',
-      description: 'Investigating every peso spent',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Detective Carol.png'),
-      icon: '🕵️',
-      color: '#5C6BC0',
-    },
-    lily: {
-      name: 'Lily',
-      description: 'A cheerful saver with a green thumb',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Lily.png'),
-      icon: '🌸',
-      color: '#66BB6A',
-    },
-    mira: {
-      name: 'Mira',
-      description: 'A tech-savvy student tracking every cent',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Mira.png'),
-      icon: '💜',
-      color: '#AB47BC',
-    },
-    head_nurse: {
-      name: 'Head Nurse',
-      description: 'Healing your finances back to health',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Head Nurse.png'),
-      icon: '👩‍⚕️',
-      color: '#EC407A',
-    },
-    policeman: {
-      name: 'Officer Dan',
-      description: 'Keeping your spending in check',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Policeman.png'),
-      icon: '👮',
-      color: '#1565C0',
-    },
-  };
+  // Character sprite configurations — including purchasable skins — now live in the
+  // shared catalogue src/data/cosmetics.js (imported as CHARACTER_SPRITES at the top
+  // of this file). Keyed by characterKey, same shape as before: { name, description,
+  // sprite, icon, color }.
 
   // Sprite frame configuration (24 frames total: 6 per direction)
   const SPRITE_CONFIG = {
@@ -1708,6 +1627,15 @@ export default function BuildScreen() {
         gameDatabaseService.incrementUserLevelStats({ xpToAdd: earnedXp });
       }
 
+      // Sprouts reward: +10 per daily task cleared. Separate from XP — Sprouts are
+      // the spendable store currency, XP is the leaderboard score. Fire-and-forget.
+      const earnedSprouts = gameMode === 'story'
+        ? SPROUTS_REWARDS.DAILY_TASK * newlyCompleted.length
+        : 0;
+      if (earnedSprouts > 0) {
+        EconomyService.awardSprouts(user?.id, earnedSprouts, 'story_daily_task');
+      }
+
       if (gameMode === 'story') {
         newlyCompleted.forEach((task) => {
           gameDatabaseService.logActivity({
@@ -1730,7 +1658,9 @@ export default function BuildScreen() {
       const count = newlyCompleted.length;
       toast.success(
         count > 1 ? `${count} tasks complete 🎉` : 'Task complete 🎉',
-        earnedXp > 0 ? `+${earnedXp} XP earned` : newlyCompleted[0].successMessage,
+        earnedXp > 0
+          ? `+${earnedXp} XP · +${earnedSprouts} 🌱 Sprouts`
+          : newlyCompleted[0].successMessage,
       );
     }
   }, [
@@ -2642,6 +2572,12 @@ export default function BuildScreen() {
       gameDatabaseService.incrementUserLevelStats({ xpToAdd: xpEarned, goalsAchieved: 1 });
       // Directly mark story level completed on user_levels (safety net for DB trigger)
       gameDatabaseService.markStoryLevelCompleted(storyLevel, starsEarned);
+      // Sprouts reward: +50 for clearing the week/level (the big payout that funds
+      // the store). Independent of XP. Fire-and-forget.
+      EconomyService.awardSprouts(user?.id, SPROUTS_REWARDS.STORY_WEEK_PASSED, 'story_week_passed');
+      // Celebrate the big payout so the player sees the currency land (mirrors the
+      // per-task toast). No daily cap on the week reward, so it always fires here.
+      toast.success('Week complete 🎉', `+${SPROUTS_REWARDS.STORY_WEEK_PASSED} 🌱 Sprouts earned`);
     }
 
     // 🏆 Check for story mode achievements when level is completed

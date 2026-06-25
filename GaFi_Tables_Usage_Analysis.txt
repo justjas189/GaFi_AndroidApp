@@ -1,0 +1,142 @@
+================================================================
+GaFi - DATABASE TABLE USAGE ANALYSIS
+For ERD scoping. Generated from a static trace of the app's live code.
+Source schema: GaFi_Table_Schema.txt (33 tables)
+================================================================
+
+A table is counted as "USED" only if it is referenced via supabase.from()
+in code that is actually reachable from the running app (context/, services/,
+screens/). References found only in docs/, supabase/*.sql migrations,
+scripts/, commented-out code, or never-called methods are NOT counted.
+
+----------------------------------------------------------------
+SUMMARY:  26 USED  |  7 LEGACY / UNUSED  |  33 TOTAL
+----------------------------------------------------------------
+
+
+================================================================
+[ USED ]  Include these in the ERD  (26 tables)
+================================================================
+
+--- Core / Auth ---------------------------------------------------
+profiles
+    AuthContext.js, ProfileService.js, FriendService.js,
+    onboarding screens, ProfileScreen.js
+
+--- Budgeting & Expenses (Custom Mode core) -----------------------
+budgets
+    DataContext.js, BudgetDatabaseService_NEW.js, GameScreen.js
+budget_categories
+    DataContext.js, BudgetDatabaseService_NEW.js
+expenses                (THE active expense table - not "transactions")
+    DataContext.js, DatabaseManager.js, BudgetDatabaseService_NEW.js,
+    GameScreen.js, LeaderboardService.js
+budget_alerts
+    BudgetDatabaseService_NEW.js (read by getActiveAlerts in dashboard)
+notes                   (full CRUD)
+    DataContext.js
+
+--- Custom Mode (savings / goals) --------------------------------
+budgets_custom_mode
+    DataContext.js, CustomModeDashboard.js
+goals_custom_mode
+    DataContext.js, CustomModeDashboard.js
+goal_contributions_custom_mode
+    CustomModeDashboard.js
+savings_accounts_custom_mode
+    DataContext.js, CustomModeDashboard.js
+savings_logs_custom_mode
+    DataContext.js, CustomModeDashboard.js
+
+--- Game / Story Mode --------------------------------------------
+user_levels             (central XP/level + story progress table)
+    GameDatabaseService.js, FriendService.js, LeaderboardService.js,
+    AchievementService.js, LeaderboardScreen.js
+story_mode_sessions
+    GameDatabaseService.js, ProfileScreen.js
+custom_mode_sessions
+    GameDatabaseService.js
+transport_expenses
+    GameDatabaseService.js
+character_customizations
+    GameDatabaseService.js
+game_activity_log
+    GameDatabaseService.js, GameScreen.js
+tutorial_progress
+    GameDatabaseService.js
+
+--- Learning / Education -----------------------------------------
+user_learning_progress
+    LearningProgressDatabaseService.js
+user_quiz_results
+    LearningProgressDatabaseService.js
+user_favorite_tips
+    LearningProgressDatabaseService.js
+user_learning_stats
+    LearningProgressDatabaseService.js
+
+--- Achievements / Social / Leaderboard --------------------------
+user_achievements
+    AchievementService.js, LeaderboardScreen.js
+friends
+    FriendService.js, AchievementService.js, LeaderboardScreen.js
+updated_leaderboard     (the active leaderboard table)
+    LeaderboardScreen.js
+
+--- Notifications ------------------------------------------------
+push_tokens
+    PushTokenService.js
+
+
+================================================================
+[ LEGACY / UNUSED ]  Safe to leave OUT of the ERD  (7 tables)
+================================================================
+
+transactions
+    Only referenced in BudgetService.js, which is dead code
+    (commented out in config/serviceImports.js and imported nowhere).
+    The live app records spending in "expenses" instead.
+
+chatbot_interactions
+    Only touched by BudgetDatabaseService_NEW.logInteraction(), which is
+    defined but never called anywhere in the app.
+
+chat_sessions
+chat_messages
+    No supabase.from() reference in app code. Chat persistence is handled
+    by ChatContext.js (local/AsyncStorage). These tables appear only in
+    old migrations + supabase/cleanup_duplicate_tables.sql.
+
+password_reset_codes
+    The custom 6-digit-code system was replaced by Supabase Auth's native
+    OTP recovery. AuthContext uses auth.resetPasswordForEmail() +
+    verifyOtp(); this table is no longer read or written by the app.
+
+leaderboards
+    Superseded by "updated_leaderboard" (+ user_levels for stats).
+    Referenced only in old SQL functions, not in app code.
+
+achievement_definitions
+    Not queried. Achievement definitions are hardcoded in
+    AchievementService.getAchievementDefinitions().
+
+
+================================================================
+[ HEADS-UP ]  Code references tables NOT in your schema
+================================================================
+These are queried by code but do not exist in GaFi_Table_Schema.txt.
+They are either already-dropped tables (dead code paths) or a stale
+backend. They are NOT part of your current DB and should NOT go in the ERD,
+but you may want to clean up the code that references them:
+
+  leaderboard_achievements   -> AchievementService.js
+  savings_level_configs      -> LeaderboardService.js
+  gamified_savings_goals     -> LeaderboardService.js
+  savings_goals              -> backend/app.py, backend/mascot.py (Flask)
+  savings_transactions       -> backend/app.py, backend/mascot.py (Flask)
+
+Note: the Python Flask backend (backend/) relies entirely on
+savings_goals / savings_transactions, neither of which is in your schema.
+If the backend is still in use, that pairing needs attention; if not,
+the backend is legacy too.
+================================================================

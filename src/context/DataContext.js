@@ -8,6 +8,8 @@ import { BudgetDatabaseService } from '../services/BudgetDatabaseService_NEW';
 import { normalizeCategory } from '../utils/categoryUtils';
 import notificationService from '../services/NotificationService';
 import goalNotificationService from '../services/GoalNotificationService';
+import EconomyService from '../services/EconomyService';
+import { toast } from '../utils/toast';
 
 export const DataContext = createContext();
 
@@ -497,6 +499,26 @@ export const DataProvider = ({ children }) => {
         } catch (alertError) {
           console.warn('Budget alert check failed (non-critical):', alertError);
         }
+
+        // ── Reward Sprouts for tracking real spending ──
+        // Capped at the first 3 logs/day inside EconomyService so users can't farm
+        // currency with fake micro-expenses. Fire-and-forget, never blocks the add.
+        // Only toast when Sprouts actually landed (res.awarded > 0) — past the daily
+        // cap awarded is 0, so the user isn't promised currency they didn't earn.
+        EconomyService.awardSproutsForExpense(userId)
+          .then((res) => {
+            if (res?.awarded > 0) {
+              // Call out the Double Sprout Token boost so the doubled payout is
+              // visibly tied to the buff the player spent a token to arm.
+              toast.success(
+                res.boosted ? 'Expense logged · 2×!' : 'Expense logged',
+                `+${res.awarded} 🌱 Sprouts earned`,
+              );
+            }
+          })
+          .catch((e) =>
+            console.warn('Sprouts award (expense) failed (non-critical):', e?.message || e)
+          );
       }
 
       // Refresh local state by reloading all data (defer AI insights to avoid blocking)

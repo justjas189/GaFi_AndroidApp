@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -19,149 +19,17 @@ import { useAuth } from '../../context/AuthContext';
 import { AchievementService } from '../../services/AchievementService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import gameDatabaseService from '../../services/GameDatabaseService';
+import EconomyService from '../../services/EconomyService';
 import { FONTS } from '../../theme/typography';
 import AnimatedBar from '../../components/AnimatedBar';
 import { toast } from '../../utils/toast';
+import { COSMETICS } from '../../data/cosmetics';
 
 const { width } = Dimensions.get('window');
 
-// Store item definitions - Skins
-const STORE_ITEMS = {
-  skins: [
-    {
-      id: 'skin_girl',
-      name: 'Maya',
-      description: 'The default bright student with big dreams',
-      price: 0,
-      icon: '👧',
-      color: '#FF69B4',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/GirlWalk.png'),
-      characterKey: 'girl',
-      isDefault: true,
-    },
-    {
-      id: 'skin_jasper',
-      name: 'Jasper',
-      description: 'A determined young saver',
-      price: 0,
-      icon: '👦',
-      color: '#4A90D9',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/JasperWalk.png'),
-      characterKey: 'jasper',
-      isDefault: true,
-    },
-    {
-      id: 'skin_businessman',
-      name: 'Business Marco',
-      description: 'A professional look for the serious saver',
-      price: 150,
-      icon: '👔',
-      color: '#2C3E50',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Businessman.png'),
-      characterKey: 'businessman',
-      isDefault: false,
-    },
-    {
-      id: 'skin_businesswoman',
-      name: 'Business Elena',
-      description: 'Power suit for the ambitious achiever',
-      price: 150,
-      icon: '👩‍💼',
-      color: '#8E44AD',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Businesswoman.png'),
-      characterKey: 'businesswoman',
-      isDefault: false,
-    },
-    {
-      id: 'skin_budget_trainer',
-      name: 'Budget Trainer',
-      description: 'Gotta save \'em all! A trainer of budgets',
-      price: 200,
-      icon: '🧢',
-      color: '#E53935',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Budget Trainer.png'),
-      characterKey: 'budget_trainer',
-      isDefault: false,
-    },
-    {
-      id: 'skin_martial_artist',
-      name: 'Martial Artist',
-      description: 'Disciplined finances, disciplined life',
-      price: 200,
-      icon: '🥋',
-      color: '#FFC107',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Martial Artist.png'),
-      characterKey: 'martial_artist',
-      isDefault: false,
-    },
-    {
-      id: 'skin_chef_stephen',
-      name: 'Chef Stephen',
-      description: 'Cooking up smart savings recipes',
-      price: 175,
-      icon: '👨‍🍳',
-      color: '#FF7043',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Chef Stephen.png'),
-      characterKey: 'chef_stephen',
-      isDefault: false,
-    },
-    {
-      id: 'skin_detective_carol',
-      name: 'Detective Carol',
-      description: 'Investigating every peso spent',
-      price: 175,
-      icon: '🕵️',
-      color: '#5C6BC0',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Detective Carol.png'),
-      characterKey: 'detective_carol',
-      isDefault: false,
-    },
-    {
-      id: 'skin_lily',
-      name: 'Lily',
-      description: 'A cheerful saver with a green thumb',
-      price: 150,
-      icon: '🌸',
-      color: '#66BB6A',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Lily.png'),
-      characterKey: 'lily',
-      isDefault: false,
-    },
-    {
-      id: 'skin_mira',
-      name: 'Mira',
-      description: 'A tech-savvy student tracking every cent',
-      price: 150,
-      icon: '💜',
-      color: '#AB47BC',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Mira.png'),
-      characterKey: 'mira',
-      isDefault: false,
-    },
-    {
-      id: 'skin_head_nurse',
-      name: 'Head Nurse',
-      description: 'Healing your finances back to health',
-      price: 200,
-      icon: '👩‍⚕️',
-      color: '#EC407A',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Head Nurse.png'),
-      characterKey: 'head_nurse',
-      isDefault: false,
-    },
-    {
-      id: 'skin_policeman',
-      name: 'Officer Dan',
-      description: 'Keeping your spending in check',
-      price: 175,
-      icon: '👮',
-      color: '#1565C0',
-      sprite: require('../../../assets/Game_Graphics/Character_Animation/Policeman.png'),
-      characterKey: 'policeman',
-      isDefault: false,
-    },
-  ],
-};
+// Store skins now come from the shared catalogue in src/data/cosmetics.js
+// (single source of truth across the Store, Boutique, and Game Closet).
+const STORE_SKINS = COSMETICS;
 
 const AchievementDashboard = () => {
   const { theme } = useTheme();
@@ -180,9 +48,15 @@ const AchievementDashboard = () => {
   // Store state
   const [showStoreModal, setShowStoreModal] = useState(false);
   const [purchasedItems, setPurchasedItems] = useState([]);
-  const [spentXP, setSpentXP] = useState(0); // XP spent in store (separate from leaderboard score)
+  const [spentXP, setSpentXP] = useState(0); // legacy lifetime store-spend record (no longer gates purchases)
   const [selectedStoreItem, setSelectedStoreItem] = useState(null);
   const [showPurchaseConfirm, setShowPurchaseConfirm] = useState(false);
+
+  // Sprouts economy — the real spendable currency (decoupled from XP). Store
+  // purchases deduct from this balance, not from lifetime XP / leaderboard score.
+  const [sproutsBalance, setSproutsBalance] = useState(0);
+  const [storeLoaded, setStoreLoaded] = useState(false); // gates the one-time legacy seed
+  const sproutsInitRef = useRef(false);
 
   useEffect(() => {
     if (user?.id) {
@@ -425,7 +299,7 @@ const AchievementDashboard = () => {
       if (!user?.id) return;
 
       // Default owned items
-      const defaultOwned = STORE_ITEMS.skins
+      const defaultOwned = STORE_SKINS
         .filter(item => item.isDefault)
         .map(item => item.id);
 
@@ -433,7 +307,7 @@ const AchievementDashboard = () => {
       // e.g. ['girl','jasper','mira'] → ['skin_girl','skin_jasper','skin_mira']
       const derivePurchasedFromUnlocked = (unlockedChars) => {
         if (!unlockedChars || !Array.isArray(unlockedChars)) return [];
-        return STORE_ITEMS.skins
+        return STORE_SKINS
           .filter(item => unlockedChars.includes(item.characterKey))
           .map(item => item.id);
       };
@@ -503,8 +377,42 @@ const AchievementDashboard = () => {
       }
     } catch (error) {
       console.error('Error loading store data:', error);
+    } finally {
+      // Signals the legacy-seed effect that spentXP is now known (any path).
+      setStoreLoaded(true);
     }
   };
+
+  // ── Sprouts: one-time legacy seed + balance load ──
+  // Existing users earned "Spendable" as (lifetime XP − spent XP). On the cutover
+  // to a real Sprouts balance we seed that value once so nobody loses their
+  // store-spending power, then always read the live balance from Supabase.
+  const loadSprouts = async (legacyEarned, legacySpent) => {
+    try {
+      if (!user?.id) return;
+      const seededKey = `sprouts_seeded_${user.id}`;
+      const alreadySeeded = await AsyncStorage.getItem(seededKey);
+      if (!alreadySeeded) {
+        const legacy = Math.max(0, (legacyEarned || 0) - (legacySpent || 0));
+        if (legacy > 0) {
+          await EconomyService.seedSprouts(user.id, legacy);
+        }
+        await AsyncStorage.setItem(seededKey, 'true');
+      }
+      const balance = await EconomyService.getSproutsBalance(user.id);
+      setSproutsBalance(balance);
+    } catch (err) {
+      console.warn('Sprouts load failed (non-critical):', err?.message || err);
+    }
+  };
+
+  // Run the seed exactly once per mount, only after BOTH achievements (earned XP)
+  // and store data (spent XP) are loaded — otherwise the legacy math is wrong.
+  useEffect(() => {
+    if (!user?.id || loading || !storeLoaded || sproutsInitRef.current) return;
+    sproutsInitRef.current = true;
+    loadSprouts(getTotalEarnedXP(), spentXP);
+  }, [user, loading, storeLoaded, spentXP]);
 
   // Save store data — write to both Supabase and AsyncStorage
   const saveStoreData = async (newPurchasedItems, newSpentXP, newUnlockedCharacters) => {
@@ -538,11 +446,6 @@ const AchievementDashboard = () => {
     return userAchievements.reduce((sum, ua) => sum + (ua.points || 0), 0);
   };
 
-  // Calculate spendable XP (earned - spent)
-  const getSpendableXP = () => {
-    return Math.max(0, getTotalEarnedXP() - spentXP);
-  };
-
   // Check if item is purchased
   const isItemPurchased = (itemId) => {
     return purchasedItems.includes(itemId);
@@ -550,11 +453,9 @@ const AchievementDashboard = () => {
 
   // Purchase item
   const purchaseItem = async (item) => {
-    const spendableXP = getSpendableXP();
-
     // Ghost: the confirm modal already shows the shortfall inline and disables
     // the Purchase button when you can't afford it — dead guard, keep the return.
-    if (item.price > spendableXP) {
+    if (item.price > sproutsBalance) {
       return;
     }
 
@@ -563,11 +464,26 @@ const AchievementDashboard = () => {
     if (isItemPurchased(item.id)) {
       return;
     }
-    
-    // Process purchase
+
+    // Deduct Sprouts first — the balance is the source of truth. Bail if the spend
+    // fails (insufficient funds / network) so we never grant an item for free.
+    const spendResult = await EconomyService.spendSprouts(user.id, item.price, `skin:${item.id}`);
+    if (!spendResult.success) {
+      toast.error(
+        'Purchase failed',
+        spendResult.error === 'insufficient_funds'
+          ? 'Not enough Sprouts.'
+          : 'Could not complete purchase. Please try again.'
+      );
+      return;
+    }
+    setSproutsBalance(spendResult.balance);
+
+    // Process purchase — record-keeping only (purchased items + legacy lifetime
+    // spend). Affordability now lives in the Sprouts balance above.
     const newPurchasedItems = [...purchasedItems, item.id];
     const newSpentXP = spentXP + item.price;
-    
+
     setPurchasedItems(newPurchasedItems);
     setSpentXP(newSpentXP);
     
@@ -615,6 +531,11 @@ const AchievementDashboard = () => {
     setRefreshing(true);
     await loadAchievementData();
     await loadStoreData();
+    // Seed already ran on mount — just re-read the live Sprouts balance.
+    if (user?.id) {
+      const balance = await EconomyService.getSproutsBalance(user.id);
+      setSproutsBalance(balance);
+    }
     setRefreshing(false);
   };
 
@@ -757,7 +678,6 @@ const AchievementDashboard = () => {
     const totalAchievements = Array.isArray(allAchievements) ? allAchievements.length : 0;
     const earnedAchievements = Array.isArray(userAchievements) ? userAchievements.length : 0;
     const totalPoints = getTotalEarnedXP();
-    const spendablePoints = getSpendableXP();
 
     return (
       <View style={[styles.statsCard, { backgroundColor: theme.colors.card }]}>
@@ -803,11 +723,14 @@ const AchievementDashboard = () => {
           </View>
           
           <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: '#4CAF50' }]}>
-              {spendablePoints}
-            </Text>
+            <View style={styles.sproutsValueRow}>
+              <Ionicons name="leaf" size={16} color="#4CAF50" />
+              <Text style={[styles.statNumber, { color: '#4CAF50' }]}>
+                {sproutsBalance}
+              </Text>
+            </View>
             <Text style={[styles.statLabel, { color: theme.colors.text }]}>
-              Spendable
+              Sprouts
             </Text>
           </View>
         </View>
@@ -1080,7 +1003,7 @@ const AchievementDashboard = () => {
   // Render Store Item Card
   const renderStoreItem = (item) => {
     const owned = isItemPurchased(item.id);
-    const canAfford = getSpendableXP() >= item.price;
+    const canAfford = sproutsBalance >= item.price;
     
     return (
       <TouchableOpacity
@@ -1137,12 +1060,12 @@ const AchievementDashboard = () => {
               styles.priceBadge, 
               { backgroundColor: canAfford ? theme.colors.primary : theme.colors.border }
             ]}>
-              <Ionicons name="star" size={14} color={canAfford ? '#FFD700' : '#888'} />
+              <Ionicons name="leaf" size={14} color={canAfford ? '#FFFFFF' : '#888'} />
               <Text style={[
-                styles.priceText, 
+                styles.priceText,
                 { color: canAfford ? 'white' : '#888' }
               ]}>
-                {item.price} XP
+                {item.price}
               </Text>
             </View>
           )}
@@ -1190,12 +1113,12 @@ const AchievementDashboard = () => {
                 </View>
                 <View style={styles.xpBalanceDivider} />
                 <View style={styles.xpBalanceItem}>
-                  <Ionicons name="wallet" size={20} color="#4CAF50" />
+                  <Ionicons name="leaf" size={20} color="#4CAF50" />
                   <Text style={[styles.xpBalanceLabel, { color: theme.colors.text + '80' }]}>
-                    Spendable
+                    Sprouts
                   </Text>
                   <Text style={[styles.xpBalanceValue, { color: '#4CAF50' }]}>
-                    {getSpendableXP()} XP
+                    {sproutsBalance}
                   </Text>
                 </View>
               </View>
@@ -1212,7 +1135,7 @@ const AchievementDashboard = () => {
               <Text style={[styles.storeSectionTitle, { color: theme.colors.text }]}>
                 🎭 Character Skins
               </Text>
-              {STORE_ITEMS.skins.map(renderStoreItem)}
+              {STORE_SKINS.map(renderStoreItem)}
               
               <View style={styles.storeComingSoon}>
                 <Ionicons name="construct" size={32} color={theme.colors.text + '40'} />
@@ -1231,8 +1154,8 @@ const AchievementDashboard = () => {
   const renderPurchaseConfirmModal = () => {
     if (!selectedStoreItem) return null;
     
-    const canAfford = getSpendableXP() >= selectedStoreItem.price;
-    
+    const canAfford = sproutsBalance >= selectedStoreItem.price;
+
     return (
       <Modal
         visible={showPurchaseConfirm}
@@ -1267,9 +1190,9 @@ const AchievementDashboard = () => {
                   Price
                 </Text>
                 <View style={styles.purchasePriceValue}>
-                  <Ionicons name="star" size={18} color="#FFD700" />
+                  <Ionicons name="leaf" size={18} color="#4CAF50" />
                   <Text style={[styles.purchasePriceText, { color: theme.colors.text }]}>
-                    {selectedStoreItem.price} XP
+                    {selectedStoreItem.price}
                   </Text>
                 </View>
               </View>
@@ -1278,17 +1201,17 @@ const AchievementDashboard = () => {
                   Your Balance
                 </Text>
                 <Text style={[
-                  styles.purchasePriceText, 
+                  styles.purchasePriceText,
                   { color: canAfford ? '#4CAF50' : '#FF5252' }
                 ]}>
-                  {getSpendableXP()} XP
+                  {sproutsBalance} 🌱
                 </Text>
               </View>
             </View>
-            
+
             {!canAfford && (
               <Text style={styles.notEnoughXP}>
-                You need {selectedStoreItem.price - getSpendableXP()} more XP
+                You need {selectedStoreItem.price - sproutsBalance} more Sprouts
               </Text>
             )}
             
@@ -1313,7 +1236,7 @@ const AchievementDashboard = () => {
                 disabled={!canAfford}
               >
                 <Text style={styles.purchaseConfirmText}>
-                  {canAfford ? 'Purchase' : 'Not Enough XP'}
+                  {canAfford ? 'Purchase' : 'Not Enough Sprouts'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1469,6 +1392,11 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.numberBold,
     fontSize: 24,
     fontVariant: ['tabular-nums'],
+  },
+  sproutsValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   statLabel: {
     fontFamily: FONTS.bodyRegular,

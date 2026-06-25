@@ -27,6 +27,8 @@ import NotificationSettingsScreen from '../screens/main/NotificationSettingsScre
 import NotificationTestScreen from '../screens/main/NotificationTestScreen';
 import GameScreen from '../screens/main/GameScreen';
 import ExploreScreen from '../screens/main/ExploreScreen';
+import BoutiqueScreen from '../screens/main/BoutiqueScreen';
+import TradingPostScreen from '../screens/main/TradingPostScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
 import LeaderboardScreen from '../screens/main/LeaderboardScreen';
 import AchievementDashboard from '../screens/main/AchievementDashboard';
@@ -155,6 +157,14 @@ const MainNavigator = () => {
             {/* <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen name="OldLearn" component={LearnScreen} /> */}
             <Stack.Screen name="CustomModeDashboard" component={CustomModeDashboard} />
+            {/* Explore hub — new gamified features (not built yet). Routed to the
+                PlaceholderScreen ("Coming Soon") so taps from ExploreScreen don't
+                crash. Swap each component as the real screen lands. */}
+            <Stack.Screen name="SeasonalSaga" component={PlaceholderScreen} />
+            <Stack.Screen name="KoinBoutique" component={BoutiqueScreen} />
+            <Stack.Screen name="SavingsGuilds" component={PlaceholderScreen} />
+            <Stack.Screen name="Chronicle" component={PlaceholderScreen} />
+            <Stack.Screen name="TradingPost" component={TradingPostScreen} />
           </Stack.Navigator>
 
           {/* Rendered after the navigator → paints over every screen; inside the
