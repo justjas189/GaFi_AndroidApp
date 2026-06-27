@@ -6801,11 +6801,16 @@ export default function BuildScreen() {
 
   // Render Main Menu
   const renderMainMenu = () => (
-    <ImageBackground
-      source={require('../../../assets/Game_Graphics/menu/main_menu_bg.jpg')}
-      style={menuStyles.menuBackground}
-      resizeMode="cover"
-    >
+    // Top-anchored bg: baked-in GaFi logo lives at the TOP of the source image.
+    // resizeMode="cover" centers + crops the top off on short 16:9 screens, hiding
+    // the logo. Pin an explicit Image to top:0 with native aspect height so any
+    // cropping spills off the BOTTOM. overflow:'hidden' clips the excess.
+    <View style={menuStyles.menuBackground}>
+      <Image
+        source={require('../../../assets/Game_Graphics/menu/main_menu_bg.jpg')}
+        style={menuStyles.menuBgImage}
+        resizeMode="cover"
+      />
       <View style={menuStyles.menuOverlay}>
         {/* Menu Buttons Container - centered */}
         <View style={menuStyles.menuButtonsContainer}>
@@ -6875,7 +6880,7 @@ export default function BuildScreen() {
           </TouchableOpacity>
         </View>
       </View>
-    </ImageBackground>
+    </View>
   );
 
   // Menu styles - 2D RPG pixel art style
@@ -6884,6 +6889,20 @@ export default function BuildScreen() {
       flex: 1,
       width: '100%',
       height: '100%',
+      overflow: 'hidden',
+      // Fills below the image if the frame is taller than the pinned bg
+      // (very tall tablet column); overlay scrim sits over both.
+      backgroundColor: '#1a1a2e',
+    },
+    menuBgImage: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      width: '100%',
+      // Native source is 939x2048 (ratio 2.181). Height from clamped screenWidth
+      // keeps true aspect inside the 600px ResponsiveStage frame; taller-than-screen
+      // so cropping happens off the bottom, never the logo at the top.
+      height: Math.round(screenWidth * 2.181),
     },
     menuOverlay: {
       flex: 1,
