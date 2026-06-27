@@ -10,6 +10,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { collisionSystem } from '../../utils/CollisionSystem';
 import { AchievementService } from '../../services/AchievementService';
 import AnimatedBar from '../../components/AnimatedBar';
+import ResponsiveStage, { MAX_CONTENT_WIDTH, MAX_CONTENT_HEIGHT } from '../../components/layout/ResponsiveStage';
 import gameDatabaseService from '../../services/GameDatabaseService';
 import EconomyService, { SPROUTS_REWARDS } from '../../services/EconomyService';
 import { normalizeCategory } from '../../utils/categoryUtils';
@@ -397,7 +398,13 @@ export default function BuildScreen() {
   }, [isFocused, enterRoom, exitRoom]);
 
   // ─── Responsive dimensions ─────────────────────────────────────────
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  // Clamp the *style-scale basis* to a phone frame so fonts/gaps/paddings stop
+  // growing on tablets (where raw width can be ~1600dp). All styles below read
+  // screenWidth/screenHeight, so this single clamp makes them tablet-safe.
+  // Map/world math uses measured contentSize (not these), so it is unaffected.
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const screenWidth = Math.min(windowWidth, MAX_CONTENT_WIDTH);
+  const screenHeight = Math.min(windowHeight, MAX_CONTENT_HEIGHT);
 
   // Helper: resolve a percentage-based spawn point to actual pixels
   const resolveSpawn = useCallback(
@@ -4099,14 +4106,11 @@ export default function BuildScreen() {
     },
     // Story Mode Progress Bar Styles - Top compact strip below header
     storyProgressContainer: {
-      position: 'absolute',
-      top: screenHeight * 0.165,
-      left: screenWidth * 0.02,
-      right: screenWidth * 0.02,
+      marginHorizontal: screenWidth * 0.02,
+      marginTop: screenHeight * 0.01,
       backgroundColor: 'rgba(26, 26, 46, 0.95)',
       borderRadius: 12,
       padding: screenWidth * 0.025,
-      zIndex: 50,
       borderWidth: 1,
       borderColor: 'rgba(255,255,255,0.15)',
       shadowColor: '#000',
@@ -4222,9 +4226,11 @@ export default function BuildScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
+      flexWrap: 'wrap',
       marginTop: 4,
       paddingHorizontal: 4,
       gap: 8,
+      rowGap: 6,
     },
     budgetCompactLabel: {
       color: '#F5DEB3',
@@ -6817,7 +6823,7 @@ export default function BuildScreen() {
               <Ionicons name={tutorialCompleted ? 'book' : 'lock-closed'} size={24} color={tutorialCompleted ? '#F5DEB3' : '#888'} />
             </View>
             <View style={menuStyles.menuButtonContent}>
-              <Text style={[menuStyles.menuButtonText, !tutorialCompleted && { color: '#888' }]}>Story Mode</Text>
+              <Text style={[menuStyles.menuButtonText, !tutorialCompleted && { color: '#888' }]} numberOfLines={1}>Story Mode</Text>
               {/* {!tutorialCompleted && (
                 <Text style={{ fontSize: 11, color: '#666', marginTop: 2 }}>Complete Tutorial first</Text>
               )}*/}
@@ -6844,7 +6850,7 @@ export default function BuildScreen() {
               <Ionicons name={customModeUnlocked ? 'compass' : 'lock-closed'} size={24} color={customModeUnlocked ? '#F5DEB3' : '#888'} />
             </View>
             <View style={menuStyles.menuButtonContent}>
-              <Text style={[menuStyles.menuButtonText, !customModeUnlocked && { color: '#888' }]}>
+              <Text style={[menuStyles.menuButtonText, !customModeUnlocked && { color: '#888' }]} numberOfLines={1}>
                 Custom Mode
               </Text>
               {/* {!customModeUnlocked && (
@@ -6863,7 +6869,7 @@ export default function BuildScreen() {
               <Ionicons name="school" size={24} color="#F5DEB3" />
             </View>
             <View style={menuStyles.menuButtonContent}>
-              <Text style={menuStyles.menuButtonText}>Tutorial</Text>
+              <Text style={menuStyles.menuButtonText} numberOfLines={1}>Tutorial</Text>
               {/* <Text style={menuStyles.menuButtonSubtext}>Learn with Koin</Text> */}
             </View>
           </TouchableOpacity>
@@ -6884,17 +6890,18 @@ export default function BuildScreen() {
       backgroundColor: 'rgba(0,0,0,0.2)',
       justifyContent: 'center',
       alignItems: 'center',
+      paddingVertical: screenHeight * 0.04,
     },
     menuButtonsContainer: {
       paddingHorizontal: screenWidth * 0.05,
       gap: Math.round(screenHeight * 0.015),
-      width: '85%',
-      maxWidth: screenWidth * 0.82,
+      width: '100%',
     },
     menuButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
+      minHeight: Math.round(screenHeight * 0.07),
       paddingVertical: screenHeight * 0.017,
       paddingHorizontal: screenWidth * 0.05,
       gap: Math.round(screenWidth * 0.03),
@@ -7282,7 +7289,9 @@ export default function BuildScreen() {
   if (showCompletionDialogue) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        {renderCompletionDialogue()}
+        <ResponsiveStage backgroundColor="#1a1a2e">
+          {renderCompletionDialogue()}
+        </ResponsiveStage>
       </SafeAreaView>
     );
   }
@@ -7291,7 +7300,9 @@ export default function BuildScreen() {
   if (showLevelIntro && introLevel !== null) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        {renderLevelIntro()}
+        <ResponsiveStage backgroundColor="#1a1a2e">
+          {renderLevelIntro()}
+        </ResponsiveStage>
       </SafeAreaView>
     );
   }
@@ -7300,7 +7311,9 @@ export default function BuildScreen() {
   if (showStoryIntro) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        {renderStoryIntro()}
+        <ResponsiveStage backgroundColor="#1a1a2e">
+          {renderStoryIntro()}
+        </ResponsiveStage>
       </SafeAreaView>
     );
   }
@@ -7311,7 +7324,9 @@ export default function BuildScreen() {
   if (showMainMenu) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        {renderMainMenu()}
+        <ResponsiveStage backgroundColor="#1a1a2e">
+          {renderMainMenu()}
+        </ResponsiveStage>
       </SafeAreaView>
     );
   }
@@ -7345,6 +7360,7 @@ export default function BuildScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <ResponsiveStage backgroundColor="#1a1a2e">
       {/* Header — tutorial mode shows simplified bar (Koin dialogue handled by KoinTutorialOverlay) */}
       {tutorialActive && gameMode === 'tutorial' ? (
         <View style={tutorialStyles.tutorialHeader}>
@@ -9370,6 +9386,7 @@ export default function BuildScreen() {
           </View>
         </View>
       </Modal>
+      </ResponsiveStage>
     </SafeAreaView>
   );
 }
