@@ -2,8 +2,9 @@ import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 
 // Import onboarding screens
+// UserTypeScreen retired: the Student/Employee selection now lives on
+// SignUpScreen (with a Google-sign-up fallback on GetStartedScreen).
 import GetStartedScreen from '../screens/onboarding/GetStartedScreen';
-import UserTypeScreen from '../screens/onboarding/UserTypeScreen';
 import BudgetGoalsScreen from '../screens/onboarding/BudgetGoalsScreen';
 
 const Stack = createStackNavigator();
@@ -16,7 +17,6 @@ const OnboardingNavigator = () => {
       }}
     >
       <Stack.Screen name="GetStarted" component={GetStartedScreen} />
-      <Stack.Screen name="UserType" component={UserTypeScreen} />
       <Stack.Screen name="BudgetGoals" component={BudgetGoalsScreen} />
     </Stack.Navigator>
   );

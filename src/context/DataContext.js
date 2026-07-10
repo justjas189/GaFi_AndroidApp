@@ -20,17 +20,25 @@ export const DataProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [insights, setInsights] = useState([]);
+  // Budget categories are keyed by the app's CANONICAL category names (the
+  // same Title-Case set normalizeCategory outputs and expenses are tagged
+  // with). This is what lets NotificationService's per-category Budget
+  // Guardian look up budget.categories[normalizedCategory] and actually match.
+  const CANONICAL_BUDGET_CATEGORIES = [
+    'Food & Dining', 'Transport', 'Groceries', 'Shopping', 'Entertainment',
+    'Electronics', 'School Supplies', 'Utilities', 'Health', 'Education', 'Other',
+  ];
+  const buildEmptyCategoryMap = () => {
+    const map = {};
+    CANONICAL_BUDGET_CATEGORIES.forEach((cat) => {
+      map[cat] = { limit: 0, spent: 0 };
+    });
+    return map;
+  };
   const defaultBudget = {
     monthly: 0,
     weekly: 0,
-    categories: {
-      food: { limit: 0, spent: 0 },
-      transportation: { limit: 0, spent: 0 },
-      entertainment: { limit: 0, spent: 0 },
-      shopping: { limit: 0, spent: 0 },
-      utilities: { limit: 0, spent: 0 },
-      others: { limit: 0, spent: 0 }
-    }
+    categories: buildEmptyCategoryMap(),
   };
   const [budget, setBudget] = useState(defaultBudget);
   const [expenses, setExpenses] = useState([]);
@@ -349,31 +357,40 @@ export const DataProvider = ({ children }) => {
         notes: notesData?.length || 0
       });
 
-      // Transform budget data to match app structure
-      const transformedBudget = budgetData ? {
-        monthly: budgetData.monthly || 0,
-        weekly: budgetData.weekly || 0,
-        categories: {
-          food: { limit: 0, spent: 0 },
-          transportation: { limit: 0, spent: 0 },
-          entertainment: { limit: 0, spent: 0 },
-          shopping: { limit: 0, spent: 0 },
-          utilities: { limit: 0, spent: 0 },
-          others: { limit: 0, spent: 0 }
-        }
-      } : defaultBudget;
+      // Transform budget data to match app structure. Categories are keyed by
+      // CANONICAL names: legacy rows ('food', 'bills', 'others', …) fold into
+      // their canonical buckets via normalizeCategory, limits merged by sum.
+      const transformedBudget = {
+        monthly: budgetData?.monthly || 0,
+        weekly: budgetData?.weekly || 0,
+        categories: buildEmptyCategoryMap(),
+      };
 
-      // Update category limits and spent amounts
       if (budgetCategories?.length > 0) {
-        budgetCategories.forEach(category => {
-          if (transformedBudget.categories[category.category_name.toLowerCase()]) {
-            transformedBudget.categories[category.category_name.toLowerCase()] = {
-              limit: category.allocated_amount || 0,
-              spent: category.spent_amount || 0
-            };
+        budgetCategories.forEach((row) => {
+          const key = normalizeCategory(row.category_name);
+          if (!transformedBudget.categories[key]) {
+            transformedBudget.categories[key] = { limit: 0, spent: 0 };
           }
+          transformedBudget.categories[key].limit =
+            Math.round((transformedBudget.categories[key].limit + (row.allocated_amount || 0)) * 100) / 100;
         });
       }
+
+      // Per-category `spent` is DERIVED from this month's expense rows —
+      // budget_categories.spent_amount is not maintained on insert, so trusting
+      // it would leave the Budget Guardian comparing against ₱0 forever.
+      const spentNow = new Date();
+      (expensesData || []).forEach((exp) => {
+        const d = new Date(exp.date);
+        if (d.getMonth() !== spentNow.getMonth() || d.getFullYear() !== spentNow.getFullYear()) return;
+        const key = normalizeCategory(exp.category);
+        if (!transformedBudget.categories[key]) {
+          transformedBudget.categories[key] = { limit: 0, spent: 0 };
+        }
+        transformedBudget.categories[key].spent =
+          Math.round((transformedBudget.categories[key].spent + (parseFloat(exp.amount) || 0)) * 100) / 100;
+      });
 
       setBudget(transformedBudget);
       setExpenses(expensesData || []);
@@ -491,11 +508,23 @@ export const DataProvider = ({ children }) => {
       // ── Check budget thresholds for notification alerts (custom mode only) ──
       if (appMode === 'custom') {
         try {
-          await notificationService.checkBudgetThresholds(
+          const alerts = await notificationService.checkBudgetThresholds(
             budget,
             parseFloat(expense.amount),
             normalizedCategory
           );
+          // In-app mirror of the local notification: toast the most severe
+          // alert so a critically-low budget is visible immediately, not just
+          // in the notification tray. checkBudgetThresholds returns [] when
+          // the user opted out of Budget Alerts, so the preference is honored.
+          if (alerts?.length) {
+            const top =
+              alerts.find((a) => a.type === 'budget_exceeded') ||
+              alerts.find((a) => a.type === 'budget_critical') ||
+              alerts[0];
+            const show = top.type === 'budget_warning' ? toast.info : toast.error;
+            show('Budget alert', top.message);
+          }
         } catch (alertError) {
           console.warn('Budget alert check failed (non-critical):', alertError);
         }
@@ -734,13 +763,14 @@ export const DataProvider = ({ children }) => {
         return true;
       }
 
+      let budgetRowId = null;
+
       if (existingBudget) {
         // Update existing budget
         const { data, error: updateError } = await supabase
           .from('budgets')
           .update({
-            monthly: newBudget.monthly,
-            weekly: newBudget.weekly
+            monthly: newBudget.monthly
           })
           .eq('user_id', userId)
           .select()
@@ -751,56 +781,88 @@ export const DataProvider = ({ children }) => {
           setBudget(newBudget);
           return true;
         }
+        budgetRowId = data.id;
+      } else {
+        // Create new budget using the enhanced service. It seeds the legacy
+        // 6-category percentage split — the canonical sync below immediately
+        // overwrites that seed with the caller's real category map, so the
+        // user's own allocations (not the 30/15/10… defaults) are what persist.
+        const result = await budgetService.createDefaultBudget(userId, newBudget.monthly);
+        if (!result.success || !result.data?.id || result.data.id === 'fallback-budget') {
+          console.warn('createDefaultBudget returned failure, falling back to local state:', result?.error);
+          // Don't throw — fall through to local state update
+        } else {
+          budgetRowId = result.data.id;
+        }
+      }
 
-        // Update budget categories with user's allocation
-        if (newBudget.categories) {
+      // ── Canonical category sync (single writer of allocated_amount) ──
+      // loadData folds budget_categories into canonical buckets by SUMMING
+      // allocated_amount across every row whose name normalizes to the same
+      // key ('food', 'food & dining', 'Food & Dining' → Food & Dining). The
+      // old per-key upsert matched on the exact canonical name only, so a
+      // legacy/case-variant row was never updated OR removed — each save
+      // added a canonical row NEXT TO it and the folded limits inflated on
+      // the next reload (₱50,000 → ₱86,500). Sync now keeps exactly ONE row
+      // per canonical bucket and deletes the rest, which also self-heals
+      // budgets already poisoned by earlier saves. Expense logging never
+      // writes allocations — recordExpense only inserts the expense row —
+      // so with duplicates gone, limits stay static when logging.
+      if (budgetRowId && newBudget.categories) {
+        const { data: existingRows, error: rowsError } = await supabase
+          .from('budget_categories')
+          .select('id, category_name')
+          .eq('budget_id', budgetRowId);
+
+        if (rowsError) {
+          console.error('Error loading budget categories for sync:', rowsError);
+        } else {
+          const rows = existingRows || [];
           for (const [category, values] of Object.entries(newBudget.categories)) {
-            const normalizedCategory = normalizeCategory(category);
-            
-            // First try to update existing category
-            const { data: existingCategory, error: checkError } = await supabase
-              .from('budget_categories')
-              .select('id')
-              .eq('budget_id', data.id)
-              .eq('category_name', normalizedCategory)
-              .maybeSingle();
+            const canonical = normalizeCategory(category);
+            const variants = rows.filter((r) => normalizeCategory(r.category_name) === canonical);
+            const keeper = variants.find((r) => r.category_name === canonical) || variants[0];
+            const stale = variants.filter((r) => r.id !== keeper?.id);
 
-            if (existingCategory) {
-              // Update existing category
+            if (keeper) {
               const { error: catUpdateError } = await supabase
                 .from('budget_categories')
                 .update({
+                  category_name: canonical,
                   allocated_amount: values.limit,
-                  spent_amount: budget.categories[normalizedCategory]?.spent || 0
+                  spent_amount: budget.categories[canonical]?.spent || 0
                 })
-                .eq('id', existingCategory.id);
+                .eq('id', keeper.id);
 
               if (catUpdateError) {
                 console.error('Error updating budget category:', catUpdateError);
               }
             } else {
-              // Insert new category
               const { error: insertError } = await supabase
                 .from('budget_categories')
                 .insert({
-                  budget_id: data.id,
-                  category_name: normalizedCategory,
+                  budget_id: budgetRowId,
+                  category_name: canonical,
                   allocated_amount: values.limit,
-                  spent_amount: budget.categories[normalizedCategory]?.spent || 0
+                  spent_amount: budget.categories[canonical]?.spent || 0
                 });
 
               if (insertError) {
                 console.error('Error inserting budget category:', insertError);
               }
             }
+
+            if (stale.length > 0) {
+              const { error: deleteError } = await supabase
+                .from('budget_categories')
+                .delete()
+                .in('id', stale.map((r) => r.id));
+
+              if (deleteError) {
+                console.error('Error deleting duplicate budget categories:', deleteError);
+              }
+            }
           }
-        }
-      } else {
-        // Create new budget using the enhanced service
-        const result = await budgetService.createDefaultBudget(userId, newBudget.monthly);
-        if (!result.success) {
-          console.warn('createDefaultBudget returned failure, falling back to local state:', result.error);
-          // Don't throw — fall through to local state update
         }
       }
 

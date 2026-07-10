@@ -552,7 +552,14 @@ const ChatModal = forwardRef(({ visible, onClose }, ref) => {
       topCategory: sortedCategories[0] || null,
       categoryBreakdown: sortedCategories.slice(0, 5),
       recentExpenses,
-      userName: userInfo?.full_name?.split(' ')[0] || userInfo?.email?.split('@')[0] || 'there',
+      // First name for greetings — AuthContext derives firstName from full_name;
+      // fallback chain covers pre-derivation cached userInfo shapes.
+      userName:
+        userInfo?.firstName ||
+        userInfo?.name?.split(' ')[0] ||
+        userInfo?.full_name?.split(' ')[0] ||
+        userInfo?.email?.split('@')[0] ||
+        'there',
       weeklySpent,
       weeklyExpenseCount: thisWeekExpenses.length,
       weeklyTopCategory: sortedWeeklyCategories[0] || null,
@@ -583,28 +590,32 @@ const ChatModal = forwardRef(({ visible, onClose }, ref) => {
     const financial = getFinancialContext();
     const screenContext = SCREEN_CONTEXTS[screenName] || SCREEN_CONTEXTS['Game'];
 
+    // Personalized greeting prefix (UX revision): Koin's very first message
+    // greets the user by first name on EVERY screen, not just a few templates.
+    const hi = `Hi ${financial.userName}! `;
+
     const welcomeTemplates = {
-      'Game': `You're in the Game tab! 🎮 Tap anywhere on the map to walk around, then visit the canteen or shops to log expenses in-game. Playing Story Mode? Ask me how to clear the day's tasks!`,
-      'Custom': `You're in Custom Mode! 🎯 You've saved ₱${financial.totalSaved.toLocaleString()} so far and used ${financial.budgetPercentage}% of your ₱${financial.monthlyBudget.toLocaleString()} budget. Want help with your budget split or a savings goal?`,
-      'CustomModeDashboard': `You're in Custom Mode! 🎯 Budgeting, Goals, and Saving all live here. You've saved ₱${financial.totalSaved.toLocaleString()} total${financial.goalsActive > 0 ? ` across ${financial.goalsActive} active goal${financial.goalsActive > 1 ? 's' : ''}` : ''}. Want help setting a realistic savings goal?`,
-      'Expenses': `You're on the Expenses tab! 📊 You have ${financial.expenseCount} transactions totaling ₱${financial.totalSpent.toLocaleString()}. Ask me "What did I spend this week?" or "Show my top category"!`,
-      'ExpenseGraph': `Looking at your spending graphs! 📈 Ask me what your charts are telling you or where you can cut back.`,
-      'Predictions': `Welcome to Predictions! 🔮 I can explain your spending forecast and what the AI insights mean for next month. What would you like to know?`,
-      'Explore': `Welcome to Explore! 🧭 From here you can open the Leaderboard, Achievements, or Manage Friends. What are you looking for?`,
-      'Profile': `This is your Profile! 🏆 Check your rank, XP, and Story Mode progress, or update your budget. Hey ${financial.userName}, how can I help?`,
-      'Achievements': `Checking your achievements! 🏅 Ask me about any badge or how to unlock the next one.`,
-      'Leaderboard': `Viewing the leaderboard! 📊 See how you rank against other savers. Need tips to climb higher?`,
-      'ManageFriends': `Managing friends! 👥 Add friends, view your list, or handle requests. Friends show up on each other's leaderboards!`,
-      'FriendsList': `Here's your friends list! 👥 Compare your savings progress on the Leaderboard anytime.`,
-      'FriendRequests': `Your friend requests! ✉️ Accept or decline pending requests here.`,
-      'Calendar': `On the Calendar view! 📅 This shows your daily spending patterns. Ask me about any date or trend.`,
-      'Settings': `In Settings! ⚙️ I can help you customize your GaFi experience. What would you like to adjust?`,
-      'BackgroundMusic': `Setting the vibe! 🎵 Pick a background track or playback mode here. Want a money tip while you're at it?`,
-      'FAQ': `On the FAQ! 📖 If you can't find an answer here, just ask me directly. What's on your mind?`,
-      'NotificationSettings': `Notification Settings! 🔔 Turn on reminders to make tracking a daily habit. Need a hand?`,
+      'Game': `${hi}You're in the Game tab! 🎮 Tap anywhere on the map to walk around, then visit the canteen or shops to log expenses in-game. Playing Story Mode? Ask me how to clear the day's tasks!`,
+      'Custom': `${hi}You're in Custom Mode! 🎯 You've saved ₱${financial.totalSaved.toLocaleString()} so far and used ${financial.budgetPercentage}% of your ₱${financial.monthlyBudget.toLocaleString()} budget. Want help with your budget split or a savings goal?`,
+      'CustomModeDashboard': `${hi}You're in Custom Mode! 🎯 Budgeting, Goals, and Saving all live here. You've saved ₱${financial.totalSaved.toLocaleString()} total${financial.goalsActive > 0 ? ` across ${financial.goalsActive} active goal${financial.goalsActive > 1 ? 's' : ''}` : ''}. Want help setting a realistic savings goal?`,
+      'Expenses': `${hi}You're on the Expenses tab! 📊 You have ${financial.expenseCount} transactions totaling ₱${financial.totalSpent.toLocaleString()}. Ask me "What did I spend this week?" or "Show my top category"!`,
+      'ExpenseGraph': `${hi}Looking at your spending graphs! 📈 Ask me what your charts are telling you or where you can cut back.`,
+      'Predictions': `${hi}Welcome to Predictions! 🔮 I can explain your spending forecast and what the AI insights mean for next month. What would you like to know?`,
+      'Explore': `${hi}Welcome to Explore! 🧭 From here you can open the Leaderboard, Achievements, or Manage Friends. What are you looking for?`,
+      'Profile': `${hi}This is your Profile! 🏆 Check your rank, XP, and Story Mode progress, or update your budget. How can I help?`,
+      'Achievements': `${hi}Checking your achievements! 🏅 Ask me about any badge or how to unlock the next one.`,
+      'Leaderboard': `${hi}Viewing the leaderboard! 📊 See how you rank against other savers. Need tips to climb higher?`,
+      'ManageFriends': `${hi}Managing friends! 👥 Add friends, view your list, or handle requests. Friends show up on each other's leaderboards!`,
+      'FriendsList': `${hi}Here's your friends list! 👥 Compare your savings progress on the Leaderboard anytime.`,
+      'FriendRequests': `${hi}Your friend requests! ✉️ Accept or decline pending requests here.`,
+      'Calendar': `${hi}On the Calendar view! 📅 This shows your daily spending patterns. Ask me about any date or trend.`,
+      'Settings': `${hi}In Settings! ⚙️ I can help you customize your GaFi experience. What would you like to adjust?`,
+      'BackgroundMusic': `${hi}Setting the vibe! 🎵 Pick a background track or playback mode here. Want a money tip while you're at it?`,
+      'FAQ': `${hi}On the FAQ! 📖 If you can't find an answer here, just ask me directly. What's on your mind?`,
+      'NotificationSettings': `${hi}Notification Settings! 🔔 Turn on reminders to make tracking a daily habit. Need a hand?`,
     };
 
-    return welcomeTemplates[screenName] || `Hi ${financial.userName}! I'm Koin, your AI finance buddy. You're on the ${screenContext.name}. How can I help? 💰`;
+    return welcomeTemplates[screenName] || `${hi}I'm Koin, your AI finance buddy. You're on the ${screenContext.name}. How can I help? 💰`;
   };
 
   // ──────────────────────────────────────────────
@@ -761,6 +772,7 @@ RESPONSE GUIDELINES
 9. If asked about navigation, mention specific screens they can visit
 10. For screen-specific questions, focus on that screen's capabilities
 11. When user asks about weekly/daily spending, use the time-based data provided above
+12. Greet the user by first name ("${financial.userName}") in your FIRST substantive reply of a conversation, then use the name only occasionally — never in every message
 
 YOUR PERSONALITY:
 - Friendly Filipino financial friend ("Koin")

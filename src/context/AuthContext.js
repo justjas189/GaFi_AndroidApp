@@ -26,19 +26,39 @@ const resolveAvatar = (user, profileData) =>
   user?.user_metadata?.picture ||
   null;
 
-const buildUserInfo = (user, profileData) => ({
-  ...user,
-  name:
+// First word of the full name — the profiles table only stores full_name, so
+// "First Name" is a derived, front-end-only concept used for UI greetings.
+const deriveFirstName = (value) => {
+  const trimmed = (value || '').trim();
+  return trimmed ? trimmed.split(/\s+/)[0] : null;
+};
+
+const VALID_USER_TYPES = ['student', 'employee'];
+
+const buildUserInfo = (user, profileData) => {
+  const fullName =
     profileData?.full_name ||
     user.user_metadata?.full_name ||
     user.user_metadata?.name ||
     user.email?.split('@')[0] ||
-    'User',
-  username: profileData?.username || user.user_metadata?.username || null,
-  userType: profileData?.user_type || null,
-  avatarUrl: resolveAvatar(user, profileData),
-  email: user.email,
-});
+    'User';
+  return {
+    ...user,
+    name: fullName,
+    firstName: deriveFirstName(fullName) || 'there',
+    username: profileData?.username || user.user_metadata?.username || null,
+    // Metadata fallback closes the first-session gap: on the very first login
+    // the profiles row may not exist yet (syncProfileFromMetadata inserts AFTER
+    // this runs) and BudgetGoalsScreen needs userType for its presets.
+    userType:
+      profileData?.user_type ||
+      (VALID_USER_TYPES.includes(user.user_metadata?.user_type)
+        ? user.user_metadata.user_type
+        : null),
+    avatarUrl: resolveAvatar(user, profileData),
+    email: user.email,
+  };
+};
 
 // ── Auto-username generation (for blank optional username at sign-up) ──
 // Build a valid base from the email local-part: lowercase, keep only the chars
@@ -104,10 +124,16 @@ const syncProfileFromMetadata = async (user, profileData) => {
       // username is a core column (since 20250806), not drift-prone, so it stays
       // in the minimal retry payload too.
       const username = meta.username || (await generateUniqueUsername(user.email));
+      // user_type rides sign-up metadata (register() passes options.data.user_type)
+      // so the selection made on SignUpScreen survives email verification and is
+      // persisted here on the first authenticated session. Conditional spread —
+      // an explicit null would trip the CHECK (user_type IN ('student','employee')).
+      const metaUserType = VALID_USER_TYPES.includes(meta.user_type) ? meta.user_type : null;
       const fullPayload = {
         id: user.id,
         full_name: meta.full_name || meta.name || null,
         username,
+        ...(metaUserType ? { user_type: metaUserType } : {}),
         avatar_url: googleAvatar, // column added in migration 20260615
         updated_at: new Date().toISOString(),
       };
@@ -142,6 +168,10 @@ const syncProfileFromMetadata = async (user, profileData) => {
     if (!profileData.username) {
       patch.username = meta.username || (await generateUniqueUsername(user.email));
     }
+    // Backfill user_type from sign-up metadata when the row predates the
+    // selection (e.g. profile row created before the metadata arrived).
+    const backfillUserType = VALID_USER_TYPES.includes(meta.user_type) ? meta.user_type : null;
+    if (!profileData.user_type && backfillUserType) patch.user_type = backfillUserType;
     if (Object.keys(patch).length === 0) return;
 
     const { error } = await supabase
@@ -582,7 +612,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const register = async (name, email, password, username = null) => {
+  const register = async (name, email, password, username = null, userType = null) => {
     try {
       setError(null);
       setIsLoading(true);
@@ -600,6 +630,11 @@ export const AuthProvider = ({ children }) => {
         ? username.trim()
         : await generateUniqueUsername(email);
 
+      // user_type travels in sign-up metadata so it survives the email-verify
+      // round trip; syncProfileFromMetadata persists it to profiles on the
+      // first authenticated session.
+      const safeUserType = VALID_USER_TYPES.includes(userType) ? userType : null;
+
       const redirectUrl = Linking.createURL('');
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
@@ -609,6 +644,7 @@ export const AuthProvider = ({ children }) => {
           data: {
             full_name: name,
             username: finalUsername,
+            ...(safeUserType ? { user_type: safeUserType } : {}),
           },
         }
       });
@@ -932,6 +968,35 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // DB-backed twin of setUserType. Upserts profiles.user_type WITHOUT the email
+  // column (profiles.email is UNIQUE — re-sending it can 23505; see the
+  // syncProfileFromMetadata INSERT-path comment). Never blocks the caller's flow:
+  // a failed DB write still updates in-memory state and is backfilled by
+  // syncProfileFromMetadata on a later session.
+  const persistUserType = async (userType) => {
+    if (!VALID_USER_TYPES.includes(userType)) {
+      return { success: false, error: 'Invalid user type' };
+    }
+    try {
+      if (userInfo?.id) {
+        const { error } = await supabase
+          .from('profiles')
+          .upsert(
+            { id: userInfo.id, user_type: userType, updated_at: new Date().toISOString() },
+            { onConflict: 'id' },
+          );
+        if (error) {
+          console.warn('persistUserType DB write failed:', error.code, error.message);
+        }
+      }
+      await AsyncStorage.setItem('userType', userType); // legacy key kept in sync
+      return await setUserType(userType);
+    } catch (error) {
+      console.error('Error persisting user type:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
   const updateProfile = async (profileData) => {
     try {
       setIsLoading(true);
@@ -966,10 +1031,11 @@ export const AuthProvider = ({ children }) => {
         throw updateError;
       }
 
-      // Update local user info
+      // Update local user info (firstName is derived from name — keep in sync)
       const updatedUserInfo = {
         ...userInfo,
         name: profileData.name,
+        firstName: deriveFirstName(profileData.name) || 'there',
         ...(profileData.username && { username: profileData.username })
       };
 
@@ -1005,6 +1071,7 @@ export const AuthProvider = ({ children }) => {
     markOnboardingComplete,
     updateProfile,
     setUserType,
+    persistUserType,
     isAuthenticated: !!userToken,
   };
 

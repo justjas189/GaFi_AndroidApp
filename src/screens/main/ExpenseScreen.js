@@ -19,6 +19,7 @@ import { ThemeContext } from '../../context/ThemeContext';
 import { LineChart } from 'react-native-chart-kit';
 import { FONTS } from '../../theme/typography';
 import { normalizeCategory } from '../../utils/categoryUtils';
+import { validateAmount } from '../../utils/ValidationUtils';
 import { getCategoryIcon } from '../../utils/categoryIcons';
 import { toast } from '../../utils/toast';
 import { useConfirm } from '../../components/feedback/ConfirmProvider';
@@ -453,7 +454,8 @@ const ExpenseScreen = ({ navigation, route }) => {
   };
 
   const formatSelectedDate = (date) => {
-    return date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+    // Weekday included per panel revision: transactions show date AND day.
+    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric' });
   };
 
   const formatSelectedTime = (date) => {
@@ -553,13 +555,44 @@ const ExpenseScreen = ({ navigation, route }) => {
   };
 
   const handleSave = async () => {
-    if (!amount || !category) {
+    if (!category) {
       toast.error('Missing info', 'Add an amount and category.');
       return;
     }
 
+    // Proper amount validation — bare parseFloat lets "abc"/0/negatives through
+    // as NaN and poisons every total, chart, and prediction downstream.
+    const amountCheck = validateAmount(amount);
+    if (!amountCheck.isValid) {
+      toast.error('Invalid amount', amountCheck.errors[0]);
+      return;
+    }
+
+    // HARD budget constraint (UX revision — reverses the earlier soft warning):
+    // an expense that exceeds the remaining monthly budget cannot be logged.
+    const monthlyBudgetNum = parseFloat(budget?.monthly) || 0;
+    if (monthlyBudgetNum > 0) {
+      const now = new Date();
+      const monthSpent = expenses.reduce((sum, exp) => {
+        const d = new Date(exp.date);
+        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+          ? sum + (parseFloat(exp.amount) || 0)
+          : sum;
+      }, 0);
+      const remaining = Math.round((monthlyBudgetNum - monthSpent) * 100) / 100;
+      if (amountCheck.sanitized > remaining) {
+        toast.error(
+          'Over budget — blocked',
+          remaining > 0
+            ? `This ₱${amountCheck.sanitized.toLocaleString('en-PH', { minimumFractionDigits: 2 })} expense exceeds your remaining monthly budget of ₱${remaining.toLocaleString('en-PH', { minimumFractionDigits: 2 })}.`
+            : 'Your monthly budget is fully spent. Raise your budget to log more.'
+        );
+        return;
+      }
+    }
+
     const newExpense = {
-      amount: parseFloat(amount),
+      amount: amountCheck.sanitized,
       category,
       sub_category: subCategory || null,
       note,

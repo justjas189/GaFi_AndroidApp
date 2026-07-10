@@ -32,6 +32,7 @@ const EndOfDayReportModal = ({
   title = 'Day Complete!',
   actionLabel,
   historicalData,
+  reportDate,
 }) => {
   const isHistoryMode = !!historicalData;
   const resolvedWeeklyBudgetRemaining = historicalData?.weeklyBudgetRemaining ?? weeklyBudgetRemaining;
@@ -95,6 +96,25 @@ const EndOfDayReportModal = ({
       ? 'Koin is analyzing your day...'
       : (liveInsight || resolvedKoinInsight || 'Koin is calculating your daily insight...'));
 
+  // Real-world date shown under the title (panel revision). History reports
+  // carry their DB completion timestamp; the live report defaults to "now"
+  // (the day is being finished at render time). A history item with no
+  // timestamp shows no date rather than a misleading current one.
+  const reportDateValue = historicalData?.reportDate ?? reportDate ?? (isHistoryMode ? null : Date.now());
+  let formattedReportDate = null;
+  if (reportDateValue) {
+    const dateObj = new Date(reportDateValue);
+    if (!isNaN(dateObj.getTime())) {
+      // e.g. "Sat, Jul 11, 2026"
+      formattedReportDate = dateObj.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+    }
+  }
+
   const primaryLabel = resolvedActionLabel || (isViewOnly ? 'Close' : 'Proceed to Next Day');
   const handlePrimaryPress = isViewOnly ? onClose : onStartNextDay;
   const showDualActions = !isViewOnly;
@@ -135,6 +155,9 @@ const EndOfDayReportModal = ({
                   <Ionicons name="checkmark-circle" size={48} color="#ffb68b" />
                 </View>
                 <Text style={styles.headerTitle}>{resolvedTitle}</Text>
+                {formattedReportDate && (
+                  <Text style={styles.headerDate}>{formattedReportDate}</Text>
+                )}
               </View>
 
               {/* Budget Card */}
@@ -372,6 +395,12 @@ const styles = StyleSheet.create({
     color: '#ffb68b',
     fontSize: 24,
     fontWeight: '600',
+  },
+  headerDate: {
+    color: '#a78b7c',
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 6,
   },
 
   // ─── Cards (shared) ────────────────────────────────────────────────

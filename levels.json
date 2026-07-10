@@ -8,7 +8,7 @@
     "tasks": [
       "Log at least 2 Needs expenses & 1 Wants expense.",
       "Travel to School/Office and record a Transport expense.",
-      "End day with Needs <= 50% and Wants <= 30%."
+      "End day with Needs <= 50%, Wants <= 30%, and 20% of your budget saved."
     ]
   },
   {
@@ -20,7 +20,8 @@
     "tasks": [
       "Log expenses across at least 4 different categories.",
       "Include at least 2 distinct Needs (e.g., Food + Transport).",
-      "Ensure no single expense goes over 40% of the day's total spend."
+      "Ensure no single expense goes over 40% of the day's total spend.",
+      "Keep your 50/30/20 split intact: Needs <= 50%, Wants <= 30%, 20% saved."
     ]
   },
   {
@@ -75,7 +76,8 @@
     "koinDialogue": "Let's put your money to work! Simple Interest pays you a flat rate on your original savings. Keep your spending strictly to basics today to lock in your principal amount.",
     "tasks": [
       "Log at least 1 Needs expense today. No Wants allowed.",
-      "Keep total spending under 20% of your weekly budget."
+      "Keep total spending under 20% of your weekly budget.",
+      "Keep at least 30% of your weekly budget saved."
     ]
   },
   {
@@ -86,7 +88,8 @@
     "koinDialogue": "Here is the ultimate money hack: Compound Interest! This means earning interest on top of your past interest. It starts slow, but grows like an avalanche!",
     "tasks": [
       "Travel to School/Office via commute and log 1 Transport expense.",
-      "Keep total daily spend <= 15% of your weekly budget."
+      "Keep total daily spend <= 15% of your weekly budget.",
+      "Keep at least 30% of your weekly budget saved."
     ]
   },
   {
@@ -97,7 +100,8 @@
     "koinDialogue": "Head to the Mall! The secret to compound growth is patience and avoiding the temptation to drain your account. Let's practice controlled exposure.",
     "tasks": [
       "Visit the Mall and log at least 1 Needs expense (e.g., Groceries).",
-      "Log 0 Wants for the entire day."
+      "Log 0 Wants for the entire day.",
+      "Keep at least 30% of your weekly budget saved."
     ]
   },
   {

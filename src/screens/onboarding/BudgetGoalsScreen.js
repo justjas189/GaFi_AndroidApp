@@ -32,33 +32,48 @@ const EMPLOYEE_PRESETS = [
   { label: '₱100,000', value: 100000 },
 ];
 
-// Student: equal split across 6 categories
-const buildStudentCategories = (monthly) => {
-  const perCategory = Math.round((monthly / 6) * 100) / 100;
-  return {
-    food: { limit: perCategory, spent: 0 },
-    transportation: { limit: perCategory, spent: 0 },
-    entertainment: { limit: perCategory, spent: 0 },
-    shopping: { limit: perCategory, spent: 0 },
-    utilities: { limit: perCategory, spent: 0 },
-    others: { limit: perCategory, spent: 0 },
-  };
-};
+// Weighted suggested split over the app's canonical categories, ordered by a
+// Needs → Savings/Debt → Wants hierarchy (UX revision — replaces the old even
+// split whose Math.round drift could over-allocate by ₱0.02).
+//
+// "Other" (savings/debt buffer) is deliberately NOT computed from its own
+// percentage: every other category is floored to the centavo first, and Other
+// receives the EXACT remainder of the monthly budget — so the allocations
+// always sum to the budget to the centavo, by construction.
+const SUGGESTED_SPLIT_WEIGHTS = [
+  ['Groceries', 0.15],       // need
+  ['Transport', 0.15],       // need
+  ['Utilities', 0.10],       // need
+  ['Health', 0.10],          // need
+  ['Food & Dining', 0.10],   // want
+  ['Shopping', 0.08],        // want
+  ['Entertainment', 0.07],   // want
+  ['Education', 0.03],       // want/need
+  ['Electronics', 0.02],     // want
+  ['School Supplies', 0.01], // want/need
+];
 
-// Employee: 50/30/20 rule — needs / wants / savings
-const buildEmployeeCategories = (monthly) => {
-  const needs = monthly * 0.50;   // 50% needs
-  const wants = monthly * 0.30;   // 30% wants
-  const savings = monthly * 0.20; // 20% savings
-  return {
-    bills: { limit: Math.round(needs * 0.40 * 100) / 100, spent: 0 },         // rent, utilities, insurance
-    food: { limit: Math.round(needs * 0.35 * 100) / 100, spent: 0 },          // groceries, meals
-    transportation: { limit: Math.round(needs * 0.25 * 100) / 100, spent: 0 },// commute, gas
-    entertainment: { limit: Math.round(wants * 0.40 * 100) / 100, spent: 0 }, // leisure, subscriptions
-    shopping: { limit: Math.round(wants * 0.35 * 100) / 100, spent: 0 },      // personal items
-    others: { limit: Math.round(wants * 0.25 * 100) / 100, spent: 0 },        // miscellaneous
-    savings: { limit: Math.round(savings * 100) / 100, spent: 0 },             // emergency fund, investments
-  };
+// Display order puts Other in its hierarchy slot (after the four core needs).
+const SUGGESTED_SPLIT_ORDER = [
+  'Groceries', 'Transport', 'Utilities', 'Health', 'Other',
+  'Food & Dining', 'Shopping', 'Entertainment', 'Education', 'Electronics', 'School Supplies',
+];
+
+const buildSuggestedCategories = (monthly) => {
+  const amounts = {};
+  let allocated = 0;
+  SUGGESTED_SPLIT_WEIGHTS.forEach(([cat, weight]) => {
+    const amount = Math.floor(monthly * weight * 100) / 100; // floor to the centavo
+    amounts[cat] = amount;
+    allocated = Math.round((allocated + amount) * 100) / 100;
+  });
+  amounts['Other'] = Math.round((monthly - allocated) * 100) / 100; // exact remainder
+
+  const categories = {};
+  SUGGESTED_SPLIT_ORDER.forEach((cat) => {
+    categories[cat] = { limit: amounts[cat], spent: 0 };
+  });
+  return categories;
 };
 
 const BudgetGoalsScreen = ({ navigation }) => {
@@ -68,9 +83,52 @@ const BudgetGoalsScreen = ({ navigation }) => {
   const confirm = useConfirm();
   const [monthlyBudget, setMonthlyBudget] = useState('');
   const [error, setError] = useState('');
+  // User-editable category allocations (cat → amount string). Prefilled with the
+  // suggested split; the user budgets their own money before completing setup.
+  const [allocations, setAllocations] = useState({});
+  const [allocTouched, setAllocTouched] = useState(false);
 
   const isEmployee = userInfo?.userType === 'employee';
   const BUDGET_PRESETS = isEmployee ? EMPLOYEE_PRESETS : STUDENT_PRESETS;
+
+  // Canonical category names are already display-ready; kept as a map for any
+  // legacy lowercase keys that survive in cached allocation state.
+  const CATEGORY_LABELS = {
+    food: 'Food & Dining',
+    transportation: 'Transport',
+    bills: 'Utilities',
+    others: 'Other',
+  };
+
+  const suggestedCategories = React.useMemo(() => {
+    const monthly = parseFloat(monthlyBudget);
+    if (isNaN(monthly) || monthly <= 0) return null;
+    return buildSuggestedCategories(monthly);
+  }, [monthlyBudget]);
+
+  // Keep allocations in sync with the suggested split until the user edits one.
+  React.useEffect(() => {
+    if (!suggestedCategories || allocTouched) return;
+    const prefill = {};
+    Object.entries(suggestedCategories).forEach(([cat, v]) => {
+      prefill[cat] = String(v.limit);
+    });
+    setAllocations(prefill);
+  }, [suggestedCategories, allocTouched]);
+
+  const totalAllocated = Object.values(allocations).reduce(
+    (sum, v) => sum + (parseFloat(v) || 0),
+    0
+  );
+  const monthlyNum = parseFloat(monthlyBudget) || 0;
+  const overAllocated = totalAllocated > monthlyNum + 0.01;
+  const unallocated = Math.max(0, Math.round((monthlyNum - totalAllocated) * 100) / 100);
+
+  const handleAllocationChange = (cat, text) => {
+    const clean = text.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
+    setAllocTouched(true);
+    setAllocations((prev) => ({ ...prev, [cat]: clean }));
+  };
 
   const handlePresetSelect = (value) => {
     setMonthlyBudget(value.toString());
@@ -105,9 +163,23 @@ const BudgetGoalsScreen = ({ navigation }) => {
         return;
       }
       const monthly = parseFloat(monthlyBudget);
-      const categories = isEmployee
-        ? buildEmployeeCategories(monthly)
-        : buildStudentCategories(monthly);
+
+      // Build categories from the user's own allocations (prefilled with the
+      // suggested split, editable above). Fallback to the suggested split if
+      // the allocation state is somehow empty.
+      let categories;
+      if (Object.keys(allocations).length > 0) {
+        if (overAllocated) {
+          setError(`Your allocations (₱${totalAllocated.toLocaleString()}) exceed your monthly budget. Adjust them first.`);
+          return;
+        }
+        categories = {};
+        Object.entries(allocations).forEach(([cat, v]) => {
+          categories[cat] = { limit: Math.round((parseFloat(v) || 0) * 100) / 100, spent: 0 };
+        });
+      } else {
+        categories = buildSuggestedCategories(monthly);
+      }
 
       const budgetData = {
         monthly,
@@ -163,7 +235,9 @@ const BudgetGoalsScreen = ({ navigation }) => {
             <View style={[styles.iconContainer, { backgroundColor: theme.colors.primary + '20' }]}>
               <Ionicons name="wallet" size={48} color={theme.colors.primary} />
             </View>
-            <Text style={[styles.title, { color: theme.colors.text }]}>Set Your Budget</Text>
+            <Text style={[styles.title, { color: theme.colors.text }]}>
+              {userInfo?.firstName ? `${userInfo.firstName}, set your budget` : 'Set Your Budget'}
+            </Text>
             <Text style={[styles.subtitle, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>
               How much do you plan to spend monthly?
             </Text>
@@ -223,13 +297,51 @@ const BudgetGoalsScreen = ({ navigation }) => {
             </View>
           </View>
 
+          {/* Category Allocation — the user budgets their own money */}
+          {suggestedCategories && (
+            <View style={styles.allocationSection}>
+              <View style={styles.allocationHeader}>
+                <Text style={[styles.presetsLabel, { color: theme.colors.textSecondary || theme.colors.text + '80', marginBottom: 0 }]}>
+                  Budget your money
+                </Text>
+                <TouchableOpacity onPress={() => setAllocTouched(false)} activeOpacity={0.7}>
+                  <Text style={[styles.allocationReset, { color: theme.colors.primary }]}>Use suggested split</Text>
+                </TouchableOpacity>
+              </View>
+              {Object.keys(allocations).map((cat) => (
+                <View
+                  key={cat}
+                  style={[styles.allocationRow, { backgroundColor: theme.colors.card, borderColor: theme.colors.border || '#3C3C3C' }]}
+                >
+                  <Text style={[styles.allocationLabel, { color: theme.colors.text }]}>
+                    {CATEGORY_LABELS[cat] || cat}
+                  </Text>
+                  <Text style={[styles.allocationCurrency, { color: theme.colors.primary }]}>₱</Text>
+                  <TextInput
+                    style={[styles.allocationInput, { color: theme.colors.text }]}
+                    value={allocations[cat]}
+                    onChangeText={(text) => handleAllocationChange(cat, text)}
+                    keyboardType="numeric"
+                    placeholder="0"
+                    placeholderTextColor={theme.colors.text + '40'}
+                  />
+                </View>
+              ))}
+              <Text style={[styles.allocationSummary, { color: overAllocated ? '#FF3B30' : theme.colors.textSecondary || theme.colors.text + '80' }]}>
+                {overAllocated
+                  ? `Over budget by ₱${(totalAllocated - monthlyNum).toLocaleString('en-PH', { maximumFractionDigits: 2 })} — trim your allocations`
+                  : unallocated > 0
+                    ? `Allocated ₱${totalAllocated.toLocaleString('en-PH', { maximumFractionDigits: 2 })} of ₱${monthlyNum.toLocaleString('en-PH')} · ₱${unallocated.toLocaleString('en-PH', { maximumFractionDigits: 2 })} unallocated`
+                    : `All ₱${monthlyNum.toLocaleString('en-PH')} allocated`}
+              </Text>
+            </View>
+          )}
+
           {/* Info Card */}
           <View style={[styles.infoCard, { backgroundColor: theme.colors.card }]}>
             <Ionicons name="information-circle" size={24} color="#00D4FF" />
             <Text style={[styles.infoText, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>
-              {isEmployee
-                ? 'Your budget follows the 50/30/20 rule: 50% needs (bills, food, transport), 30% wants (entertainment, shopping), and 20% savings.'
-                : 'You can set savings goals later through the gamification feature. Your budget will be evenly distributed across 6 categories.'}
+              We prefilled a needs-first weighted split (essentials like groceries and transport get the biggest share, "Other" holds your savings/debt buffer) — adjust each category to budget your money your way.
             </Text>
           </View>
         </View>
@@ -341,6 +453,53 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.numberSemiBold,
     fontSize: 14,
     fontVariant: ['tabular-nums'],
+  },
+  allocationSection: {
+    marginBottom: 24,
+  },
+  allocationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  allocationReset: {
+    fontFamily: FONTS.bodySemiBold,
+    fontSize: 13,
+  },
+  allocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 52,
+    marginBottom: 8,
+  },
+  allocationLabel: {
+    flex: 1,
+    fontFamily: FONTS.bodyMedium,
+    fontSize: 14,
+  },
+  allocationCurrency: {
+    fontFamily: FONTS.numberSemiBold,
+    fontSize: 16,
+    fontVariant: ['tabular-nums'],
+    marginRight: 4,
+  },
+  allocationInput: {
+    minWidth: 90,
+    textAlign: 'right',
+    fontFamily: FONTS.numberSemiBold,
+    fontSize: 16,
+    fontVariant: ['tabular-nums'],
+    paddingVertical: 0,
+  },
+  allocationSummary: {
+    fontFamily: FONTS.bodyRegular,
+    fontSize: 13,
+    marginTop: 4,
+    marginLeft: 4,
   },
   infoCard: {
     flexDirection: 'row',

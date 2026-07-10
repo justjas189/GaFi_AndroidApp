@@ -838,6 +838,34 @@ class GameDatabaseService {
   }
 
   /**
+   * Latest PASSED session for a level. Used to read the leftover budget that
+   * carries over into the next level (results_data.leftover).
+   */
+  async getLastPassedStorySession(level) {
+    try {
+      const userId = await this._getUserId();
+      if (!userId) return null;
+
+      const { data, error } = await supabase
+        .from('story_mode_sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('level', level)
+        .eq('status', 'completed')
+        .eq('passed', true)
+        .order('completed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error('❌ getLastPassedStorySession error:', err.message);
+      return null;
+    }
+  }
+
+  /**
    * Find ANY in-progress story session (regardless of level).
    * Used by the 'Single Active Session' model to auto-resume.
    */

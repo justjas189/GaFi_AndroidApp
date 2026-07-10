@@ -8,14 +8,13 @@ import { useAuth } from './AuthContext';
 const TutorialContext = createContext();
 
 // ─── Tutorial Phases ─────────────────────────────────────────────────────────
-// 1. GAME_INTRO   — Koin introduces himself and the app
-// 2. GAME_TUTORIAL — Step-by-step in-game walkthrough (user must complete actions)
-// 3. APP_TOUR     — Koin walks through each tab (Expenses, Predictions, Explore, Profile)
-// 4. COMPLETE     — All tutorials done
+// 1. CONTEXTUAL — Free-roam in-game tutorial: Koin pops up the first time the
+//    player visits each location (no forced step order, no action gates).
+// 2. APP_TOUR   — Koin walks through each tab (Expenses, Predictions, Explore, Profile)
+// 3. COMPLETE   — All tutorials done
 export const TUTORIAL_PHASE = {
   IDLE: 'IDLE',
-  GAME_INTRO: 'GAME_INTRO',
-  GAME_TUTORIAL: 'GAME_TUTORIAL',
+  CONTEXTUAL: 'CONTEXTUAL',
   APP_TOUR: 'APP_TOUR',
   COMPLETE: 'COMPLETE',
 };
@@ -30,165 +29,9 @@ export const KOIN_STATE = {
   CELEBRATING: 'CELEBRATING',
 };
 
-// ─── In-Game Tutorial Steps (enhanced from existing TUTORIAL_STEPS) ──────────
-export const GAME_TUTORIAL_STEPS = [
-  {
-    id: 'intro_welcome',
-    koinDialogue: [
-      "Hey there! I'm Koin, your financial buddy! 🪙",
-      "Welcome to GaFi — the app that makes learning about money fun and easy!",
-      "I'll be your guide through everything. Let's start by exploring your room!"
-    ],
-    conditionKey: null,
-    nextAlwaysEnabled: true,
-    highlight: null,
-    position: 'center',
-  },
-  {
-    id: 'walk_around',
-    koinDialogue: [
-      "This is your room! Try tapping anywhere on the screen to walk your character around."
-    ],
-    conditionKey: 'walked',
-    nextAlwaysEnabled: false,
-    highlight: 'map',
-    position: 'top',
-  },
-  {
-    id: 'closet',
-    koinDialogue: [
-      "See that closet over there? Walk to it and tap on it!",
-      "You can customize your character's outfit in the closet. Let's check it out!"
-    ],
-    conditionKey: 'closet_opened',
-    nextAlwaysEnabled: false,
-    highlight: 'closet',
-    position: 'right',
-  },
-  {
-    id: 'notebook_and_log',
-    koinDialogue: [
-      "Great outfit! Now, walk to the Notebook — it's on the desk.",
-      "Open it and try logging an expense. Enter any amount and description, then tap Log.",
-      "Don't worry — this is just practice! It won't be saved to your real records."
-    ],
-    conditionKey: 'notebook_expense_logged',
-    nextAlwaysEnabled: false,
-    highlight: 'notebook',
-    position: 'left',
-  },
-  {
-    id: 'exit_door',
-    koinDialogue: [
-      "Awesome! You just logged your first expense!",
-      "Now let's explore the world. Walk to the Exit Door and head to your workplace.",
-      "You'll also learn about transport expenses along the way!"
-    ],
-    conditionKey: 'arrived_at_school',
-    nextAlwaysEnabled: false,
-    highlight: 'door',
-    position: 'bottom',
-  },
-  {
-    id: 'school_intro',
-    koinDialogue: [
-      "Welcome to your workplace! 🏫",
-      "See the NPCs here? Walk up to any staff member to buy something — food, supplies, you name it.",
-      "Approach one of them and log a practice expense!"
-    ],
-    conditionKey: 'school_expense_logged',
-    nextAlwaysEnabled: false,
-    highlight: null,
-    position: 'top',
-  },
-  {
-    id: 'go_to_mall',
-    koinDialogue: [
-      "Great job! You're a natural at this!",
-      "Now let's visit the Mall! Walk to the School Exit and travel there."
-    ],
-    conditionKey: 'arrived_at_mall',
-    nextAlwaysEnabled: false,
-    highlight: null,
-    position: 'center',
-  },
-  {
-    id: 'mall_1f_intro',
-    koinDialogue: [
-      "Welcome to the Mall! 🏬",
-      "On the 1st floor, you'll find the Clothing Store 👕, Electronics 📱, and Grocery Store 🛒.",
-      "Feel free to approach any NPC to log a practice expense, or just look around!"
-    ],
-    conditionKey: null,
-    nextAlwaysEnabled: true,
-    highlight: null,
-    position: 'top',
-  },
-  {
-    id: 'go_to_2f',
-    koinDialogue: [
-      "Let's explore more! Walk to the Escalator to go up to the 2nd floor."
-    ],
-    conditionKey: 'arrived_at_mall_2f',
-    nextAlwaysEnabled: false,
-    highlight: null,
-    position: 'bottom',
-  },
-  {
-    id: 'mall_2f_intro',
-    koinDialogue: [
-      "The 2nd floor has the Food Court 🍕 and a Cafe ☕.",
-      "You can approach the NPCs to log practice expenses if you'd like!"
-    ],
-    conditionKey: null,
-    nextAlwaysEnabled: true,
-    highlight: null,
-    position: 'top',
-  },
-  {
-    id: 'go_to_3f',
-    koinDialogue: [
-      "One more floor to go! Walk to the Escalator to reach the 3rd floor."
-    ],
-    conditionKey: 'arrived_at_mall_3f',
-    nextAlwaysEnabled: false,
-    highlight: null,
-    position: 'bottom',
-  },
-  {
-    id: 'mall_3f_intro',
-    koinDialogue: [
-      "The 3rd floor has the Entertainment Hub 🎮 and the Gym 💪.",
-      "Every place you visit is an opportunity to practice tracking your expenses!"
-    ],
-    conditionKey: null,
-    nextAlwaysEnabled: true,
-    highlight: null,
-    position: 'top',
-  },
-  {
-    id: 'go_down_escalator',
-    koinDialogue: [
-      "You can also go back down! Walk to the Escalator to go down.",
-      "Use escalators anytime to move between mall floors."
-    ],
-    conditionKey: 'went_down_escalator',
-    nextAlwaysEnabled: false,
-    highlight: null,
-    position: 'bottom',
-  },
-  {
-    id: 'game_tutorial_done',
-    koinDialogue: [
-      "Amazing job! You've learned all the basics — moving around, logging expenses, and navigating the world!",
-      "Now let me show you the rest of the GaFi app. There's a lot more to explore!"
-    ],
-    conditionKey: null,
-    nextAlwaysEnabled: true,
-    highlight: null,
-    position: 'center',
-  },
-];
+// The old linear GAME_TUTORIAL_STEPS rail was removed (UX revision): the
+// in-game tutorial is now free-roam. GameScreen owns the per-location intro
+// content (TUTORIAL_INTROS) and pushes intros here via showKoinIntro().
 
 // ─── Global App Tour Steps (tab-by-tab walkthrough) ──────────────────────────
 export const APP_TOUR_STEPS = [
@@ -264,8 +107,9 @@ export const TutorialProvider = ({ children }) => {
   const [koinState, setKoinState] = useState(KOIN_STATE.SPEAKING);
   const [dialoguePage, setDialoguePage] = useState(0);
 
-  // Completion conditions for in-game tutorial
-  const [completedConditions, setCompletedConditions] = useState(new Set());
+  // CONTEXTUAL phase: the single Koin intro currently on screen (free-roam
+  // tutorial). Shaped like a step ({ id, koinDialogue: [...] }); null = none.
+  const [activeIntro, setActiveIntro] = useState(null);
 
   // Whether the full onboarding tutorial has been completed (persisted)
   const [onboardingComplete, setOnboardingComplete] = useState(null); // null = loading
@@ -294,12 +138,33 @@ export const TutorialProvider = ({ children }) => {
   }, [userInfo?.id]);
 
   // ─── Phase control ───────────────────────────────────────────────────
-  const startGameTutorial = useCallback(() => {
-    setTutorialPhase(TUTORIAL_PHASE.GAME_TUTORIAL);
-    setCurrentStepIndex(0);
+  // Enter the free-roam in-game tutorial. Intros are pushed one at a time by
+  // GameScreen (showKoinIntro) as the player discovers locations.
+  const enterTutorialMode = useCallback(() => {
+    setTutorialPhase(TUTORIAL_PHASE.CONTEXTUAL);
+    setActiveIntro(null);
     setDialoguePage(0);
     setKoinState(KOIN_STATE.SPEAKING);
-    setCompletedConditions(new Set());
+  }, []);
+
+  // Show one contextual Koin intro (first visit to a location). Never
+  // action-gated: the player reads it and taps "Got it!" to keep roaming.
+  const showKoinIntro = useCallback((intro) => {
+    if (!intro?.koinDialogue?.length) return;
+    setActiveIntro({ ...intro, conditionKey: null, nextAlwaysEnabled: true });
+    setDialoguePage(0);
+    setKoinState(KOIN_STATE.SPEAKING);
+  }, []);
+
+  const dismissIntro = useCallback(() => {
+    setActiveIntro(null);
+    setDialoguePage(0);
+  }, []);
+
+  const exitTutorialMode = useCallback(() => {
+    setActiveIntro(null);
+    setDialoguePage(0);
+    setTutorialPhase(TUTORIAL_PHASE.IDLE);
   }, []);
 
   const startAppTour = useCallback(() => {
@@ -316,19 +181,19 @@ export const TutorialProvider = ({ children }) => {
 
   // ─── Step navigation ─────────────────────────────────────────────────
   const getCurrentSteps = useCallback(() => {
-    if (tutorialPhase === TUTORIAL_PHASE.GAME_TUTORIAL) {
-      return GAME_TUTORIAL_STEPS;
-    }
     if (tutorialPhase === TUTORIAL_PHASE.APP_TOUR) {
       return APP_TOUR_STEPS;
     }
-    return [];
+    return []; // CONTEXTUAL has no step list — one intro at a time
   }, [tutorialPhase]);
 
   const getCurrentStep = useCallback(() => {
+    if (tutorialPhase === TUTORIAL_PHASE.CONTEXTUAL) {
+      return activeIntro;
+    }
     const steps = getCurrentSteps();
     return steps[currentStepIndex] || null;
-  }, [getCurrentSteps, currentStepIndex]);
+  }, [tutorialPhase, activeIntro, getCurrentSteps, currentStepIndex]);
 
   // Advance dialogue page within the current step, or advance to next step
   const advanceDialogue = useCallback(() => {
@@ -354,16 +219,17 @@ export const TutorialProvider = ({ children }) => {
   }, [getCurrentStep, dialoguePage]);
 
   const advanceToNextStep = useCallback(() => {
+    // CONTEXTUAL: "advancing" past a one-off intro just closes it.
+    if (tutorialPhase === TUTORIAL_PHASE.CONTEXTUAL) {
+      dismissIntro();
+      return;
+    }
+
     const steps = getCurrentSteps();
     const nextIndex = currentStepIndex + 1;
 
     if (nextIndex >= steps.length) {
-      // All steps in current phase are done
-      if (tutorialPhase === TUTORIAL_PHASE.GAME_TUTORIAL) {
-        // Game tutorial finished — transition to App Tour
-        startAppTour();
-        return;
-      } else if (tutorialPhase === TUTORIAL_PHASE.APP_TOUR) {
+      if (tutorialPhase === TUTORIAL_PHASE.APP_TOUR) {
         // App tour finished — mark complete
         markOnboardingComplete();
         return;
@@ -374,40 +240,7 @@ export const TutorialProvider = ({ children }) => {
     setCurrentStepIndex(nextIndex);
     setDialoguePage(0);
     setKoinState(KOIN_STATE.SPEAKING);
-  }, [getCurrentSteps, currentStepIndex, tutorialPhase, startAppTour, markOnboardingComplete]);
-
-  // Mark a condition as complete (called from GameScreen)
-  const markConditionComplete = useCallback((conditionKey) => {
-    setCompletedConditions(prev => {
-      const next = new Set(prev);
-      next.add(conditionKey);
-      return next;
-    });
-
-    // If the current step is gated on this condition, celebrate and advance.
-    // We advance regardless of whether Koin is mid-dialogue (SPEAKING) or already
-    // minimized (WAITING) — the only state we skip is CELEBRATING, to avoid a
-    // double-trigger. This prevents the overlay from getting stuck full-screen
-    // (pointerEvents:'auto') over the map when an action completes while Koin is
-    // still talking, which previously froze map taps after a practice log.
-    const step = getCurrentStep();
-    if (step && step.conditionKey === conditionKey && koinState !== KOIN_STATE.CELEBRATING) {
-      setKoinState(KOIN_STATE.CELEBRATING);
-      // After brief celebration, advance to next step
-      setTimeout(() => {
-        advanceToNextStep();
-      }, 1500);
-    }
-  }, [getCurrentStep, koinState, advanceToNextStep]);
-
-  // Check if current step's condition is met
-  const isCurrentStepConditionMet = useCallback(() => {
-    const step = getCurrentStep();
-    if (!step) return false;
-    if (step.nextAlwaysEnabled) return true;
-    if (step.conditionKey && completedConditions.has(step.conditionKey)) return true;
-    return false;
-  }, [getCurrentStep, completedConditions]);
+  }, [tutorialPhase, dismissIntro, getCurrentSteps, currentStepIndex, markOnboardingComplete]);
 
   // Navigate to a specific tab (used during App Tour)
   const navigateToTab = useCallback((tabName) => {
@@ -425,7 +258,7 @@ export const TutorialProvider = ({ children }) => {
     setCurrentStepIndex(0);
     setDialoguePage(0);
     setKoinState(KOIN_STATE.SPEAKING);
-    setCompletedConditions(new Set());
+    setActiveIntro(null);
   }, []);
 
   // ─── Reset (for testing / re-running) ────────────────────────────────
@@ -434,7 +267,7 @@ export const TutorialProvider = ({ children }) => {
     setCurrentStepIndex(0);
     setDialoguePage(0);
     setKoinState(KOIN_STATE.SPEAKING);
-    setCompletedConditions(new Set());
+    setActiveIntro(null);
     setOnboardingComplete(false);
     if (userInfo?.id) {
       await AsyncStorage.removeItem(`gafi_onboarding_complete_${userInfo.id}`);
@@ -447,21 +280,22 @@ export const TutorialProvider = ({ children }) => {
     currentStepIndex,
     koinState,
     dialoguePage,
-    completedConditions,
+    activeIntro,
     onboardingComplete,
 
     // Getters
     getCurrentStep,
     getCurrentSteps,
-    isCurrentStepConditionMet,
 
     // Actions
-    startGameTutorial,
+    enterTutorialMode,
+    showKoinIntro,
+    dismissIntro,
+    exitTutorialMode,
     startAppTour,
     skipTutorial,
     advanceDialogue,
     advanceToNextStep,
-    markConditionComplete,
     markOnboardingComplete,
     navigateToTab,
     setNavigationRef,

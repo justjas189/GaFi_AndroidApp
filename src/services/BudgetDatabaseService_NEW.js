@@ -301,7 +301,7 @@ export class BudgetDatabaseService {
       data: {
         id: 'fallback-budget',
         monthly: monthlyBudget,
-        weekly: Math.round((monthlyBudget / 4) * 100) / 100,
+        weekly: 0, // No auto weekly split — the user budgets their own money via category allocations
         currency: 'PHP',
         budget_categories: [
           { category_name: 'food', allocated_amount: categoryBudget, spent_amount: 0 },
@@ -414,7 +414,7 @@ export class BudgetDatabaseService {
           .from('budgets')
           .update({
             monthly: monthlyBudget,
-            weekly: Math.round((monthlyBudget / 4) * 100) / 100,
+            weekly: 0, // No auto weekly split — the user budgets their own money via category allocations
             updated_at: new Date().toISOString()
           })
           .eq('id', existingBudget.id)
@@ -442,7 +442,7 @@ export class BudgetDatabaseService {
           .insert({
             user_id: userId,
             monthly: monthlyBudget,
-            weekly: Math.round((monthlyBudget / 4) * 100) / 100,
+            weekly: 0, // No auto weekly split — the user budgets their own money via category allocations
             currency: 'PHP'
           })
           .select()
@@ -592,13 +592,18 @@ export class BudgetDatabaseService {
       
       DebugUtils.log('DB_SERVICE', 'Ensuring category exists', { budgetId, category: normalizedCategory });
       
-      // Check if category already exists
+      // Check if category already exists. Match case-insensitively (ilike with
+      // no wildcards): DataContext persists canonical Title-Case rows
+      // ('Food & Dining') while this service normalizes to lowercase — an
+      // exact-case .eq() missed those rows and re-inserted a duplicate
+      // variant row on every logged expense.
       const { data: existingCategory, error: checkError } = await this.supabase
         .from('budget_categories')
         .select('id')
         .eq('budget_id', budgetId)
-        .eq('category_name', normalizedCategory)
-        .single();
+        .ilike('category_name', normalizedCategory)
+        .limit(1)
+        .maybeSingle();
 
       if (checkError && checkError.code !== 'PGRST116') {
         throw checkError;
@@ -1281,7 +1286,7 @@ export class BudgetDatabaseService {
         .from('budgets')
         .update({
           monthly: newAmount,
-          weekly: Math.round((newAmount / 4) * 100) / 100,
+          weekly: 0, // No auto weekly split — the user budgets their own money via category allocations
           updated_at: new Date().toISOString()
         })
         .eq('user_id', userId)

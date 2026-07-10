@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTutorial, KOIN_STATE, TUTORIAL_PHASE } from '../context/TutorialContext';
+import VoiceOverService from '../services/VoiceOverService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const KOIN_IMAGE = require('../../assets/mascot/koin_tutorial.png');
@@ -52,7 +53,10 @@ const KoinTutorialOverlay = () => {
 
   const step = getCurrentStep();
   const steps = getCurrentSteps();
-  const isActive = tutorialPhase === TUTORIAL_PHASE.GAME_TUTORIAL ||
+  // CONTEXTUAL (free-roam tutorial) renders only while an intro is on screen;
+  // APP_TOUR renders for its whole step sequence.
+  const isContextual = tutorialPhase === TUTORIAL_PHASE.CONTEXTUAL;
+  const isActive = (isContextual && !!step) ||
                    tutorialPhase === TUTORIAL_PHASE.APP_TOUR;
 
   // ─── Typewriter Effect ───────────────────────────────────────────────
@@ -67,6 +71,9 @@ const KoinTutorialOverlay = () => {
     let charIndex = 0;
     setDisplayedText('');
     setTypingDone(false);
+    // Narrate the page in sync with the typewriter. speak() no-ops when the
+    // voice-over toggle is off, and stops any previous page first.
+    VoiceOverService.speak(fullText);
 
     timerRef.current = setInterval(() => {
       charIndex++;
@@ -207,6 +214,20 @@ const KoinTutorialOverlay = () => {
     }
   }, [isActive]);
 
+  // ─── Voice over lifecycle ────────────────────────────────────────────
+  // Resolve the persisted toggle once (idempotent — GameScreen may already
+  // have done it, but the App Tour can start before GameScreen mounts).
+  useEffect(() => {
+    VoiceOverService.loadVoiceOverSetting();
+  }, []);
+
+  // Silence narration whenever the overlay deactivates (skip, finish,
+  // contextual dismiss) and on unmount — no audio bleeding into the game.
+  useEffect(() => {
+    if (!isActive) VoiceOverService.stop();
+    return () => VoiceOverService.stop();
+  }, [isActive]);
+
   // ─── Tap handler ─────────────────────────────────────────────────────
   const handleTap = useCallback(() => {
     if (koinState === KOIN_STATE.WAITING) {
@@ -275,11 +296,20 @@ const KoinTutorialOverlay = () => {
           {/* Semi-transparent background */}
           <View style={styles.darkOverlay} />
 
-          {/* Skip button */}
-          <TouchableOpacity style={styles.skipButton} onPress={skipTutorial}>
-            <Text style={styles.skipButtonText}>Skip Tutorial</Text>
-            <Ionicons name="play-skip-forward" size={14} color="#AAA" />
-          </TouchableOpacity>
+          {/* Skip button — App Tour only. Contextual intros are one-tap
+              dismissible already, so a skip control would be noise. */}
+          {!isContextual && (
+            <TouchableOpacity
+              style={styles.skipButton}
+              onPress={() => {
+                VoiceOverService.stop();
+                skipTutorial();
+              }}
+            >
+              <Text style={styles.skipButtonText}>Skip Tour</Text>
+              <Ionicons name="play-skip-forward" size={14} color="#AAA" />
+            </TouchableOpacity>
+          )}
 
           {/* Koin Character */}
           <Animated.View style={[
@@ -337,14 +367,14 @@ const KoinTutorialOverlay = () => {
                     onPress={() => advanceDialogue()}
                   >
                     <Text style={styles.advanceButtonText}>
-                      {step.conditionKey && !step.nextAlwaysEnabled
+                      {isContextual
                         ? "Got it!"
                         : isLastStep
                           ? "Finish! 🎉"
                           : "Next"}
                     </Text>
                     <Ionicons
-                      name={isLastStep ? "checkmark" : "arrow-forward"}
+                      name={isContextual || isLastStep ? "checkmark" : "arrow-forward"}
                       size={14}
                       color="#1a1a2e"
                     />
@@ -354,18 +384,21 @@ const KoinTutorialOverlay = () => {
             </View>
           </Animated.View>
 
-          {/* Step progress */}
-          <View style={styles.progressContainer}>
-            <View style={styles.progressBar}>
-              <View style={[
-                styles.progressFill,
-                { width: `${((currentStepIndex + 1) / steps.length) * 100}%` }
-              ]} />
+          {/* Step progress — App Tour only. Contextual intros have no step
+              list (steps.length === 0 would divide by zero here). */}
+          {!isContextual && steps.length > 0 && (
+            <View style={styles.progressContainer}>
+              <View style={styles.progressBar}>
+                <View style={[
+                  styles.progressFill,
+                  { width: `${((currentStepIndex + 1) / steps.length) * 100}%` }
+                ]} />
+              </View>
+              <Text style={styles.progressText}>
+                {currentStepIndex + 1} / {steps.length}
+              </Text>
             </View>
-            <Text style={styles.progressText}>
-              {currentStepIndex + 1} / {steps.length}
-            </Text>
-          </View>
+          )}
         </View>
       </TouchableWithoutFeedback>
     </Animated.View>

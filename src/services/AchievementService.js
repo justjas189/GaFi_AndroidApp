@@ -137,7 +137,7 @@ export class AchievementService {
       'explorer_home': {
         id: 'explorer_home',
         title: 'Home Sweet Home',
-        description: 'Returned to your Home/Dorm',
+        description: 'Returned to your Home',
         points: 10,
         icon: '🏠',
         category: 'exploration',

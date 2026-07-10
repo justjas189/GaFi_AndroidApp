@@ -23,6 +23,25 @@ export const WANTS_CATEGORIES = [
   'Other',
 ];
 
+// ── Level-wide curriculum constraints ────────────────────────────────
+// Strict 50/30/20 rule, anchored to the WEEKLY budget (not the day's own
+// spending): Needs ≤ 50% and Wants ≤ 30% of the weekly budget across the
+// whole level, and at least 20% of the weekly budget left unspent (savings).
+// Enforced on EVERY Level 1 day. Group totals only ever grow within a level,
+// so the pre-log guard can treat each cap as an irreversible crossing.
+const RULE_50_30_20 = {
+  type: 'all_of',
+  conditions: [
+    { type: 'level_group_spending_pct_weekly_budget_max', categoryGroup: 'needs', max: 0.5 },
+    { type: 'level_group_spending_pct_weekly_budget_max', categoryGroup: 'wants', max: 0.3 },
+    { type: 'level_savings_rate_min', min: 0.2 },
+  ],
+};
+
+// Advanced savings discipline: ≥ 30% of the weekly budget must stay unspent.
+// Enforced on EVERY Level 3 day (day 10 already carried it as 3_10_1).
+const RULE_SAVINGS_30 = { type: 'level_savings_rate_min', min: 0.3 };
+
 const DAILY_TASK_RULES = {
   '1_1_1': {
     // Forgiving thresholds: use min (>=) not exact (===) so an extra logged
@@ -40,13 +59,9 @@ const DAILY_TASK_RULES = {
       { type: 'expense_count', min: 1, categories: ['Transport'] },
     ],
   },
-  '1_1_3': {
-    type: 'all_of',
-    conditions: [
-      { type: 'spending_ratio_max', categoryGroup: 'needs', max: 0.5 },
-      { type: 'spending_ratio_max', categoryGroup: 'wants', max: 0.3 },
-    ],
-  },
+  // Days 1-3 all enforce the strict weekly-anchored 50/30/20 rule (was a
+  // day-share ratio check on days 1/3 only, with no savings floor on day 1).
+  '1_1_3': RULE_50_30_20,
   '1_2_1': {
     type: 'distinct_categories',
     min: 4,
@@ -60,6 +75,7 @@ const DAILY_TASK_RULES = {
     type: 'max_single_category_ratio',
     max: 0.4,
   },
+  '1_2_4': RULE_50_30_20,
   '1_3_1': {
     type: 'expense_count',
     min: 4,
@@ -69,14 +85,7 @@ const DAILY_TASK_RULES = {
     min: 1,
     categories: ['Other'],
   },
-  '1_3_3': {
-    type: 'all_of',
-    conditions: [
-      { type: 'spending_ratio_max', categoryGroup: 'needs', max: 0.5 },
-      { type: 'spending_ratio_max', categoryGroup: 'wants', max: 0.3 },
-      { type: 'level_savings_rate_min', min: 0.2 },
-    ],
-  },
+  '1_3_3': RULE_50_30_20,
   // Level 2 — Goals: simplified essential logging + the "Allocate to Goals" mechanic.
   // Day 4 (Inflation): log a basic essential, then hedge purchasing power via allocation.
   '2_4_1': {
@@ -129,6 +138,7 @@ const DAILY_TASK_RULES = {
     type: 'day_spending_pct_weekly_budget_max',
     max: 0.20,
   },
+  '3_7_3': RULE_SAVINGS_30,
   '3_8_1': {
     type: 'all_of',
     conditions: [
@@ -140,6 +150,7 @@ const DAILY_TASK_RULES = {
     type: 'day_spending_pct_weekly_budget_max',
     max: 0.15,
   },
+  '3_8_3': RULE_SAVINGS_30,
   '3_9_1': {
     // Needs uses min (>=) to avoid soft-lock; 3_9_2 still enforces zero Wants.
     type: 'all_of',
@@ -153,6 +164,7 @@ const DAILY_TASK_RULES = {
     max: 0,
     categoryGroup: 'wants',
   },
+  '3_9_3': RULE_SAVINGS_30,
   '3_10_1': {
     type: 'level_savings_rate_min',
     min: 0.3,
@@ -174,6 +186,7 @@ const DAILY_TASK_SUFFIX = {
   '1_2_1': 'four_categories_logged',
   '1_2_2': 'two_distinct_needs',
   '1_2_3': 'single_category_under_40',
+  '1_2_4': 'division_50_30_20_intact',
   '1_3_1': 'four_expenses_logged',
   '1_3_2': 'other_unplanned_expense',
   '1_3_3': 'division_50_30_20_intact',
@@ -187,10 +200,13 @@ const DAILY_TASK_SUFFIX = {
   // Level 3 Suffixes
   '3_7_1': 'one_needs_no_wants',
   '3_7_2': 'spend_under_20pct_weekly_budget',
+  '3_7_3': 'savings_rate_at_least_30pct',
   '3_8_1': 'commute_and_transport_log',
   '3_8_2': 'spend_under_15pct_weekly_budget',
+  '3_8_3': 'savings_rate_at_least_30pct',
   '3_9_1': 'mall_visit_one_needs',
   '3_9_2': 'no_wants_expenses_today',
+  '3_9_3': 'savings_rate_at_least_30pct',
   '3_10_1': 'savings_rate_at_least_30pct',
   '3_10_2': 'two_expenses_wants_under_10pct',
 };
@@ -203,6 +219,7 @@ const DAILY_TASK_REWARD_XP = {
   '1_2_1': 25,
   '1_2_2': 25,
   '1_2_3': 25,
+  '1_2_4': 25,
   '1_3_1': 30,
   '1_3_2': 30,
   '1_3_3': 35,
@@ -216,10 +233,13 @@ const DAILY_TASK_REWARD_XP = {
   // Level 3 XP
   '3_7_1': 35,
   '3_7_2': 35,
+  '3_7_3': 35,
   '3_8_1': 40,
   '3_8_2': 40,
+  '3_8_3': 40,
   '3_9_1': 45,
   '3_9_2': 45,
+  '3_9_3': 45,
   '3_10_1': 50,
   '3_10_2': 60,
 };

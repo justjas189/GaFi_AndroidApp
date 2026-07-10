@@ -1,24 +1,46 @@
-import React, { useContext } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import React, { useContext, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemeContext } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { FONTS } from '../../theme/typography';
+import { toast } from '../../utils/toast';
+import UserTypeCards from '../../components/onboarding/UserTypeCards';
+import { detectUserTypeFromEmail } from '../../utils/emailUserType';
 
 const { width } = Dimensions.get('window');
 
 const GetStartedScreen = ({ navigation }) => {
   const { theme } = useContext(ThemeContext);
+  const { userInfo, persistUserType } = useAuth();
+
+  // Google sign-ups skip the SignUp form, so they arrive here without a
+  // user type. Show the fallback picker only for them — email sign-ups
+  // already chose on SignUpScreen (user_type rides the sign-up metadata).
+  const needsTypePick = !userInfo?.userType;
+  const [selectedType, setSelectedType] = useState(
+    () => detectUserTypeFromEmail(userInfo?.email) || null
+  );
 
   const handleGetStarted = async () => {
     try {
+      if (needsTypePick) {
+        if (!selectedType) {
+          toast.error('Pick one', "Tell us if you're a student or an employee.");
+          return;
+        }
+        // DB upsert (no email column) + in-memory sync — BudgetGoals presets
+        // read userInfo.userType on mount.
+        await persistUserType(selectedType);
+      }
       await AsyncStorage.setItem('onboardingComplete', 'false');
       if (global.setHasOnboarded) {
         global.setHasOnboarded(false);
       }
-      navigation.navigate('UserType');
+      navigation.navigate('BudgetGoals');
     } catch (error) {
       console.error('Error in GetStartedScreen:', error);
     }
@@ -51,9 +73,16 @@ const GetStartedScreen = ({ navigation }) => {
     },
   ];
 
+  // With the fallback picker visible the page can overflow short (~640dp)
+  // screens, so it scrolls; without it the original fixed layout stays.
+  const Body = needsTypePick ? ScrollView : View;
+  const bodyProps = needsTypePick
+    ? { style: styles.content, contentContainerStyle: styles.scrollContent, showsVerticalScrollIndicator: false }
+    : { style: styles.content };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <View style={styles.content}>
+      <Body {...bodyProps}>
         {/* Hero Section */}
         <View style={styles.heroSection}>
           <Image
@@ -63,17 +92,19 @@ const GetStartedScreen = ({ navigation }) => {
             accessibilityRole="image"
             accessibilityLabel="GaFi logo"
           />
-          <Text style={[styles.title, { color: theme.colors.text }]}>Welcome to GaFI</Text>
+          <Text style={[styles.title, { color: theme.colors.text }]}>
+            Hi {userInfo?.firstName || userInfo?.name?.split(' ')[0] || 'there'}!
+          </Text>
           <Text style={[styles.subtitle, { color: theme.colors.textSecondary || theme.colors.text + '80' }]}>
-            Your gamified finance companion
+            Welcome to GaFI — your gamified finance companion
           </Text>
         </View>
 
         {/* Features Grid */}
         <View style={styles.featuresGrid}>
           {features.map((feature, index) => (
-            <View 
-              key={index} 
+            <View
+              key={index}
               style={[styles.featureCard, { backgroundColor: theme.colors.card }]}
             >
               <View style={[styles.featureIconContainer, { backgroundColor: feature.color + '20' }]}>
@@ -89,9 +120,19 @@ const GetStartedScreen = ({ navigation }) => {
           ))}
         </View>
 
+        {/* Fallback user-type picker — Google sign-ups only (no type yet) */}
+        {needsTypePick && (
+          <View style={styles.typePickerSection}>
+            <Text style={[styles.typePickerLabel, { color: theme.colors.text }]}>
+              First, are you a student or an employee?
+            </Text>
+            <UserTypeCards selectedType={selectedType} onSelect={setSelectedType} />
+          </View>
+        )}
+
         {/* CTA Button */}
         <View style={styles.ctaContainer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.button, { backgroundColor: theme.colors.primary }]}
             onPress={handleGetStarted}
             activeOpacity={0.8}
@@ -100,7 +141,7 @@ const GetStartedScreen = ({ navigation }) => {
             <Ionicons name="arrow-forward" size={20} color="#FFF" />
           </TouchableOpacity>
         </View>
-      </View>
+      </Body>
     </SafeAreaView>
   );
 };
@@ -174,6 +215,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     lineHeight: 16,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 8,
+  },
+  typePickerSection: {
+    marginBottom: 24,
+  },
+  typePickerLabel: {
+    fontFamily: FONTS.headingSemiBold,
+    fontSize: 17,
+    letterSpacing: -0.2,
+    marginBottom: 14,
+    textAlign: 'center',
   },
   ctaContainer: {
     marginTop: 'auto',

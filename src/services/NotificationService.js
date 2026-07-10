@@ -53,11 +53,15 @@ class NotificationService {
    * @param {Object} budget   – { monthly, weekly, categories: { food: { limit, spent }, … } }
    * @param {number} newExpenseAmount – The amount just added
    * @param {string} newExpenseCategory – The category of the new expense (normalized)
+   * @returns {Array} The triggered alerts ({ type, category, percentage, message })
+   *   so callers can mirror them in-app (toast). Local notifications keep their
+   *   cooldown; the returned array is pre-cooldown so in-app feedback always
+   *   reflects the current budget state. Empty when opted out or on error.
    */
   async checkBudgetThresholds(budget, newExpenseAmount, newExpenseCategory) {
     try {
       const enabled = await this.getPreference(PREF_KEYS.BUDGET_ALERTS);
-      if (enabled === false) return; // User opted out
+      if (enabled === false) return []; // User opted out
 
       const alerts = [];
 
@@ -132,8 +136,11 @@ class NotificationService {
         this._markCooldown(cooldownKey, COOLDOWNS[alert.type] || COOLDOWNS.budget_warning);
         DebugUtils.log('NOTIF', 'Budget alert fired', alert);
       }
+
+      return alerts;
     } catch (error) {
       DebugUtils.error('NOTIF', 'Error checking budget thresholds', error);
+      return [];
     }
   }
 

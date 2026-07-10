@@ -175,7 +175,7 @@ const AchievementDashboard = () => {
           {
             id: 'explorer_home',
             title: 'Home Explorer',
-            description: 'Visit your Home/Dorm',
+            description: 'Visit your Home',
             icon: '🏠',
             points: 15,
             achievement_type: 'exploration',

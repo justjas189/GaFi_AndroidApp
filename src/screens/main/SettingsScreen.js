@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -24,6 +24,7 @@ import { FONTS } from '../../theme/typography';
 import { toast } from '../../utils/toast';
 import { useConfirm } from '../../components/feedback/ConfirmProvider';
 import ExportModal from '../../components/ExportModal';
+import VoiceOverService from '../../services/VoiceOverService';
 
 const SettingsScreen = ({ navigation }) => {
   const { logout, userInfo } = useContext(AuthContext);
@@ -33,7 +34,23 @@ const SettingsScreen = ({ navigation }) => {
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [voiceOverEnabled, setVoiceOverEnabledState] = useState(VoiceOverService.isVoiceOverEnabled());
   const confirm = useConfirm();
+
+  // Load the persisted voice-over toggle and stay in sync with the service.
+  useEffect(() => {
+    VoiceOverService.loadVoiceOverSetting().then(setVoiceOverEnabledState);
+    return VoiceOverService.onVoiceOverChange(setVoiceOverEnabledState);
+  }, []);
+
+  const handleToggleVoiceOver = (value) => {
+    setVoiceOverEnabledState(value);
+    VoiceOverService.setVoiceOverEnabled(value);
+    if (value) {
+      // Immediate audible confirmation that narration works on this device.
+      VoiceOverService.speak('Voice over enabled. Koin will read story and tutorial messages out loud.');
+    }
+  };
 
   // ── Handlers ──
 
@@ -226,6 +243,27 @@ const SettingsScreen = ({ navigation }) => {
               onValueChange={toggleTheme}
               trackColor={{ false: '#767577', true: `${theme.colors.primary}80` }}
               thumbColor={isDarkMode ? theme.colors.primary : '#f4f3f4'}
+              ios_backgroundColor="#3e3e3e"
+            />
+          </View>
+
+          <View style={[styles.settingItem, { backgroundColor: theme.colors.card }]}>
+            <View style={styles.settingItemLeft}>
+              <View style={[styles.settingIconContainer, { backgroundColor: `${theme.colors.primary}20` }]}>
+                <Ionicons name="volume-high-outline" size={20} color={theme.colors.primary} />
+              </View>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>Voice Over</Text>
+                <Text style={[styles.settingValue, { color: theme.colors.text }]}>
+                  {voiceOverEnabled ? 'Narrates story & tutorial' : 'Disabled'}
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={voiceOverEnabled}
+              onValueChange={handleToggleVoiceOver}
+              trackColor={{ false: '#767577', true: `${theme.colors.primary}80` }}
+              thumbColor={voiceOverEnabled ? theme.colors.primary : '#f4f3f4'}
               ios_backgroundColor="#3e3e3e"
             />
           </View>

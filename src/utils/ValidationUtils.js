@@ -31,7 +31,7 @@ const VALIDATION_RULES = {
     requireLowercase: true,
     requireNumbers: true,
     requireSpecialChars: true,
-    specialChars: '@$!%*?&'
+    specialChars: '@$!%*#?&'
   }
 };
 

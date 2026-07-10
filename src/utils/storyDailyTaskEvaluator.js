@@ -189,6 +189,16 @@ export const evaluateDailyTaskRule = (rule, context) => {
       return pct <= toNumber(rule.max);
     }
 
+    // Level-wide cap on a category group as a share of the WEEKLY budget
+    // (50/30/20 rule: needs ≤ 50%, wants ≤ 30%). Reads the level-scoped group
+    // totals GameScreen tracks in budgetCategories (context.levelGroupSpending)
+    // — NOT the day's own spending, which is what spending_ratio_max checks.
+    case 'level_group_spending_pct_weekly_budget_max': {
+      if (weeklyBudget <= 0) return false;
+      const groupSpent = toNumber(context?.levelGroupSpending?.[rule.categoryGroup]);
+      return groupSpent <= toNumber(rule.max) * weeklyBudget;
+    }
+
     case 'travel_destination_any': {
       const required = Array.isArray(rule.destinations) ? rule.destinations : [];
       if (required.length === 0) return false;

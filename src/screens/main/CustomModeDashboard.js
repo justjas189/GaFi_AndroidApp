@@ -26,6 +26,7 @@ import { supabase } from '../../config/supabase';
 import goalNotificationService from '../../services/GoalNotificationService';
 import { getCategoryIcon } from '../../utils/categoryIcons';
 import { normalizeCategory } from '../../utils/categoryUtils';
+import { validateAmount } from '../../utils/ValidationUtils';
 import { toast } from '../../utils/toast';
 import { useConfirm } from '../../components/feedback/ConfirmProvider';
 
@@ -138,7 +139,8 @@ const formatDate = (dateStr) => {
 const formatShortDate = (dateStr) => {
   if (!dateStr) return '';
   const d = new Date(dateStr);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  // Weekday included per panel revision: transactions show date AND day.
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 };
 
 const formatInputDate = (date) => {
@@ -204,7 +206,7 @@ export default function CustomModeDashboard({ navigation }) {
   const insets = useSafeAreaInsets();
   const { theme } = useContext(ThemeContext);
   const { user, userInfo } = useContext(AuthContext);
-  const { budget, expenses, addExpense } = useContext(DataContext);
+  const { budget, expenses, addExpense, updateBudget } = useContext(DataContext);
   const confirm = useConfirm();
   const isEmployee = userInfo?.userType === 'employee';
 
@@ -223,6 +225,13 @@ export default function CustomModeDashboard({ navigation }) {
   const [expenseNote, setExpenseNote] = useState('');
   const [expenseCategory, setExpenseCategory] = useState('Food & Dining');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Category Budgets accordion (one open at a time) + inline limit editing.
+  // The whole section is itself collapsible (collapsed by default) — 11
+  // category rows ate the Budgeting tab's screen real estate.
+  const [showCategoryBudgets, setShowCategoryBudgets] = useState(false);
+  const [expandedCategory, setExpandedCategory] = useState(null);
+  const [categoryLimitDraft, setCategoryLimitDraft] = useState('');
+  const [savingCategoryLimit, setSavingCategoryLimit] = useState(false);
 
   // ── Goals state ─────────────────────────────────────────────────────
   const [savingsGoals, setSavingsGoals] = useState([]);
@@ -554,6 +563,19 @@ export default function CustomModeDashboard({ navigation }) {
       toast.error('Not signed in', 'Sign in to save expenses.');
       return;
     }
+    // HARD budget constraint (UX revision): `remaining` is this dashboard's
+    // Spendable Money Left (income − expenses − goal contributions − savings,
+    // clamped ≥ 0) — the same number shown in the header, so the block always
+    // matches what the user sees.
+    if (amount > remaining) {
+      toast.error(
+        'Over budget — blocked',
+        remaining > 0
+          ? `Only ₱${remaining.toLocaleString('en-PH', { minimumFractionDigits: 2 })} spendable money is left this month.`
+          : 'No spendable money left this month. Adjust your budget or goals first.'
+      );
+      return;
+    }
     setIsSubmitting(true);
     const savedAmount = amount;
     const savedNote = expenseNote;
@@ -579,6 +601,57 @@ export default function CustomModeDashboard({ navigation }) {
       toast.error('Save failed', error.message || 'Could not save the expense.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // ── Category budget handlers ────────────────────────────────────────
+
+  const toggleCategoryBudget = (cat) => {
+    if (expandedCategory === cat) {
+      setExpandedCategory(null);
+      return;
+    }
+    const currentLimit = budget?.categories?.[cat]?.limit || 0;
+    setCategoryLimitDraft(currentLimit > 0 ? String(currentLimit) : '');
+    setExpandedCategory(cat);
+  };
+
+  // Persist one category's monthly limit. Budget Guardian
+  // (NotificationService.checkBudgetThresholds) reads exactly these
+  // budget.categories[<canonical name>].limit values on every logged expense —
+  // saving here is what arms the per-category 85% / 95% / 100% alerts.
+  const handleSaveCategoryLimit = async (cat) => {
+    const parsed = parseFloat(categoryLimitDraft);
+    if (isNaN(parsed) || parsed < 0) {
+      toast.error('Invalid amount', 'Enter a valid budget amount (or 0 to remove the limit).');
+      return;
+    }
+    const newLimit = Math.round(parsed * 100) / 100;
+    setSavingCategoryLimit(true);
+    try {
+      // Full category map required: updateBudget replaces local budget state
+      // with what it is given, so a partial map would drop the other limits.
+      const newCategories = { ...(budget?.categories || {}) };
+      newCategories[cat] = {
+        limit: newLimit,
+        spent: newCategories[cat]?.spent || 0,
+      };
+      await updateBudget({
+        monthly: budget?.monthly || 0,
+        weekly: budget?.weekly || 0,
+        categories: newCategories,
+      });
+      toast.success(
+        'Category budget saved',
+        newLimit > 0
+          ? `${cat}: ₱${newLimit.toLocaleString('en-PH', { minimumFractionDigits: 2 })}/month. Budget Guardian warns at 85%.`
+          : `${cat} limit removed.`
+      );
+      setExpandedCategory(null);
+    } catch (error) {
+      toast.error('Save failed', error.message || 'Could not save the category budget.');
+    } finally {
+      setSavingCategoryLimit(false);
     }
   };
 
@@ -704,11 +777,12 @@ export default function CustomModeDashboard({ navigation }) {
   };
 
   const handleAllocate = async () => {
-    const amt = parseFloat(allocateAmount);
-    if (!allocateGoal || isNaN(amt) || amt <= 0) {
-      toast.error('Invalid amount', 'Enter a positive number.');
+    const allocateCheck = validateAmount(allocateAmount);
+    if (!allocateGoal || !allocateCheck.isValid) {
+      toast.error('Invalid amount', allocateCheck.errors[0] || 'Enter a valid amount.');
       return;
     }
+    const amt = allocateCheck.sanitized;
     try {
       const newAmount = (parseFloat(allocateGoal.current_amount) || 0) + amt;
       const isAchieved = newAmount >= parseFloat(allocateGoal.target_amount);
@@ -777,11 +851,12 @@ export default function CustomModeDashboard({ navigation }) {
   };
 
   const handleTransaction = async () => {
-    const amt = parseFloat(txnAmount);
-    if (!selectedWallet || isNaN(amt) || amt <= 0) {
-      toast.error('Invalid amount', 'Enter a valid amount.');
+    const txnCheck = validateAmount(txnAmount);
+    if (!selectedWallet || !txnCheck.isValid) {
+      toast.error('Invalid amount', txnCheck.errors[0] || 'Enter a valid amount.');
       return;
     }
+    const amt = txnCheck.sanitized;
     const currentBalance = parseFloat(selectedWallet.current_amount) || 0;
     if (txnType === 'withdrawal' && amt > currentBalance) {
       toast.error('Insufficient balance', `${selectedWallet.name} only has ${formatCurrency(currentBalance)}.`);
@@ -1229,6 +1304,105 @@ export default function CustomModeDashboard({ navigation }) {
         {renderBudgetBar('Needs', '#4CAF50', budgetBreakdown.needs.budget, budgetBreakdown.needs.spent)}
         {renderBudgetBar('Wants', '#FF9800', budgetBreakdown.wants.budget, budgetBreakdown.wants.spent)}
         {renderBudgetBar('Savings', '#2196F3', budgetBreakdown.savings.budget, budgetBreakdown.savings.actual, false)}
+      </View>
+
+      {/* Category Budgets — collapsible section (collapsed by default), then an
+          accordion list inside, tap a row to inline-edit a limit.
+          These limits feed the Budget Guardian's per-category 85% warnings. */}
+      <View style={s.section}>
+        <TouchableOpacity
+          style={[s.sectionHeader, !showCategoryBudgets && { marginBottom: 0 }]}
+          onPress={() => {
+            if (showCategoryBudgets) setExpandedCategory(null); // closing the section closes any open editor
+            setShowCategoryBudgets(!showCategoryBudgets);
+          }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="shield-checkmark" size={20} color={colors.primary} />
+          <Text style={s.sectionTitle}>Category Budgets</Text>
+          <Ionicons
+            name={showCategoryBudgets ? 'chevron-up' : 'chevron-down'}
+            size={18}
+            color={colors.textSecondary}
+            style={{ marginLeft: 'auto' }}
+          />
+        </TouchableOpacity>
+        {showCategoryBudgets && (
+        <>
+        <Text style={s.catBudgetHint}>
+          Set a monthly limit per category — the Budget Guardian warns you at 85% of each limit.
+        </Text>
+        {EXPENSE_CATEGORIES.map(({ id: cat }) => {
+          const meta = CATEGORY_META[cat] || { icon: 'ellipsis-horizontal', color: '#795548' };
+          const limit = budget?.categories?.[cat]?.limit || 0;
+          const spent = categoryBreakdown[cat] || 0;
+          const pct = limit > 0 ? (spent / limit) * 100 : 0;
+          const barColor = pct >= 100 ? colors.error : pct >= 85 ? '#FF9800' : meta.color;
+          const isExpanded = expandedCategory === cat;
+          return (
+            <View key={cat} style={[s.catBudgetRow, isExpanded && { borderColor: meta.color }]}>
+              <TouchableOpacity
+                style={s.catBudgetHeader}
+                onPress={() => toggleCategoryBudget(cat)}
+                activeOpacity={0.7}
+              >
+                <View style={[s.categoryIcon, { backgroundColor: meta.color + '18' }]}>
+                  <Ionicons name={meta.icon} size={18} color={meta.color} />
+                </View>
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={s.catBudgetName}>{cat}</Text>
+                  <Text style={[s.catBudgetAmounts, pct >= 85 && { color: barColor }]}>
+                    {limit > 0
+                      ? `${formatCurrency(spent)} / ${formatCurrency(limit)} · ${Math.round(pct)}%`
+                      : spent > 0
+                        ? `${formatCurrency(spent)} spent · no limit set`
+                        : 'No limit set'}
+                  </Text>
+                </View>
+                <Ionicons
+                  name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
+
+              {limit > 0 && (
+                <AnimatedBar
+                  percent={Math.min(100, pct)}
+                  color={barColor}
+                  trackStyle={s.barTrack}
+                  fillStyle={s.barFill}
+                />
+              )}
+
+              {isExpanded && (
+                <View style={s.catBudgetEditor}>
+                  <Text style={s.catBudgetCurrency}>₱</Text>
+                  <TextInput
+                    style={s.catBudgetInput}
+                    value={categoryLimitDraft}
+                    onChangeText={(text) =>
+                      setCategoryLimitDraft(text.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1'))
+                    }
+                    keyboardType="numeric"
+                    placeholder="Monthly limit"
+                    placeholderTextColor={colors.textSecondary}
+                    editable={!savingCategoryLimit}
+                  />
+                  <TouchableOpacity
+                    style={[s.catBudgetSaveBtn, { backgroundColor: meta.color }, savingCategoryLimit && { opacity: 0.6 }]}
+                    onPress={() => handleSaveCategoryLimit(cat)}
+                    disabled={savingCategoryLimit}
+                  >
+                    <Text style={s.catBudgetSaveText}>{savingCategoryLimit ? 'Saving…' : 'Save'}</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          );
+        })}
+        </>
+        )}
       </View>
 
       {/* Top Spending Insight */}
@@ -2144,6 +2318,73 @@ const createStyles = (colors) =>
     },
     splitBarSegment: {
       height: '100%',
+    },
+
+    // ── Category Budgets (accordion) ─────────────────────────────────
+    catBudgetHint: {
+      fontSize: 12,
+      fontFamily: FONTS.bodyRegular,
+      color: colors.textSecondary,
+      marginBottom: 12,
+      lineHeight: 17,
+    },
+    catBudgetRow: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      padding: 10,
+      marginBottom: 8,
+      backgroundColor: colors.surface,
+    },
+    catBudgetHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    catBudgetName: {
+      fontSize: 14,
+      fontFamily: FONTS.bodySemiBold,
+      color: colors.text,
+    },
+    catBudgetAmounts: {
+      fontSize: 12,
+      fontFamily: FONTS.numberSemiBold,
+      fontVariant: ['tabular-nums'],
+      color: colors.textSecondary,
+      marginTop: 2,
+    },
+    catBudgetEditor: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 10,
+      gap: 8,
+    },
+    catBudgetCurrency: {
+      fontSize: 16,
+      fontFamily: FONTS.numberSemiBold,
+      color: colors.textSecondary,
+    },
+    catBudgetInput: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      fontSize: 15,
+      fontFamily: FONTS.numberSemiBold,
+      fontVariant: ['tabular-nums'],
+      color: colors.text,
+      backgroundColor: colors.card,
+    },
+    catBudgetSaveBtn: {
+      paddingHorizontal: 18,
+      paddingVertical: 10,
+      borderRadius: 10,
+    },
+    catBudgetSaveText: {
+      fontSize: 13,
+      fontFamily: FONTS.bodySemiBold,
+      color: '#FFF',
     },
 
     // ── Health Circle ────────────────────────────────────────────────

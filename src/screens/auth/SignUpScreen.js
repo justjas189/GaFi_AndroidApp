@@ -19,7 +19,10 @@ import { useTheme } from '../../context/ThemeContext';
 import { supabase } from '../../config/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ProfileService from '../../services/ProfileService';
+import { validatePassword } from '../../utils/ValidationUtils';
 import GoogleSignInButton from '../../components/auth/GoogleSignInButton';
+import UserTypeCards from '../../components/onboarding/UserTypeCards';
+import { detectUserTypeFromEmail } from '../../utils/emailUserType';
 import { FONTS } from '../../theme/typography';
 import { toast } from '../../utils/toast';
 import { useConfirm } from '../../components/feedback/ConfirmProvider';
@@ -36,6 +39,8 @@ const SignUpScreen = ({ navigation }) => {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [checkingUsername, setCheckingUsername] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState(null);
+  const [selectedUserType, setSelectedUserType] = useState(null); // 'student' | 'employee'
+  const [userTypeTouched, setUserTypeTouched] = useState(false);  // manual pick freezes auto-detect
   const { register, loginWithGoogle, error, isLoading } = useContext(AuthContext);
   const { colors, spacing, borderRadius, shadows, createThemedStyles } = useTheme();
   const confirm = useConfirm();
@@ -87,6 +92,16 @@ const SignUpScreen = ({ navigation }) => {
     return () => clearTimeout(timer);
   }, [username]);
 
+  // Live auto-detect: as the email is typed, a recognized school/work domain
+  // flips the user-type cards automatically. A manual card tap wins for the
+  // rest of the session, and a null detection never clears an existing
+  // selection (no jumpy UI mid-typing).
+  React.useEffect(() => {
+    if (userTypeTouched) return;
+    const detected = detectUserTypeFromEmail(email);
+    if (detected) setSelectedUserType(detected);
+  }, [email, userTypeTouched]);
+
   const validateForm = () => {
     const newErrors = {};
 
@@ -117,14 +132,16 @@ const SignUpScreen = ({ navigation }) => {
       newErrors.email = 'Please enter a valid email';
     }
 
-    // Validate password
-    const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*#?&])[A-Za-z\d@$!%*#?&]{8,}$/;
-    if (!password) {
-      newErrors.password = 'Password is required';
-    } else if (password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
-    } else if (!passwordRegex.test(password)) {
-      newErrors.password = 'Password must contain letters, numbers, and special characters';
+    // Validate user type (Student / Employee cards)
+    if (!selectedUserType) {
+      newErrors.userType = 'Tell us if you are a student or an employee';
+    }
+
+    // Validate password — shared rules (min length, uppercase, lowercase,
+    // number, special char) live in ValidationUtils, same as the reset flow.
+    const passwordCheck = validatePassword(password);
+    if (!passwordCheck.isValid) {
+      newErrors.password = passwordCheck.errors[0];
     }
 
     // Validate confirm password
@@ -194,10 +211,11 @@ const SignUpScreen = ({ navigation }) => {
       // Proceed with registration since email doesn't exist
       const usernameToRegister = username.trim() || null;
       const { success, error, user, needsVerification } = await register(
-        name.trim(), 
-        email.trim(), 
+        name.trim(),
+        email.trim(),
         password,
-        usernameToRegister
+        usernameToRegister,
+        selectedUserType
       );
       
       // Handle any unexpected registration errors
@@ -319,6 +337,21 @@ const SignUpScreen = ({ navigation }) => {
     },
     successText: {
       color: theme.colors.success,
+    },
+    sectionLabel: {
+      fontFamily: FONTS.bodyMedium,
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+      marginBottom: theme.spacing.sm,
+      marginLeft: theme.spacing.xs,
+    },
+    userTypeSection: {
+      marginBottom: theme.spacing.md,
+    },
+    // The user-type cards sit between two inputs; hints below them need their
+    // own top offset (the shared hintText negative margin assumes an input above).
+    userTypeHint: {
+      marginTop: theme.spacing.xs,
     },
     showPasswordButton: {
       padding: theme.spacing.xs,
@@ -471,6 +504,25 @@ const SignUpScreen = ({ navigation }) => {
               />
             </View>
             {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+
+            <View style={styles.userTypeSection}>
+              <Text style={styles.sectionLabel}>I am a…</Text>
+              <UserTypeCards
+                compact
+                selectedType={selectedUserType}
+                onSelect={(type) => {
+                  setSelectedUserType(type);
+                  setUserTypeTouched(true);
+                  setErrors({ ...errors, userType: null });
+                }}
+              />
+              {!userTypeTouched && selectedUserType && detectUserTypeFromEmail(email) === selectedUserType && (
+                <Text style={[styles.hintText, styles.successText, styles.userTypeHint]}>
+                  ✨ Detected "{selectedUserType === 'student' ? 'Student' : 'Employee'}" from your school email — tap the other card if that's wrong.
+                </Text>
+              )}
+              {errors.userType && <Text style={[styles.errorText, styles.userTypeHint]}>{errors.userType}</Text>}
+            </View>
 
             <View style={styles.inputContainer}>
               <Ionicons name="lock-closed-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />

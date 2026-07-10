@@ -13,6 +13,7 @@ import AnimatedBar from '../../components/AnimatedBar';
 import ResponsiveStage, { MAX_CONTENT_WIDTH, MAX_CONTENT_HEIGHT } from '../../components/layout/ResponsiveStage';
 import gameDatabaseService from '../../services/GameDatabaseService';
 import EconomyService, { SPROUTS_REWARDS } from '../../services/EconomyService';
+import VoiceOverService from '../../services/VoiceOverService';
 import { normalizeCategory } from '../../utils/categoryUtils';
 import { getCategoryIcon } from '../../utils/categoryIcons';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -29,6 +30,7 @@ import {
   getStoryLevelDisplayTotalDays,
 } from '../../config/storyDailyTasks';
 import { evaluateDailyTaskRule } from '../../utils/storyDailyTaskEvaluator';
+import { evaluateStoryExpense } from '../../utils/storyExpenseGuard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTutorial, TUTORIAL_PHASE } from '../../context/TutorialContext';
 import DailyTaskPopup from '../../components/DailyTaskPopup';
@@ -110,6 +112,9 @@ const MAPS = {
   },
   dorm: {
     id: 'dorm',
+    // Display name only — id stays 'dorm' so saved sessions/travel links hold.
+    // Renamed back to 'Home' (UX revision, reversing the earlier panel change);
+    // the old main-menu ambiguity is solved by the header's exit-outline glyph.
     name: 'Home',
     icon: '🏠',
     image: require('../../../assets/Game_Graphics/maps/Home/Map002.png'),
@@ -379,7 +384,14 @@ export default function BuildScreen() {
   const { colors } = useTheme();
   const { user } = useContext(AuthContext);
   const { addExpense, expenses } = useContext(DataContext);
-  const { startGameTutorial: startContextTutorial, markConditionComplete, cancelTutorial, tutorialPhase } = useTutorial();
+  const {
+    enterTutorialMode,
+    showKoinIntro,
+    exitTutorialMode,
+    startAppTour,
+    cancelTutorial,
+    tutorialPhase,
+  } = useTutorial();
   const navigation = useNavigation();
   const confirm = useConfirm();
 
@@ -467,11 +479,11 @@ export default function BuildScreen() {
   const pendingEntrySpawnRef = useRef(null);
 
   const profileUserType = user?.userType === 'employee' ? 'employee' : 'student';
+  const isEmployeeUser = profileUserType === 'employee';
   // Tutorial is scripted around a single "workplace" node — School for Students,
-  // Office for Employees. Used to gate the arrival + expense tutorial conditions
-  // and to keep the on-screen copy role-appropriate.
-  const tutorialWorkplaceId = profileUserType === 'employee' ? 'office' : 'school';
-  const tutorialWorkplaceName = profileUserType === 'employee' ? 'Office' : 'School';
+  // Office for Employees. Used to keep the map gate + on-screen copy role-appropriate.
+  const tutorialWorkplaceId = isEmployeeUser ? 'office' : 'school';
+  const tutorialWorkplaceName = isEmployeeUser ? 'Office' : 'School';
 
   // Character position — resolve spawn point from percentages using initial screen size
   const initialSpawn = { x: INITIAL_WIDTH * (currentMap.spawnPoint.xPct ?? 0.5), y: INITIAL_HEIGHT * (currentMap.spawnPoint.yPct ?? 0.5) };
@@ -564,11 +576,14 @@ export default function BuildScreen() {
   const [showMainMenu, setShowMainMenu] = useState(true);
   const [gameMode, setGameMode] = useState(null); // 'story' or 'tutorial'
   const [showHowToPlay, setShowHowToPlay] = useState(false); // Legacy - not used anymore
-  const [tutorialStep, setTutorialStep] = useState(0);
   const [tutorialActive, setTutorialActive] = useState(false); // In-game tutorial mode
-  const [tutorialCompleted, setTutorialCompleted] = useState(false); // Persisted — gates Story Mode
-  const [tutorialConditions, setTutorialConditions] = useState(new Set()); // Tracks step completion conditions
-  const [tutorialViewedCar, setTutorialViewedCar] = useState(false); // Track if car transport was viewed in tutorial
+  // Persisted "has finished the tutorial at least once" flag. No longer gates
+  // Story Mode (UX revision — tutorial is optional); kept for analytics and the
+  // tutorial_progress table.
+  const [tutorialCompleted, setTutorialCompleted] = useState(false);
+  // Free-roam tutorial: which map intros Koin has already given (per user).
+  const tutorialIntrosSeenRef = useRef(new Set());
+  const [introsHydrated, setIntrosHydrated] = useState(false);
 
   // Role-based map gate. Applies to BOTH Story and Tutorial so the travel list
   // matches the Student/Employee profile (Student → School, Employee → Office).
@@ -590,195 +605,115 @@ export default function BuildScreen() {
   // Koin Tutorial Guide Image
   const KOIN_TUTORIAL_IMAGE = require('../../../assets/mascot/koin_tutorial.png');
 
-  // Helper: mark a tutorial condition as met and auto-advance if it matches current step
-  const markTutorialCondition = (conditionKey) => {
-    setTutorialConditions(prev => {
-      const next = new Set(prev);
-      next.add(conditionKey);
-      return next;
-    });
-    // Also notify TutorialContext so KoinTutorialOverlay can react
-    markConditionComplete(conditionKey);
-    // Auto-advance: if this condition matches the current step, move forward
-    const currentStep = TUTORIAL_STEPS[tutorialStep];
-    if (currentStep && currentStep.conditionKey === conditionKey) {
-      // Small delay so the user sees the action complete before the overlay advances
-      setTimeout(() => {
-        setTutorialStep(prev => {
-          const nextIdx = prev + 1;
-          if (nextIdx < TUTORIAL_STEPS.length) {
-            gameDatabaseService.saveTutorialProgress({ currentStep: nextIdx, stepsCompleted: Array.from({ length: nextIdx }, (_, i) => String(i)), tutorialCompleted: false });
-            return nextIdx;
-          }
-          return prev;
-        });
-      }, 600);
+  // ── Free-roam tutorial (UX revision) ────────────────────────────────────
+  // The linear, action-gated TUTORIAL_STEPS rail was removed. The player roams
+  // freely in tutorial mode and Koin introduces each place the FIRST time they
+  // arrive there. Keys are map ids — extend with new keys to add more intros.
+  const TUTORIAL_INTROS = {
+    dorm: {
+      pages: [
+        "Hi! I'm Koin, your financial buddy! Welcome to your Home! 🏠",
+        "Roam freely — tap anywhere to walk. Check the Closet 👔 to change outfits, and the Notebook 📓 to practice logging an expense.",
+        "When you're ready to explore, head to the Exit Door 🚪. Nothing here is saved — it's all practice!",
+      ],
+    },
+    school: {
+      pages: [
+        "Welcome to the School Campus! 🏫",
+        "Approach the Librarian for school supplies or the Canteen staff for food, and try logging a practice expense!",
+      ],
+    },
+    office: {
+      pages: [
+        "Welcome to the Office! 🏢",
+        "Approach the staff and log a practice expense — try the Pantry for food!",
+      ],
+    },
+    mall_1f: {
+      pages: [
+        "Welcome to the Mall! 🏬",
+        "The 1st floor has the Clothing Store 👕, Electronics 📱, and Grocery 🛒. Ride the Escalator to explore other floors!",
+      ],
+    },
+    mall_2f: {
+      pages: [
+        "Mall — 2nd Floor! 🍕 The Food Court and Cafe are up here. Log a practice expense if you're hungry!",
+      ],
+    },
+    mall_3f: {
+      pages: [
+        "Mall — 3rd Floor! 🎮 The Entertainment Hub and Gym live here. Every visit is a chance to practice tracking expenses!",
+      ],
+    },
+  };
+
+  // Hydrate the per-user "intros already seen" set once.
+  useEffect(() => {
+    if (!user?.id) return;
+    AsyncStorage.getItem(`tutorialIntrosSeen_${user.id}`)
+      .then((raw) => {
+        tutorialIntrosSeenRef.current = new Set(raw ? JSON.parse(raw) : []);
+      })
+      .catch(() => {})
+      .finally(() => setIntrosHydrated(true));
+  }, [user?.id]);
+
+  const maybeShowTutorialIntro = useCallback((mapKey) => {
+    if (gameMode !== 'tutorial' || !introsHydrated) return;
+    const intro = TUTORIAL_INTROS[mapKey];
+    if (!intro || tutorialIntrosSeenRef.current.has(mapKey)) return;
+
+    tutorialIntrosSeenRef.current.add(mapKey);
+    if (user?.id) {
+      AsyncStorage.setItem(
+        `tutorialIntrosSeen_${user.id}`,
+        JSON.stringify([...tutorialIntrosSeenRef.current]),
+      ).catch(() => {});
     }
-  };
+    showKoinIntro({ id: mapKey, koinDialogue: intro.pages });
+    // Narration handled per dialogue page by KoinTutorialOverlay — speaking
+    // the joined pages here too would double the audio.
+    gameDatabaseService.logActivity({
+      activityType: 'tutorial_step',
+      details: { intro: mapKey, action: 'shown' },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameMode, introsHydrated, user?.id, showKoinIntro]);
 
-  // Helper: check if current tutorial step's condition is met
-  const isTutorialStepComplete = () => {
-    const step = TUTORIAL_STEPS[tutorialStep];
-    if (!step) return false;
-    if (step.nextAlwaysEnabled) return true;
-    if (step.conditionKey && tutorialConditions.has(step.conditionKey)) return true;
-    return false;
-  };
+  // Contextual trigger: whichever way the player reaches a map (initial spawn,
+  // exit-door travel, mall escalator), currentMapId changes — one effect covers
+  // every entry point.
+  useEffect(() => {
+    if (gameMode !== 'tutorial' || showMainMenu) return;
+    maybeShowTutorialIntro(currentMapId);
+  }, [gameMode, showMainMenu, currentMapId, maybeShowTutorialIntro]);
 
-  // In-game Tutorial steps configuration — step-by-step, action-gated
-  const TUTORIAL_STEPS = [
-    // {
-    //   id: 'budget_intro',
-    //   title: "Budget Tracker 📊",
-    //   message: " See the Budget Tracker at the top? It shows your daily spending and weekly budget. Keep an eye on it!",
-    //   nextAlwaysEnabled: true,
-    //   conditionKey: null,
-    //   position: 'bottom',
-    //   highlight: 'header',
-    // },
-    {
-      id: 'walk_around',
-      title: "Move Around! 🏠",
-      message: "Hi! I'm Koin, your financial buddy! This is your room! Tap anywhere on the screen to walk your character around. Try it now!",
-      nextAlwaysEnabled: false,
-      conditionKey: 'walked',
-      position: 'top',
-      highlight: 'map',
-    },
-    {
-      id: 'closet',
-      title: "The Closet 👔",
-      message: "Walk to the Closet and check it out! Tap on the closet area to open it.",
-      nextAlwaysEnabled: false,
-      conditionKey: 'closet_opened',
-      position: 'right',
-      highlight: 'closet',
-    },
-    {
-      id: 'notebook_and_log',
-      title: "The Notebook 📓",
-      message: "Walk to the Notebook, open it, and try logging an expense! Enter any amount and description, then tap Log. Don't worry — this is just practice!",
-      nextAlwaysEnabled: false,
-      conditionKey: 'notebook_expense_logged',
-      position: 'left',
-      highlight: 'notebook',
-    },
-    {
-      id: 'exit_door',
-      title: "The Exit Door 🚪",
-      message: `Walk to the Exit Door to see the places you can go! Choose ${tutorialWorkplaceName} and learn about transport expenses.`,
-      nextAlwaysEnabled: false,
-      conditionKey: 'arrived_at_school',
-      position: 'bottom',
-      highlight: 'door',
-    },
-    {
-      id: 'school_intro',
-      title: `Welcome to your ${tutorialWorkplaceName}! ${profileUserType === 'employee' ? '🏢' : '🏫'}`,
-      message: profileUserType === 'employee'
-        ? "Welcome to the Office! See the NPCs here? Approach the staff and log a practice expense — try the Pantry for food. This is just practice!"
-        : "This is the School Campus! See the NPCs here? You can approach the Librarian to buy school supplies, or the Canteen staff to buy food. Walk to either one and log an expense — this is just practice!",
-      nextAlwaysEnabled: false,
-      conditionKey: 'school_expense_logged',
-      position: 'top',
-      highlight: null,
-    },
-    {
-      id: 'go_to_mall',
-      title: "The Mall 🏬",
-      message: "Great job! Now let's visit the Mall! Walk to the School Exit and travel there.",
-      nextAlwaysEnabled: false,
-      conditionKey: 'arrived_at_mall',
-      position: 'center',
-      highlight: null,
-    },
-    {
-      id: 'mall_1f_intro',
-      title: "Mall - 1st Floor 🏬",
-      message: "Welcome to the Mall! On the 1st floor, you'll find the Clothing Store 👕, Electronics 📱, and Grocery Store 🛒. Feel free to approach any NPC to log a practice expense, or just look around!",
-      nextAlwaysEnabled: true,
-      conditionKey: null,
-      position: 'top',
-      highlight: null,
-    },
-    {
-      id: 'go_to_2f',
-      title: "Go to 2nd Floor ⬆️",
-      message: "Now let's explore more! Walk to the Escalator to go up to the 2nd floor.",
-      nextAlwaysEnabled: false,
-      conditionKey: 'arrived_at_mall_2f',
-      position: 'bottom',
-      highlight: null,
-    },
-    {
-      id: 'mall_2f_intro',
-      title: "Mall - 2nd Floor 🍕",
-      message: "The 2nd floor has the Food Court 🍕 and a Cafe ☕. You can approach the NPCs to log practice expenses if you'd like!",
-      nextAlwaysEnabled: true,
-      conditionKey: null,
-      position: 'top',
-      highlight: null,
-    },
-    {
-      id: 'go_to_3f',
-      title: "Go to 3rd Floor ⬆️",
-      message: "One more floor to go! Walk to the Escalator to reach the 3rd floor.",
-      nextAlwaysEnabled: false,
-      conditionKey: 'arrived_at_mall_3f',
-      position: 'bottom',
-      highlight: null,
-    },
-    {
-      id: 'mall_3f_intro',
-      title: "Mall - 3rd Floor 🎮",
-      message: "The 3rd floor has the Entertainment Hub 🎮 and the Gym 💪. Feel free to log a practice expense or just explore!",
-      nextAlwaysEnabled: true,
-      conditionKey: null,
-      position: 'top',
-      highlight: null,
-    },
-    {
-      id: 'go_down_escalator',
-      title: "Going Down ⬇️",
-      message: "You can also go back down! Walk to the Escalator to go down to the 2nd floor. Use escalators anytime to move between mall floors.",
-      nextAlwaysEnabled: false,
-      conditionKey: 'went_down_escalator',
-      position: 'bottom',
-      highlight: null,
-    },
-    {
-      id: 'tutorial_done',
-      title: "You're All Set! 🌟",
-      message: "Amazing job! You've learned all the basics — budgeting, traveling, logging expenses, and navigating mall floors. Now go start Story Mode and become a financial master!",
-      nextAlwaysEnabled: true,
-      conditionKey: null,
-      position: 'center',
-      highlight: null,
-    },
-  ];
-
-  // Start interactive tutorial
+  // Start free-roam tutorial
   const startTutorial = () => {
+    // Replay support: if Koin has already introduced every place, clear the
+    // seen-set so a deliberate tutorial replay talks again.
+    const allSeen = Object.keys(TUTORIAL_INTROS).every((key) =>
+      tutorialIntrosSeenRef.current.has(key),
+    );
+    if (allSeen) {
+      tutorialIntrosSeenRef.current = new Set();
+      if (user?.id) {
+        AsyncStorage.removeItem(`tutorialIntrosSeen_${user.id}`).catch(() => {});
+      }
+    }
     setShowMainMenu(false);
     setGameMode('tutorial');
     setTutorialActive(true);
-    setTutorialStep(0);
-    setTutorialConditions(new Set());
-    setTutorialViewedCar(false);
     setCurrentMapId('dorm'); // Always start tutorial at home
-    // Also start the new KoinTutorialOverlay system
-    startContextTutorial();
-    // Persist tutorial start to Supabase
+    enterTutorialMode(); // KoinTutorialOverlay renders intros in CONTEXTUAL phase
+    // Persist tutorial start to Supabase (schema-compatible with the old rail)
     gameDatabaseService.saveTutorialProgress({ currentStep: 0, stepsCompleted: [], tutorialCompleted: false });
     gameDatabaseService.logActivity({ activityType: 'tutorial_step', details: { step: 0, action: 'started' } });
   };
 
-  // End tutorial — the in-game part is done, Koin will continue with the App Tour
-  const endTutorial = useCallback(() => {
+  // End tutorial — player leaves free-roam; optionally hand off to the App Tour.
+  const endTutorial = useCallback(async () => {
     setTutorialActive(false);
-    setTutorialStep(0);
-    setTutorialConditions(new Set());
-    setTutorialViewedCar(false);
     setShowMainMenu(true);
     setGameMode(null);
     setTutorialCompleted(true);
@@ -789,19 +724,21 @@ export default function BuildScreen() {
     // Persist tutorial completion to Supabase
     gameDatabaseService.saveTutorialProgress({ currentStep: 0, stepsCompleted: [], tutorialCompleted: true });
     gameDatabaseService.logActivity({ activityType: 'tutorial_step', details: { step: 'done', action: 'completed' } });
-  }, [user?.id]);
 
-  // Auto-detect when TutorialContext finishes the GAME_TUTORIAL phase
-  // and clean up GameScreen local state (exit to main menu, unlock Story Mode)
-  const prevTutorialPhaseRef = useRef(tutorialPhase);
-  useEffect(() => {
-    const prevPhase = prevTutorialPhaseRef.current;
-    prevTutorialPhaseRef.current = tutorialPhase;
-    // If we were in GAME_TUTORIAL and now transitioned to APP_TOUR or beyond, end the game tutorial
-    if (prevPhase === TUTORIAL_PHASE.GAME_TUTORIAL && tutorialPhase !== TUTORIAL_PHASE.GAME_TUTORIAL) {
-      endTutorial();
+    // Offer the app-wide tab tour (kept from the old flow, now opt-in).
+    const wantsTour = await confirm({
+      title: 'Quick app tour? 🗺️',
+      message: 'Want Koin to walk you through the app tabs — Expenses, Predictions, Explore, and Profile?',
+      confirmLabel: 'Show me',
+      cancelLabel: 'Not now',
+      icon: 'map',
+    });
+    if (wantsTour) {
+      startAppTour();
+    } else {
+      exitTutorialMode();
     }
-  }, [tutorialPhase, endTutorial]);
+  }, [user?.id, confirm, startAppTour, exitTutorialMode]);
 
   // Story Mode state
   const [showStoryIntro, setShowStoryIntro] = useState(false);
@@ -820,6 +757,15 @@ export default function BuildScreen() {
   const [activeStoryDay, setActiveStoryDay] = useState(1);
   const dailyTaskAnnouncedDayRef = useRef(null);
   const isHydratingDailyTaskStateRef = useRef(false);
+  // Day-fail state (UX revision): set when the player knowingly logs an expense
+  // that breaks the active day's task(s). Persisted with the daily-task payload
+  // so quitting to the menu and resuming re-raises the Failed modal.
+  const [failedDayInfo, setFailedDayInfo] = useState(null); // { day, brokenTaskIds: [] }
+  const [showDayFailedModal, setShowDayFailedModal] = useState(false);
+  // Restart Day un-completes the day's tasks, and cap-style rules (ratio caps)
+  // pass again on an empty day — without this, every restart would re-award
+  // their XP/Sprouts (an infinite farm loop). Keys here complete silently once.
+  const suppressTaskRewardKeysRef = useRef(new Set());
 
   // End of Day/Level Progression State
   const [dailyTasksCompleted, setDailyTasksCompleted] = useState(false); // Tracks if all daily tasks are checked
@@ -881,8 +827,15 @@ export default function BuildScreen() {
   // Level completion results
   const [levelResults, setLevelResults] = useState(null);
 
-  // Custom Mode unlock state (locked until Level 3 completed)
+  // Custom Mode unlock state. Students: locked until Story Level 3 completed.
+  // Employees: unlocked immediately (UX revision) via the derived effect below.
   const [customModeUnlocked, setCustomModeUnlocked] = useState(false);
+
+  // Employee bypass — derived, never persisted: covers accounts with no
+  // user_levels row yet and userType arriving async from AuthContext.
+  useEffect(() => {
+    if (isEmployeeUser) setCustomModeUnlocked(true);
+  }, [isEmployeeUser]);
 
   // Story completion dialogue (after Level 3 victory)
   const [showCompletionDialogue, setShowCompletionDialogue] = useState(false);
@@ -1143,7 +1096,7 @@ export default function BuildScreen() {
     return `${DAILY_TASK_STORAGE_KEY_PREFIX}${sessionId}`;
   }, []);
 
-  const persistDailyTaskState = useCallback(async (sessionId, completionState, runtimeState) => {
+  const persistDailyTaskState = useCallback(async (sessionId, completionState, runtimeState, failedDay = null) => {
     if (!sessionId) return;
     try {
       await AsyncStorage.setItem(
@@ -1151,6 +1104,7 @@ export default function BuildScreen() {
         JSON.stringify({
           completion: completionState || {},
           runtimeByDay: runtimeState || {},
+          failedDay: failedDay || null,
         }),
       );
     } catch (error) {
@@ -1168,22 +1122,31 @@ export default function BuildScreen() {
         setDailyTaskRuntimeByDay({});
         dailyTaskRuntimeByDayRef.current = {};
         setActiveStoryDay(1);
+        setFailedDayInfo(null);
         return;
       }
 
       const parsed = JSON.parse(raw);
       const completion = parsed?.completion || {};
       const runtimeByDay = parsed?.runtimeByDay || {};
+      const failedDay = parsed?.failedDay || null;
       setDailyTaskCompletion(completion);
       setDailyTaskRuntimeByDay(runtimeByDay);
       dailyTaskRuntimeByDayRef.current = runtimeByDay;
-      setActiveStoryDay(getFirstIncompleteStoryDay(level, completion));
+      // A persisted failed day pins the player back on that day — the Failed
+      // modal re-raises (effect below) and blocks day progression until they
+      // choose Restart Day or walk away again.
+      setFailedDayInfo(failedDay);
+      setActiveStoryDay(
+        failedDay?.day || getFirstIncompleteStoryDay(level, completion),
+      );
     } catch (error) {
       console.warn('⚠️ Failed to hydrate daily task state:', error?.message || error);
       setDailyTaskCompletion({});
       setDailyTaskRuntimeByDay({});
       dailyTaskRuntimeByDayRef.current = {};
       setActiveStoryDay(1);
+      setFailedDayInfo(null);
     } finally {
       isHydratingDailyTaskStateRef.current = false;
     }
@@ -1507,7 +1470,14 @@ export default function BuildScreen() {
   const openHistoryReport = useCallback((dayItem) => {
     const reportData = dayItem?.reportData || dayItem?.report || buildHistoryReportData(dayItem);
     if (!reportData) return;
-    setHistoryReportData(reportData);
+    // Stamp the real-world completion date (panel revision) — the DB row's
+    // updated/created timestamp, NOT today, so old reports show when the day
+    // was actually finished. Local-fallback items without a timestamp show
+    // no date rather than a wrong one.
+    setHistoryReportData({
+      ...reportData,
+      reportDate: dayItem?.updatedAt || dayItem?.createdAt || reportData.reportDate || null,
+    });
     setIsHistoryModalVisible(false);
     setShowHistoryReportModal(true);
   }, [buildHistoryReportData]);
@@ -1604,6 +1574,12 @@ export default function BuildScreen() {
       dailyBudget: weeklyBudget / Math.max(1, STORY_DAILY_TASKS[storyLevel]?.totalDays || 1),
       needsCategories: NEEDS_CATEGORIES,
       wantsCategories: WANTS_CATEGORIES,
+      // Level-scoped needs/wants totals for the 50/30/20 weekly-budget caps
+      // (level_group_spending_pct_weekly_budget_max).
+      levelGroupSpending: {
+        needs: budgetCategories.needs?.spent || 0,
+        wants: budgetCategories.wants?.spent || 0,
+      },
       goalTotalsByName,
       goalTargetsByName,
     };
@@ -1629,6 +1605,21 @@ export default function BuildScreen() {
     });
 
     if (newlyCompleted.length > 0 && !isHydratingDailyTaskStateRef.current) {
+      // Re-completions after a Restart Day earned their rewards the first time —
+      // mark them complete silently (no XP/Sprouts/toast) exactly once.
+      const suppressed = suppressTaskRewardKeysRef.current;
+      if (suppressed.size > 0) {
+        const rewardable = newlyCompleted.filter((task) => {
+          if (suppressed.has(task.conditionKey)) {
+            suppressed.delete(task.conditionKey);
+            return false;
+          }
+          return true;
+        });
+        newlyCompleted.length = 0;
+        newlyCompleted.push(...rewardable);
+        if (newlyCompleted.length === 0) return;
+      }
       const earnedXp = newlyCompleted.reduce((sum, task) => sum + (task.reward?.xp || 0), 0);
       if (gameMode === 'story' && earnedXp > 0) {
         gameDatabaseService.incrementUserLevelStats({ xpToAdd: earnedXp });
@@ -1679,6 +1670,7 @@ export default function BuildScreen() {
     goalAllocations,
     weeklyBudget,
     weeklySpending,
+    budgetCategories,
     activeSessionId,
   ]);
 
@@ -1759,12 +1751,105 @@ export default function BuildScreen() {
     }
   }, [gameMode, getActiveStoryDay, updateDailyTaskRuntimeForActiveDay, evaluateActiveStoryDayTasks, user?.id]);
 
+  // Pre-log guard (UX revision): before a Story expense is committed, check the
+  // GLOBAL weekly budget and simulate the expense against the active day's task
+  // rules. Koin warns with the specific rule(s) being broken and the player
+  // must explicitly proceed. Returns true when logging may continue. A knowing
+  // proceed arms failedDayInfo ONLY when a task actually breaks — a plain
+  // budget overflow warns but does not fail the day.
+  const confirmStoryExpenseAgainstTasks = useCallback(async ({ category, amount }) => {
+    if (gameMode !== 'story' || !(amount > 0)) return true;
+
+    const activeDay = getActiveStoryDay();
+    // May be null on a misconfigured level/day — the guard still runs the
+    // global weekly-budget check without task rules.
+    const dayConfig = getStoryDayTasks(storyLevel, activeDay);
+
+    // Same eval context evaluateActiveStoryDayTasks builds.
+    const goalTotalsByName = {};
+    const goalTargetsByName = {};
+    savingsGoals.forEach((goal) => {
+      goalTotalsByName[goal.name] = goalAllocations[goal.id] || 0;
+      goalTargetsByName[goal.name] = goal.target || 0;
+    });
+    const evalContext = {
+      weeklyBudget,
+      weeklySpending,
+      dailyBudget: weeklyBudget / Math.max(1, STORY_DAILY_TASKS[storyLevel]?.totalDays || 1),
+      needsCategories: NEEDS_CATEGORIES,
+      wantsCategories: WANTS_CATEGORIES,
+      // Pre-log snapshot of the level's needs/wants totals — the guard adds the
+      // proposed amount on top to detect 50/30/20 weekly-budget cap crossings.
+      levelGroupSpending: {
+        needs: budgetCategories.needs?.spent || 0,
+        wants: budgetCategories.wants?.spent || 0,
+      },
+      goalTotalsByName,
+      goalTargetsByName,
+    };
+
+    const dayState = dailyTaskRuntimeByDayRef.current?.[activeDay] || buildEmptyDailyRuntime();
+    const { shouldWarn, budgetOverflow, brokenTasks } = evaluateStoryExpense({
+      dayConfig,
+      dayState,
+      evalContext,
+      expense: { category: normalizeCategory(category), amount },
+    });
+    if (!shouldWarn) return true;
+
+    const lines = [];
+    if (budgetOverflow) lines.push(`• ${budgetOverflow.message}`);
+    brokenTasks.forEach(({ task, messages }) => {
+      lines.push(`• ${task.requiredAppAction}${messages[0] ? `\n   ${messages[0]}` : ''}`);
+    });
+
+    const proceed = await confirm({
+      title: 'Koin says: hold on!',
+      message:
+        (brokenTasks.length > 0
+          ? `This expense breaks today's task${brokenTasks.length > 1 ? 's' : ''}:\n`
+          : 'This expense goes over your budget:\n') +
+        lines.join('\n') +
+        (brokenTasks.length > 0
+          ? '\n\nIf you proceed you will fail this current day.'
+          : '\n\nYou can proceed, but you would be spending money you do not have.'),
+      confirmLabel: 'Proceed anyway',
+      cancelLabel: 'Cancel',
+      icon: 'warning',
+    });
+    // Overflow alone never fails the day — only a real task break arms the
+    // Failed-Day modal.
+    if (proceed && brokenTasks.length > 0) {
+      setFailedDayInfo({ day: activeDay, brokenTaskIds: brokenTasks.map(({ task }) => task.id) });
+    }
+    return proceed;
+  }, [
+    gameMode,
+    getActiveStoryDay,
+    storyLevel,
+    savingsGoals,
+    goalAllocations,
+    weeklyBudget,
+    weeklySpending,
+    budgetCategories,
+    confirm,
+  ]);
+
+  // Raise the Failed modal once the fail-armed expense has landed in the day
+  // runtime. NO auto-restart — the player chooses Restart Day / Return to Menu.
+  useEffect(() => {
+    if (gameMode !== 'story' || !failedDayInfo || showDayFailedModal) return;
+    if (failedDayInfo.day !== getActiveStoryDay()) return;
+    setShowDayFailedModal(true);
+    VoiceOverService.speak('Oh no! You failed this day. Restart the day, or return to the main menu.');
+  }, [gameMode, failedDayInfo, showDayFailedModal, getActiveStoryDay, dailyTaskRuntimeByDay]);
+
   useEffect(() => {
     if (gameMode !== 'story' || !activeSessionId) return;
     if (isHydratingDailyTaskStateRef.current) return;
 
-    persistDailyTaskState(activeSessionId, dailyTaskCompletion, dailyTaskRuntimeByDay);
-  }, [activeSessionId, gameMode, dailyTaskCompletion, dailyTaskRuntimeByDay, persistDailyTaskState]);
+    persistDailyTaskState(activeSessionId, dailyTaskCompletion, dailyTaskRuntimeByDay, failedDayInfo);
+  }, [activeSessionId, gameMode, dailyTaskCompletion, dailyTaskRuntimeByDay, failedDayInfo, persistDailyTaskState]);
 
   useEffect(() => {
     if (gameMode !== 'story' || showLevelComplete) return;
@@ -1794,6 +1879,11 @@ export default function BuildScreen() {
       dialogue,
     });
     setShowDailyTaskPopup(true);
+
+    // Voice over (panel revision): narrate Koin's daily story dialogue.
+    VoiceOverService.speak(
+      `Day ${getStoryDayDisplayNumber(storyLevel, activeDay)}. ${dayConfig.financialConcept || ''}. ${dialogue || ''}`
+    );
   }, [gameMode, showLevelComplete, storyLevel, getActiveStoryDay, dailyTaskCompletion, activeSessionId, profileUserType]);
 
   useEffect(() => {
@@ -1801,6 +1891,21 @@ export default function BuildScreen() {
       setShowDailyTasksModal(false);
     }
   }, [gameMode, showDailyTasksModal]);
+
+  // ── Voice over (panel revision) ─────────────────────────────────────────
+  // Resolve the persisted toggle once on mount; stop narration when leaving
+  // to the main menu and when the screen unmounts.
+  useEffect(() => {
+    VoiceOverService.loadVoiceOverSetting();
+    return () => VoiceOverService.stop();
+  }, []);
+
+  useEffect(() => {
+    if (showMainMenu) VoiceOverService.stop();
+  }, [showMainMenu]);
+
+  // Tutorial narration fires per dialogue page inside KoinTutorialOverlay
+  // (App Tour + contextual intros), synced to the typewriter.
 
   useEffect(() => {
     if ((gameMode !== 'story' || showLevelComplete) && showDailyTaskPopup) {
@@ -1973,7 +2078,10 @@ export default function BuildScreen() {
           setUnlockedLevels(unlocked);
         }
 
-        // 1b. Check if Custom Mode was previously unlocked
+        // 1b. Check if Custom Mode was previously EARNED (students: all 3 story
+        // levels). Employees are unlocked by the derived bypass effect instead —
+        // deliberately NOT cached to AsyncStorage, so an account whose type
+        // changes back to student falls back to the earned gate automatically.
         // Primary source: Supabase user_levels (survives logout / device switch)
         if (userLevels?.story_level_3_completed) {
           setCustomModeUnlocked(true);
@@ -2364,6 +2472,12 @@ export default function BuildScreen() {
 
   // End of Day Handler
   const handleEndDay = async () => {
+    // A failed day cannot be ended/advanced — re-raise the Failed modal so the
+    // player resolves it (Restart Day / Return to Main Menu) first.
+    if (failedDayInfo) {
+      setShowDayFailedModal(true);
+      return;
+    }
     // 1. Generate report data using the current active story day
     const dayItem = {
       dayNumber: activeStoryDay,
@@ -2449,6 +2563,126 @@ export default function BuildScreen() {
 
     // Advance the day
     setActiveStoryDay((prev) => prev + 1);
+  };
+
+  // Restart the failed story day from scratch (UX revision — the Failed modal's
+  // "Restart Day" choice). Reverses everything the day logged: DB rows, the
+  // live budget mirrors, the day's runtime, and its task completion flags (the
+  // one sanctioned break of dailyTaskCompletion's monotonicity).
+  const restartActiveStoryDay = async () => {
+    const day = getActiveStoryDay();
+    const dayConfig = getStoryDayTasks(storyLevel, day);
+    const dayState = dailyTaskRuntimeByDayRef.current?.[day] || buildEmptyDailyRuntime();
+    const entries = dayState.expenseEntries || [];
+
+    // 1) Best-effort backend cleanup — same table/filters as handleDeleteExpense.
+    //    Rows that never landed (no dbId — pending or sync-failed) only exist
+    //    locally; fetchTodaySpending reconciles afterwards.
+    const dbIds = entries.map((entry) => entry.dbId).filter(Boolean);
+    if (dbIds.length && user?.id) {
+      try {
+        const { error } = await supabase
+          .from('expenses')
+          .delete()
+          .in('id', dbIds)
+          .eq('user_id', user.id);
+        if (error) console.warn('⚠️ Restart day: expense cleanup failed:', error.message);
+      } catch (err) {
+        console.warn('⚠️ Restart day: expense cleanup threw:', err?.message || err);
+      }
+    }
+
+    // 2) Reverse the live budget mirrors entry-by-entry (mirror of
+    //    handleDeleteExpense's math, applied to the whole day at once).
+    let needsDelta = 0;
+    let wantsDelta = 0;
+    const categoryDelta = {};
+    entries.forEach((entry) => {
+      const amount = Number(entry.amount) || 0;
+      const budgetType = CATEGORY_BUDGET_MAP[entry.category] || 'wants';
+      if (budgetType === 'needs') needsDelta += amount;
+      else wantsDelta += amount;
+      categoryDelta[entry.category] = (categoryDelta[entry.category] || 0) + amount;
+    });
+    const dayExpenseTotal = dayState.expenseTotal || 0;
+    // Level 2: this day's goal allocations also count as weekly "spending" —
+    // refund them too. dayState.goalAllocations is keyed by goal NAME; the
+    // committed goalAllocations map is keyed by goal id, so map name → id.
+    const dayAllocationTotal = Object.values(dayState.goalAllocations || {}).reduce(
+      (sum, value) => sum + (Number(value) || 0),
+      0,
+    );
+    const restoredWeeklySpending = Math.max(0, weeklySpending - dayExpenseTotal - dayAllocationTotal);
+    const restoredNeedsSpent = Math.max(0, (budgetCategories.needs.spent || 0) - needsDelta);
+    const restoredWantsSpent = Math.max(0, (budgetCategories.wants.spent || 0) - wantsDelta);
+
+    setWeeklySpending(restoredWeeklySpending);
+    setBudgetCategories((prev) => ({
+      ...prev,
+      needs: { ...prev.needs, spent: restoredNeedsSpent },
+      wants: { ...prev.wants, spent: restoredWantsSpent },
+    }));
+    setCategorySpending((prev) => {
+      const next = { ...prev };
+      Object.entries(categoryDelta).forEach(([category, amount]) => {
+        next[category] = Math.max(0, (next[category] || 0) - amount);
+      });
+      return next;
+    });
+    setTodaySpending(0);
+    if (dayAllocationTotal > 0) {
+      setGoalAllocations((prev) => {
+        const next = { ...prev };
+        savingsGoals.forEach((goal) => {
+          const refund = Number(dayState.goalAllocations?.[goal.name]) || 0;
+          if (refund) next[goal.id] = Math.max(0, (next[goal.id] || 0) - refund);
+        });
+        return next;
+      });
+    }
+
+    // 3) Reset THIS day's runtime + un-complete its tasks. Their rewards were
+    //    already paid the first time around — flag them so the evaluator's
+    //    immediate re-completion of cap-style rules stays silent (no re-award).
+    (dayConfig?.tasks || []).forEach((task) => {
+      suppressTaskRewardKeysRef.current.add(task.conditionKey);
+    });
+    setDailyTaskRuntimeByDay((prev) => {
+      const next = { ...prev, [day]: buildEmptyDailyRuntime() };
+      dailyTaskRuntimeByDayRef.current = next;
+      return next;
+    });
+    setDailyTaskCompletion((prev) => {
+      const next = { ...prev };
+      (dayConfig?.tasks || []).forEach((task) => {
+        delete next[task.conditionKey];
+      });
+      return next;
+    });
+
+    // 4) Clear fail state, restart the in-game day clock, replay Koin's day intro.
+    setFailedDayInfo(null);
+    setShowDayFailedModal(false);
+    dailyTaskAnnouncedDayRef.current = null;
+    await applyInGameDayStart(new Date().toISOString());
+
+    // 5) Reconcile the story session row (fire-and-forget) — deltas computed
+    //    from the captured locals above, never from post-set state.
+    if (activeSessionId) {
+      gameDatabaseService.updateStorySessionSpending(activeSessionId, {
+        weeklySpending: restoredWeeklySpending,
+        needsSpent: restoredNeedsSpent,
+        wantsSpent: restoredWantsSpent,
+        savingsAmount: weeklyBudget - restoredWeeklySpending,
+      });
+      gameDatabaseService.logActivity({
+        activityType: 'day_restarted',
+        sessionId: activeSessionId,
+        details: { level: storyLevel, day },
+      });
+    }
+    fetchTodaySpending();
+    toast.info('Day restarted 🔄', `Day ${getStoryDayDisplayNumber(storyLevel, day)} starts fresh. You've got this!`);
   };
 
   // Check if level is completed - handles all 3 level types
@@ -2541,6 +2775,10 @@ export default function BuildScreen() {
       }
     }
 
+    // Leftover money carries into the next level (panel revision): whatever
+    // wasn't spent this level gets added on top of the next level's budget.
+    results.leftover = Math.max(0, Math.round((weeklyBudget - totalSpent) * 100) / 100);
+
     setLevelPassed(passed);
     results.history = completedDaysHistory;
     setLevelResults(results);
@@ -2625,7 +2863,21 @@ export default function BuildScreen() {
       }
 
       // Calculate weekly budget (monthly / 4)
-      const calculatedWeeklyBudget = monthlyBudget / 4;
+      let calculatedWeeklyBudget = monthlyBudget / 4;
+
+      // Panel revision: money left over from the previous level is added to
+      // this level's budget. Read it off the latest passed session's results.
+      if (level > 1) {
+        const prevSession = await gameDatabaseService.getLastPassedStorySession(level - 1);
+        const carryover = parseFloat(prevSession?.results_data?.leftover) || 0;
+        if (carryover > 0) {
+          calculatedWeeklyBudget = Math.round((calculatedWeeklyBudget + carryover) * 100) / 100;
+          toast.success(
+            'Carryover bonus! 💰',
+            `₱${carryover.toFixed(2)} left over from Level ${level - 1} was added to this level's budget.`
+          );
+        }
+      }
       setWeeklyBudget(calculatedWeeklyBudget);
 
       // Set start and end dates based on level day count
@@ -2892,9 +3144,6 @@ export default function BuildScreen() {
         setExpenseSubCategory(null);
         setShowSubCategoryDropdown(false);
         // Directly open the expense modal without an alert prompt
-        if (tutorialActive && gameMode === 'tutorial') {
-          markTutorialCondition('expense_opened');
-        }
         setShowExpenseModal(true);
         break;
       case 'travel':
@@ -2908,10 +3157,6 @@ export default function BuildScreen() {
         break;
       case 'closet':
         console.log('👔 Opening closet for character selection');
-        // Tutorial: mark closet opened condition
-        if (tutorialActive && gameMode === 'tutorial') {
-          markTutorialCondition('closet_opened');
-        }
         setShowClosetModal(true);
         break;
       case 'notebook':
@@ -2951,10 +3196,6 @@ export default function BuildScreen() {
     setTransportMode(mode);
     if (mode === 'car') {
       setDidBuyFuel(null); // Reset fuel question when switching to car
-      // Tutorial: mark that user has viewed car transport
-      if (tutorialActive && gameMode === 'tutorial') {
-        setTutorialViewedCar(true);
-      }
     }
   };
 
@@ -2989,6 +3230,20 @@ export default function BuildScreen() {
       }
     }
 
+    // Task-aware guard (Story): a paid trip is a Transport expense — warn if it
+    // would fail today's task. ₱0 fares/no-fuel trips skip the guard (travel
+    // itself can only help travel-count tasks).
+    const guardedTransportCost =
+      transportMode === 'commute'
+        ? parseFloat(fareAmount) || 0
+        : (didBuyFuel ? parseFloat(fuelAmount) || 0 : 0);
+    if (
+      guardedTransportCost > 0 &&
+      !(await confirmStoryExpenseAgainstTasks({ category: 'Transport', amount: guardedTransportCost }))
+    ) {
+      return;
+    }
+
     // ── Capture values before clearing state ──
     const savedDestination = selectedDestination;
     const savedTransportMode = transportMode;
@@ -3010,11 +3265,8 @@ export default function BuildScreen() {
     // ── Optimistic UI: travel immediately (closes transport modal inside travelToMap) ──
     travelToMap(savedDestination);
 
-    // ── Tutorial mode: skip all DB saves, just mark conditions ──
+    // ── Tutorial mode: practice sandbox, skip all DB saves ──
     if (tutorialActive && gameMode === 'tutorial') {
-      // Mark arrival conditions (workplace = School for Students, Office for Employees)
-      if (savedDestination === tutorialWorkplaceId) markTutorialCondition('arrived_at_school');
-      if (savedDestination === 'mall_1f' || savedDestination.startsWith('mall')) markTutorialCondition('arrived_at_mall');
       console.log('🎓 Tutorial: Skipped transport expense save (practice mode)');
       return;
     }
@@ -3267,16 +3519,6 @@ export default function BuildScreen() {
       sessionId: activeSessionId,
     });
 
-    // Tutorial: mark floor change conditions
-    if (tutorialActive && gameMode === 'tutorial') {
-      if (floorId === 'mall_2f') markTutorialCondition('arrived_at_mall_2f');
-      if (floorId === 'mall_3f') markTutorialCondition('arrived_at_mall_3f');
-      // Track going down an escalator (from higher to lower floor)
-      if ((previousMapId === 'mall_3f' && floorId === 'mall_2f') ||
-        (previousMapId === 'mall_2f' && floorId === 'mall_1f')) {
-        markTutorialCondition('went_down_escalator');
-      }
-    }
   };
 
   // Reference to store the current movement path
@@ -3456,11 +3698,6 @@ export default function BuildScreen() {
 
   const handleScreenPress = (event) => {
     const { locationX, locationY } = event.nativeEvent;
-
-    // Tutorial: mark 'walked' condition when user taps to move
-    if (tutorialActive && gameMode === 'tutorial') {
-      markTutorialCondition('walked');
-    }
 
     logMovement('===== TAP DEBUG =====');
     logMovement('Current map:', currentMapId);
@@ -3765,6 +4002,15 @@ export default function BuildScreen() {
       return;
     }
 
+    // Task-aware guard (Story): warn if this expense would fail today's task.
+    // Runs BEFORE the modal closes so Cancel keeps the form intact.
+    if (!(await confirmStoryExpenseAgainstTasks({
+      category: expenseCategory,
+      amount: parseFloat(expenseAmount),
+    }))) {
+      return;
+    }
+
     // Capture values before clearing
     const savedAmount = expenseAmount;
     const savedNote = expenseNote;
@@ -3788,13 +4034,10 @@ export default function BuildScreen() {
     // Keyboard-resize safety net — re-seat the player if the grid moved under them.
     snapToPassableTileIfStuck();
 
-    // ── Tutorial mode: skip DB save, mark conditions ──
+    // ── Tutorial mode: practice sandbox, skip DB save ──
     if (tutorialActive && gameMode === 'tutorial') {
       // Practice run saves nothing, so nothing animates — a toast is the feedback.
       toast.success('Nice practice! 🎓', `Logged ₱${savedAmount} on ${savedCategory} — not saved.`);
-      // Mark tutorial conditions based on current map (workplace = School/Office by role)
-      if (currentMapId === tutorialWorkplaceId) markTutorialCondition('school_expense_logged');
-      if (currentMapId.startsWith('mall')) markTutorialCondition('mall_expense_logged');
       console.log('🎓 Tutorial: Skipped expense save (practice mode)');
       return;
     }
@@ -3943,6 +4186,14 @@ export default function BuildScreen() {
     }
   };
 
+  // Compact HUD icon button (panel polish): clamp to 32-36px. The old 9% of
+  // the 600px phone-frame hit 54px, so the 4-button row looked oversized and
+  // squeezed. 8.5% of frame width, floored at 32 / capped at 36.
+  const HUD_BUTTON_SIZE = Math.min(36, Math.max(32, Math.round(screenWidth * 0.085)));
+  // Shared gap for the 2x2 HUD grid — one value for both axes so the grid
+  // reads as a unit. ~2% of frame width, clamped to the 8-10px design band.
+  const HUD_GRID_GAP = Math.min(28, Math.max(18, Math.round(screenWidth * 0.02)));
+
   const styles = StyleSheet.create({
     container: {
       flex: 1,
@@ -3952,7 +4203,8 @@ export default function BuildScreen() {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: 16,
+      paddingHorizontal: 28,
+      paddingRight: 8,
       paddingTop: screenHeight * 0.012,
       paddingBottom: 12,
       backgroundColor: '#1a1a2e',
@@ -3960,26 +4212,33 @@ export default function BuildScreen() {
       borderBottomRightRadius: 16,
     },
     backToMenuButton: {
-      width: Math.round(screenWidth * 0.09),
-      height: Math.round(screenWidth * 0.09),
-      borderRadius: Math.round(screenWidth * 0.045),
+      width: HUD_BUTTON_SIZE,
+      height: HUD_BUTTON_SIZE,
+      borderRadius: HUD_BUTTON_SIZE / 2,
       backgroundColor: '#E67E22',
       justifyContent: 'center',
       alignItems: 'center',
     },
     headerLeftControls: {
+      // 2x2 grid (UI polish): the old 4-button row ate too much horizontal
+      // space. Two stacked rows; vertical centering comes from the header's
+      // alignItems so the grid and the budget column sit symmetrically.
+      flexDirection: 'column',
+      gap: HUD_GRID_GAP,
+    },
+    headerLeftControlsRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: HUD_GRID_GAP,
     },
     historyButtonAlert: {
       backgroundColor: '#ffb68b',
     },
     historyButton: {
       flexDirection: 'row',
-      width: Math.round(screenWidth * 0.09),
-      height: Math.round(screenWidth * 0.09),
-      borderRadius: Math.round(screenWidth * 0.025),
+      width: HUD_BUTTON_SIZE,
+      height: HUD_BUTTON_SIZE,
+      borderRadius: 10,
       backgroundColor: 'rgba(90, 90, 122, 0.9)',
       justifyContent: 'center',
       alignItems: 'center',
@@ -4018,20 +4277,31 @@ export default function BuildScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      width: Math.round(screenWidth * 0.09),
-      height: Math.round(screenWidth * 0.09),
-      borderRadius: Math.round(screenWidth * 0.025),
+      width: HUD_BUTTON_SIZE,
+      height: HUD_BUTTON_SIZE,
+      borderRadius: 10,
       backgroundColor: 'rgba(90, 90, 122, 0.9)',
     },
     dailyTasksButtonText: {
       fontSize: Math.round(screenWidth * 0.026),
       fontFamily: FONTS.bodyBold,
     },
-    headerLeft: {
-      flex: 1,
+    headerCenterOverlay: {
+      // True-center title: absolute overlay spanning the whole header, so the
+      // text centers on the SCREEN instead of in the leftover flex space
+      // between the (uneven-width) icon grid and budget column. Rendered
+      // first so siblings paint above it (avoids Android negative-zIndex
+      // quirks), and pointerEvents="none" in JSX keeps grid taps working.
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      top: 0,
+      bottom: 0,
       alignItems: 'center',
       justifyContent: 'center',
-      paddingHorizontal: 8,
+      // Inset past the icon grid so long map names can't run under the
+      // side columns (16 edge padding + grid width + 8 breathing room).
+      paddingHorizontal: 16 + (HUD_BUTTON_SIZE * 2 + HUD_GRID_GAP) + 8,
     },
     headerTitle: {
       fontSize: Math.round(screenWidth * 0.045),
@@ -5606,23 +5876,28 @@ export default function BuildScreen() {
 
   // Handle menu button press
   const handleStoryMode = async () => {
-    // Gate behind tutorial completion
-    if (!tutorialCompleted) {
-      const start = await confirm({
-        title: 'Tutorial first 🎓',
-        message: 'Finish the Tutorial to learn the basics before Story Mode.',
-        confirmLabel: 'Start tutorial',
-        cancelLabel: 'Cancel',
+    // Story Mode is unlocked from the start (UX revision — the tutorial gate
+    // was dropped). One-time nudge on the very first press: offer the optional
+    // tutorial, then never ask again regardless of the answer.
+    const promptKey = `storyTutorialPromptSeen_${user?.id}`;
+    if (user?.id && (await AsyncStorage.getItem(promptKey)) !== 'true') {
+      await AsyncStorage.setItem(promptKey, 'true');
+      const playTutorial = await confirm({
+        title: 'Learn the controls first? 🎓',
+        message: 'Would you like to play the Tutorial first to learn the controls?',
+        confirmLabel: 'Play tutorial',
+        cancelLabel: 'Skip',
         icon: 'school',
       });
-      if (start) startTutorial();
-      return;
+      if (playTutorial) {
+        startTutorial();
+        return;
+      }
     }
     // Clear any leftover tutorial state
     if (tutorialActive) {
       setTutorialActive(false);
       cancelTutorial();
-      setTutorialStep(0);
     }
 
     // ── Single Active Session: auto-resume if an in-progress session exists ──
@@ -5681,6 +5956,8 @@ export default function BuildScreen() {
     dailyTaskRuntimeByDayRef.current = {};
     setActiveStoryDay(1);
     dailyTaskAnnouncedDayRef.current = null;
+    setFailedDayInfo(null);
+    setShowDayFailedModal(false);
     setGameMode(null);
     setShowMainMenu(true);
   };
@@ -5704,6 +5981,9 @@ export default function BuildScreen() {
     let charIndex = 0;
     setIntroDisplayedText('');
     setIntroTypingDone(false);
+    // Narrate the page in sync with the typewriter (no-op when toggle off);
+    // covers forward taps and the Back button alike.
+    VoiceOverService.speak(fullText);
 
     introTimerRef.current = setInterval(() => {
       charIndex++;
@@ -5761,6 +6041,7 @@ export default function BuildScreen() {
     await AsyncStorage.setItem(key, 'true');
     gameDatabaseService.markIntroSeen(level); // fire-and-forget DB update
 
+    VoiceOverService.stop();
     setShowLevelIntro(false);
     setIntroLevel(null);
     setIntroPage(0);
@@ -5774,6 +6055,7 @@ export default function BuildScreen() {
       clearInterval(introTimerRef.current);
       introTimerRef.current = null;
     }
+    VoiceOverService.stop();
     setShowLevelIntro(false);
     setIntroLevel(null);
     setIntroPage(0);
@@ -6812,26 +7094,28 @@ export default function BuildScreen() {
         resizeMode="cover"
       />
       <View style={menuStyles.menuOverlay}>
+        {/* Greeting — panel revision: show the signed-in user's name on top.
+            Sits above the buttons in the center band, clear of the baked-in
+            logo at the top of the background image. */}
+        {/* <Text style={menuStyles.menuGreeting} numberOfLines={1}>
+          Hi, {user?.firstName || user?.name || user?.email?.split('@')[0] || 'Player'}! 👋
+        </Text> */}
         {/* Menu Buttons Container - centered */}
         <View style={menuStyles.menuButtonsContainer}>
-          {/* Story Mode Button */}
+          {/* Story Mode Button — always unlocked (UX revision: tutorial gate dropped) */}
           <TouchableOpacity
             style={[
               menuStyles.menuButton,
               menuStyles.storyModeButton,
-              !tutorialCompleted && menuStyles.lockedModeButton,
             ]}
             onPress={handleStoryMode}
             activeOpacity={0.7}
           >
             <View style={menuStyles.menuButtonIcon}>
-              <Ionicons name={tutorialCompleted ? 'book' : 'lock-closed'} size={24} color={tutorialCompleted ? '#F5DEB3' : '#888'} />
+              <Ionicons name="book" size={24} color="#F5DEB3" />
             </View>
             <View style={menuStyles.menuButtonContent}>
-              <Text style={[menuStyles.menuButtonText, !tutorialCompleted && { color: '#888' }]} numberOfLines={1}>Story Mode</Text>
-              {/* {!tutorialCompleted && (
-                <Text style={{ fontSize: 11, color: '#666', marginTop: 2 }}>Complete Tutorial first</Text>
-              )}*/}
+              <Text style={menuStyles.menuButtonText} numberOfLines={1}>Story Mode</Text>
             </View>
           </TouchableOpacity>
 
@@ -6916,6 +7200,18 @@ export default function BuildScreen() {
       gap: Math.round(screenHeight * 0.015),
       width: '100%',
     },
+    menuGreeting: {
+      fontSize: Math.round(screenWidth * 0.05),
+      fontFamily: FONTS.headingBold,
+      color: '#FFF',
+      textShadowColor: 'rgba(0,0,0,0.75)',
+      textShadowOffset: { width: 1, height: 2 },
+      textShadowRadius: 3,
+      textAlign: 'center',
+      maxWidth: '90%',
+      paddingHorizontal: screenWidth * 0.05,
+      marginBottom: Math.round(screenHeight * 0.02),
+    },
     menuButton: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -6923,7 +7219,8 @@ export default function BuildScreen() {
       minHeight: Math.round(screenHeight * 0.07),
       paddingVertical: screenHeight * 0.017,
       paddingHorizontal: screenWidth * 0.05,
-      gap: Math.round(screenWidth * 0.03),
+      // Panel revision: wider icon-to-label spacing on the main choices.
+      gap: Math.round(screenWidth * 0.045),
       // RPG-style box with pixel border effect
       backgroundColor: '#2D2D44',
       borderWidth: 4,
@@ -7084,9 +7381,10 @@ export default function BuildScreen() {
       gap: 8,
     },
     tutorialIconBadge: {
-      width: Math.round(screenWidth * 0.085),
-      height: Math.round(screenWidth * 0.085),
-      borderRadius: Math.round(screenWidth * 0.085) / 2,
+      // Matches the story-HUD button size (HUD_BUTTON_SIZE clamp).
+      width: HUD_BUTTON_SIZE,
+      height: HUD_BUTTON_SIZE,
+      borderRadius: HUD_BUTTON_SIZE / 2,
       backgroundColor: 'rgba(255, 255, 255, 0.12)',
       alignItems: 'center',
       justifyContent: 'center',
@@ -7388,15 +7686,13 @@ export default function BuildScreen() {
           <View style={tutorialStyles.tutorialRow1}>
             <TouchableOpacity
               style={tutorialStyles.tutorialIconBadge}
-              onPress={() => {
-                setTutorialActive(false);
-                cancelTutorial();
-                setTutorialStep(0);
-                setGameMode(null);
-                setShowMainMenu(true);
-              }}
+              accessibilityLabel="End Tutorial"
+              onPress={endTutorial}
             >
-              <Ionicons name="home" size={16} color="#FFF" />
+              {/* Ending the free-roam tutorial marks it done and offers the
+                  app tour — exit-outline glyph kept (consistent with story HUD,
+                  size matched to it). */}
+              <Ionicons name="exit-outline" size={18} color="#FFF" />
             </TouchableOpacity>
             <View style={tutorialStyles.tutorialTextArea}>
               <Text style={tutorialStyles.tutorialTitle} numberOfLines={1}>
@@ -7408,81 +7704,92 @@ export default function BuildScreen() {
             </View>
           </View>
 
-          {/* Per-step hint — IN-FLOW inside the locked-height header (not over the
-              map). 3 reserved lines, so the text wraps here without resizing the
-              header → map rect & collision grid stay constant. */}
+          {/* Free-roam hint — IN-FLOW inside the locked-height header (not over
+              the map), so the map rect & collision grid stay constant. */}
           <View style={tutorialStyles.tutorialHintBox}>
             <View style={tutorialStyles.tutorialBadge}>
               <Text style={tutorialStyles.tutorialBadgeText}>
-                Complete the action to continue
+                Free roam — explore anywhere
               </Text>
             </View>
             <Text style={tutorialStyles.tutorialHint} numberOfLines={4}>
-              💡 {TUTORIAL_STEPS[tutorialStep]?.message || 'Follow Koin\'s instructions!'}
+              💡 Koin pops up the first time you visit each place. Nothing is saved — practice freely, and tap the exit icon when you're done!
             </Text>
           </View>
         </View>
       ) : (
         <View style={styles.header}>
-          <View style={styles.headerLeftControls}>
-            <TouchableOpacity
-              style={styles.backToMenuButton}
-              onPress={() => {
-                if (tutorialActive) {
-                  setTutorialActive(false);
-                  cancelTutorial();
-                  setTutorialStep(0);
-                }
-                setGameMode(null);
-                setShowMainMenu(true);
-              }}
-            >
-              <Ionicons name="home" size={20} color="#FFF" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.historyButton, showDayReportNotification && styles.historyButtonAlert]}
-              onPress={() => {
-                if (showDayReportNotification) {
-                  handleEndDay();
-                } else {
-                  openDayReportHistory();
-                }
-              }}
-            >
-              <Ionicons name="calendar" size={18} color={showDayReportNotification ? '#1c1c1c' : '#FFF'} />
-              {hasUnreadReport && !showDayReportNotification && (
-                <View style={styles.historyBadge} />
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.historyButton}
-              onPress={() => setIsExpenseListModalVisible(true)}
-            >
-              <Ionicons name="receipt-outline" size={18} color="#FFF" />
-            </TouchableOpacity>
-            {gameMode === 'story' && (
-              isDailyTaskDone ? (
-                <TouchableOpacity
-                  style={[styles.dailyTasksButton, styles.dailyTasksButtonSleep]}
-                  onPress={handleEndDay}
-                >
-                  <Ionicons name="moon" size={19} color="#FFFFFF" />
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  style={[styles.dailyTasksButton, { backgroundColor: dailyTaskButtonColor }]}
-                  onPress={() => setShowDailyTasksModal(true)}
-                >
-                  <Ionicons name="list" size={19} color={dailyTaskButtonTextColor} />
-                </TouchableOpacity>
-              )
-            )}
-          </View>
-          <View style={styles.headerLeft}>
-            <Text style={styles.headerTitle}>{currentMap.icon} {currentMap.name}</Text>
-            <Text style={styles.headerSubtitle}>
+          {/* Screen-centered title overlay — see headerCenterOverlay comment.
+              Must stay the FIRST child (paints under the buttons) and keep
+              pointerEvents="none" (it spans the grid's touch area). */}
+          <View style={styles.headerCenterOverlay} pointerEvents="none">
+            <Text style={styles.headerTitle} numberOfLines={1}>{currentMap.name}</Text>
+            <Text style={styles.headerSubtitle} numberOfLines={1}>
               {gameMode === 'story' ? `Story Mode - Level ${storyLevel}` : 'Tutorial'}
             </Text>
+          </View>
+          <View style={styles.headerLeftControls}>
+            {/* Top row: Exit + History */}
+            <View style={styles.headerLeftControlsRow}>
+              <TouchableOpacity
+                style={styles.backToMenuButton}
+                accessibilityLabel="Back to Main Menu"
+                onPress={() => {
+                  if (tutorialActive) {
+                    setTutorialActive(false);
+                    cancelTutorial();
+                  }
+                  setGameMode(null);
+                  setShowMainMenu(true);
+                }}
+              >
+                {/* Exit icon (was a 'home' glyph — panel revision: this returns
+                    to the main menu, not any 'Home' screen) */}
+                <Ionicons name="exit-outline" size={18} color="#FFF" />
+              </TouchableOpacity>
+              {/* One icon, one job (UX revision): history is ALWAYS history —
+                  the old calendar doubled as the end-day trigger, which confused
+                  testers. Ending the day now lives solely on the moon button. */}
+              <TouchableOpacity
+                style={styles.historyButton}
+                onPress={openDayReportHistory}
+              >
+                <Ionicons name="time-outline" size={18} color="#FFF" />
+                {hasUnreadReport && <View style={styles.historyBadge} />}
+              </TouchableOpacity>
+            </View>
+            {/* Bottom row: Expenses + Tasks/End-Day (the latter is one slot —
+                clipboard swaps to moon once the daily tasks are done) */}
+            <View style={styles.headerLeftControlsRow}>
+              <TouchableOpacity
+                style={styles.historyButton}
+                onPress={() => setIsExpenseListModalVisible(true)}
+              >
+                <Ionicons name="receipt-outline" size={18} color="#FFF" />
+              </TouchableOpacity>
+              {gameMode === 'story' && (
+                isDailyTaskDone ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.dailyTasksButton,
+                      styles.dailyTasksButtonSleep,
+                      showDayReportNotification && styles.historyButtonAlert,
+                    ]}
+                    onPress={handleEndDay}
+                  >
+                    <Ionicons name="moon" size={18} color={showDayReportNotification ? '#1c1c1c' : '#FFFFFF'} />
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.dailyTasksButton, { backgroundColor: dailyTaskButtonColor }]}
+                    onPress={() => setShowDailyTasksModal(true)}
+                  >
+                    {/* clipboard (tasks) — distinct from the receipt (expenses) glyph */}
+                    <Ionicons name="clipboard-outline" size={18} color={dailyTaskButtonTextColor} />
+                  </TouchableOpacity>
+                )
+              )}
+            </View>
           </View>
           <View style={styles.headerRight}>
             <Text style={styles.spendingLabel}>Today's Spending</Text>
@@ -8061,6 +8368,15 @@ export default function BuildScreen() {
                       return;
                     }
 
+                    // Task-aware guard (Story): warn if this expense would fail
+                    // today's task. Before capture/close so Cancel keeps the form.
+                    if (!(await confirmStoryExpenseAgainstTasks({
+                      category: notebookCategory,
+                      amount,
+                    }))) {
+                      return;
+                    }
+
                     // Capture values before clearing (same pattern as Canteen)
                     const savedAmount = amount;
                     const savedNote = expenseNote;
@@ -8085,11 +8401,10 @@ export default function BuildScreen() {
                     // Keyboard-resize safety net — re-seat player if the grid moved.
                     snapToPassableTileIfStuck();
 
-                    // ── Tutorial mode: skip DB save, mark condition ──
+                    // ── Tutorial mode: practice sandbox, skip DB save ──
                     if (tutorialActive && gameMode === 'tutorial') {
                       // Practice saves nothing, so nothing animates — toast is the feedback.
                       toast.success('Nice practice! 🎓', `Logged ₱${savedAmount.toFixed(2)} in ${savedCategory} — not saved.`);
-                      markTutorialCondition('notebook_expense_logged');
                       console.log('🎓 Tutorial: Skipped notebook expense save (practice mode)');
                       return;
                     }
@@ -8810,6 +9125,71 @@ export default function BuildScreen() {
         </View>
       </Modal>
 
+      {/* Day Failed Modal (UX revision) — raised after the player knowingly logs
+          a task-breaking expense. Exactly two ways out, no backdrop dismiss. */}
+      <Modal
+        visible={showDayFailedModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => {}}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { alignItems: 'center' }]}>
+            <Image
+              source={KOIN_TUTORIAL_IMAGE}
+              style={{ width: 96, height: 96, marginBottom: 8 }}
+              resizeMode="contain"
+            />
+            <Text style={[styles.modalTitle, { textAlign: 'center' }]}>
+              Day {getStoryDayDisplayNumber(storyLevel, failedDayInfo?.day || activeStoryDay)} Failed 😔
+            </Text>
+            <Text style={[styles.modalSubtitle, { textAlign: 'center', marginBottom: 20 }]}>
+              That expense broke today's task. Want to try this day again?
+            </Text>
+            <View style={{ width: '100%', gap: 12 }}>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#FF9800',
+                  paddingVertical: 16,
+                  paddingHorizontal: 24,
+                  borderRadius: 12,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                onPress={restartActiveStoryDay}
+              >
+                <Text style={{ color: '#FFFFFF', fontSize: 16, fontFamily: FONTS.bodyBold }}>
+                  Restart Day 🔄
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: 'rgba(100,100,100,0.5)',
+                  paddingVertical: 16,
+                  paddingHorizontal: 24,
+                  borderRadius: 12,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderWidth: 1,
+                  borderColor: 'rgba(255,255,255,0.3)',
+                }}
+                onPress={() => {
+                  // The failed day stays persisted — resuming the session
+                  // re-raises this modal until the player restarts the day.
+                  setShowDayFailedModal(false);
+                  setGameMode(null);
+                  setShowMainMenu(true);
+                }}
+              >
+                <Text style={{ color: '#FFFFFF', fontSize: 16, fontFamily: FONTS.bodyBold }}>
+                  Return to Main Menu
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Abandon / End Session Confirmation Modal */}
       <Modal
         visible={showAbandonModal}
@@ -8874,11 +9254,7 @@ export default function BuildScreen() {
             {tutorialActive && gameMode === 'tutorial' && (
               <View style={{ backgroundColor: '#FFF3E0', borderRadius: 10, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#FF9800' }}>
                 <Text style={{ fontSize: 13, color: '#E65100', textAlign: 'center', fontFamily: FONTS.bodySemiBold }}>
-                  {TUTORIAL_STEPS[tutorialStep]?.id === 'exit_door'
-                    ? `🎓 Choose ${tutorialWorkplaceName} to continue the tutorial!`
-                    : TUTORIAL_STEPS[tutorialStep]?.id === 'go_to_mall'
-                      ? '🎓 Choose the Mall to continue!'
-                      : '🎓 Pick a destination!'}
+                  🎓 Pick anywhere — Koin introduces each new place you visit!
                 </Text>
               </View>
             )}
@@ -8945,16 +9321,11 @@ export default function BuildScreen() {
             {tutorialActive && gameMode === 'tutorial' && (
               <View style={{ backgroundColor: '#FFF3E0', borderRadius: 10, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#FF9800' }}>
                 <Text style={{ fontSize: 13, color: '#E65100', textAlign: 'center', fontFamily: FONTS.bodySemiBold }}>
-                  {!transportMode && !tutorialViewedCar
-                    ? '🎓 First, try the Car option to learn about gas tracking!'
-                    : !transportMode && tutorialViewedCar
-                      ? '🎓 Great! Now choose Commute to log your fare!'
-                      : transportMode === 'car'
-                        ? '🎓 You can track gas expenses here! Now go back and try Commute.'
-                        : transportMode === 'commute'
-                          ? '🎓 Enter your commute fare and confirm! This is practice only.'
-                          : '🎓 Pick a transport mode!'
-                  }
+                  {transportMode === 'car'
+                    ? '🎓 Track gas expenses here — practice only, nothing is saved!'
+                    : transportMode === 'commute'
+                      ? '🎓 Enter your commute fare and confirm — practice only!'
+                      : '🎓 Try Car or Commute to see how travel costs are tracked!'}
                 </Text>
               </View>
             )}
