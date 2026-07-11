@@ -113,7 +113,7 @@
 - **Native rebuild** is only needed for item 11; everything else is JS-only.
 
 ## Verification Checklist
-- [ ] Weak password (no uppercase) rejected at sign-up **and** reset, with a clear message.
+- [x] Weak password (no uppercase) rejected at sign-up **and** reset, with a clear message.
 - [ ] School-email sign-up pre-selects the user type; manual override still works.
 - [ ] Expense `"abc"` / `0` / `−5` blocked with inline error; oversized expense triggers the warning dialog.
 - [ ] Finish Story Level 1 under budget → Level 2 intro shows the carried-over amount and boosted budget.
